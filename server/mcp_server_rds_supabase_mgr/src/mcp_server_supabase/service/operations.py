@@ -576,7 +576,12 @@ class Operations:
                 ],
                 "completion_verified":False,
             }
-        if action in ("password","storage","auth_config"):
+        if action == "password":
+            notices={"warnings":["Only the application login password (dashboard user supabase) is changed; the managed instance root login password is out of scope for this tool.",
+                                 "Sessions and automation using the old password stop working once the change lands; update them in step.",
+                                 "Review all changed fields and dependent applications; secrets are supplied locally."],
+                     "validation_scope":"Known structural contract only; backend policy and live acceptance remain required."}
+        elif action in ("storage","auth_config"):
             notices={"warnings":["Review all changed fields and dependent applications; secrets are supplied locally.",
                                  "Disabling a provider may clear its nested configuration; omitted Auth fields remain unchanged.",
                                  "First Storage enable requires SK; omission on an enabled component retains its SK only with the same AK."],

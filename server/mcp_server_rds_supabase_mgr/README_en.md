@@ -4,8 +4,8 @@
 
 ## Version
 
-Current version: `0.4.0a50` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 52 tools.
+Current version: `0.4.0a51` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 53 tools.
 
 ## Overview
 
@@ -15,8 +15,8 @@ creation (two managed-instance sources), network and security-group
 specification, EIP provisioning and binding, SSL certificate query and
 purchase, OBS storage integration,
 authentication and login configuration, API key delivery, prepaid orders,
-application and managed-instance start/stop/restart, and
-change and deletion. It serves AgentArts and other MCP clients; the REST-token
+application and managed-instance start/stop/restart, security-group
+binding changes, routine changes, and deletion. It serves AgentArts and other MCP clients; the REST-token
 and SDK credential modes, over stdio and Streamable HTTP, share one tool set,
 one set of safety guardrails, and one output protocol. It is read-only by
 default: every write runs a preview/confirm two-phase flow, and sensitive
@@ -26,8 +26,8 @@ direct inspection. The companion skill
 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` provides scenario-based
 operational guidance. This server covers the control plane only and performs
 no SQL or data operations; the data plane is a separate service,
-`server/mcp_server_rds_supabase`, delivered independently and interchangeable
-with neither.
+`server/mcp_server_rds_supabase`, delivered separately — neither substitutes
+for the other.
 
 ## Quick start
 
@@ -83,65 +83,24 @@ database hosting.
 
 ## Features
 
-- **Arrangement and discovery**: scenario-based creation arrangement
-  baseline — two managed-instance sources, three mandatory parameter modules plus
-  the OBS bucket integration (a key optional module that must be confirmed before
-  creation), two independent intent modules (SSL configuration and public access
-  via EIP), and a step-numbered creation flow; four discovery tool
-  families (application, instance, network, security group) that consolidate
-  parameters live with recommendations.
-- **Scenario-based creation**: `create_supabase_with_new_instance`
-  (recommended) and `create_supabase_link_exist_instance` execute resource
-  preparation strictly per the arrangement — dedicated security groups and
-  the OBS bucket auto-created, parameters backfilled and injected, one
-  submission; application/instance identifiers and workflow IDs echoed.
-- **Network and security groups**: VPC/subnet placement (free-IP preference
-  and default recommendation), dedicated group creation and rules, tag
-  protection (AUTO_CREATE/USE_FOR), three-way ingress source choice
-  (auto-detect / open / custom).
-- **EIP**: idle-first provisioning (pay-per-use recommended, dedicated
-  full-dynamic BGP 5-1000M with 300M recommended, auto-tagged); binding with
-  triple validation (in32 application ID, ownership, format) via the RDS
-  AttachEip API.
-- **SSL certificates**: account certificate inventory (`list_ssl_certificates`,
-  the SCM global service), two-phase certificate purchase and application
-  (`purchase_supabase_ssl_cert`: free-tier DV_SSL_CERT_BASIC recommended,
-  paid tiers produce pending-payment orders, pure-EIP public-IP certificates
-  support file validation only), and the SSL switch.
-- **OBS storage**: two acquisition options (reuse / create-new, new
-  recommended) with the full new-bucket specification (private / standard /
-  multi-AZ / block-public-access); temporary-credential detection and a read
-  test.
-- **Authentication and login**: sign-up toggles, Auth URLs, email/GitHub
-  login, confirmation templates; application password change.
-- **Key delivery**: key metadata, reset, and delivery through a protected
-  local file — key values never enter conversation.
-- **Orders**: prepaid order query, balance payment, and cancellation, with
-  amount and currency verified item by item.
-- **Application lifecycle**: start (does not start the managed instance),
-  stop (does not stop the managed instance, which keeps billing), and
-  restart (brief interruption, off-peak recommended); status-guardrail
-  checks, asynchronous tasks tracked to a terminal state via
-  `show_operation_job_status`.
-- **Managed-instance lifecycle**: `show_supabase_managed_instance` inspects
-  the managed instance (engine/version/status/flavor/disk/AZ/in-progress
-  actions, with billing and the fifteen-day auto-start note); start, stop,
-  and restart all take `application_id` only — the target instance is
-  strictly resolved from the application's `managed_instance` field and a
-  bare `instance_id` is never accepted, preventing operations on standalone
-  database instances; only pay-per-use instances on ultra-high-IO/SSD
-  cloud disk/ESSD storage can be stopped (dedicated clouds unsupported) —
-  the VM stops billing while EIP/storage/backup keep billing, and a
-  default fifteen-day stop auto-starts in the maintenance window if not
-  started within fifteen days; the instance is unavailable during restart;
-  start the instance before the application; asynchronous tasks are
-  tracked to a terminal state via `show_operation_job_status`.
-- **Change and deletion**: SSL, EIP, and storage-integration changes;
-  application deletion (optional managed-instance cascade) and standalone
-  managed-instance teardown; task query and bounded waiting.
-- **Safety and experience**: read-only mode with risk grading, sensitive-field
-  redaction, JSONL audit, chart-rendered output, and four-layer
-  wrong-deletion verification for delete-class tools.
+- **Arrangement and discovery**: two-source decision, live parameter consolidation
+- **Flavor discovery**: grouped full catalogs, live disk compatibility
+- **Scenario-based creation**: auto-prepared resources, one submission
+- **Network placement**: VPC/subnet choice with free-IP preference
+- **Security-group management**: dedicated groups, rules, tag-guarded cleanup
+- **Security-group rebinding**: three targets, full-list replacement
+- **EIP**: idle-first provisioning, triple-validated binding
+- **SSL certificates**: inventory, two-phase purchase, SSL switch
+- **OBS storage**: reuse or new bucket, credential checks
+- **Authentication and login**: sign-up toggles, email/GitHub login
+- **Key delivery and reset**: metadata queries, protected local-file delivery
+- **Application lifecycle**: guardrailed start/stop/restart
+- **Managed-instance operations**: strict resolution, lifecycle and detail
+- **Routine changes**: SSL/EIP/storage/application password
+- **Orders**: verified balance payment and cancellation
+- **Deletion**: application and managed instance, four-layer verification
+- **Safety guardrails**: read-only default, two-phase confirmation, redaction
+- **Operations experience**: JSONL audit and chart-rendered output
 
 ## Business scenarios
 
@@ -220,7 +179,7 @@ identifier into the request before one successful submission.
    querying via `show_supabase_creation_progress`: roughly 20-30 minutes
    overall, the instance becomes ready first and only then does the
    application task start; prepaid resources begin only after the order is
-   paid per Scenario 5.
+   paid per Scenario 6.
 7. Verify readiness with `show_supabase_application`; then proceed as needed
    with public access (Scenario 3), SSL (three certificate paths: reuse /
    purchase / import your own), login configuration, and access
@@ -272,7 +231,83 @@ DV_SSL_CERT_BASIC recommended, paid tiers producing pending-payment orders,
 pure-EIP public-IP certificates supporting file validation only. Once the
 `cert_id` is at hand, enable it via `change_supabase_ssl`.
 
-### Scenario 4: Application deletion (with the managed PG instance)
+### Scenario 4: Application and managed-instance operations
+
+Day-to-day operations after launch — application start/stop/restart,
+managed-instance detail and start/stop/restart, security-group rebinding,
+password change, key reset, and SSL switching — share one rhythm:
+**verify before acting** (`show_supabase_application` or
+`show_supabase_managed_instance` to confirm the target state and any
+in-progress actions; guardrails reject mismatched states and the rejection is
+relayed verbatim) → **two-phase submission** (preview with `confirm=false` for
+a `plan_id`, then one confirmed submission) → **job tracking** (the accepted
+`job_id`/`workflowId` is tracked to a terminal state via
+`show_operation_job_status`) → **re-verification** (a read-only re-read of the
+resource). Start/stop/restart briefly affects availability — prefer off-peak
+windows.
+
+#### Application start/stop/restart
+
+`start_supabase_application` accepts stopped applications only and does not
+start the managed instance automatically (an unhealthy instance may fail the
+start); `stop_supabase_application` accepts running applications only, with
+features unavailable while stopped, the managed instance not stopped and still
+billing; `restart_supabase_application` accepts running applications only,
+briefly interrupting the service and clearing the memory cache; stopped
+applications must start first.
+
+#### Managed-instance detail and start/stop/restart
+
+`show_supabase_managed_instance` and the three start/stop/restart tools all
+take `application_id`; the target instance is strictly resolved from the
+application's `managed_instance` field — a bare `instance_id` is never
+accepted, preventing operations on standalone database instances. The detail
+query returns engine/version/instance_status semantics/flavor/disk/AZ/
+in-progress actions, with billing and fifteen-day auto-start notes. Stop
+accepts normal, action-free pay-per-use instances on ultra-high-IO/SSD cloud
+disk/ESSD storage only (dedicated clouds unsupported): the VM stops billing
+while EIP/storage/backup keep billing; if not started again within fifteen
+days, the instance auto-starts in the maintenance window; a stopped instance
+is deleted without the recycle bin; stopping the primary also stops its read
+replicas. Start accepts shutdown instances only and may fail on insufficient
+resources; restart accepts normal, unfrozen, action-free instances only, with
+the instance unavailable during restart. **Start the instance first, then the
+application** — starting the application does not pull the instance up
+automatically.
+
+#### Security-group rebinding
+
+`change_supabase_security_group` serves three targets (the application
+itself, its managed instance, and the attachable instance of the
+attach-existing scenario) with **full-list replacement** semantics — the given
+list is the final list, unlisted groups are detached, and keep-needed groups
+must be listed; removing the group carrying the 8443/5432 allowance makes the
+application unreachable. Instances in creation, database upgrade, flavor
+change, or user creation/deletion states cannot be set. This tool decides
+which groups are bound; rule add/remove within a group stays with
+`add_supabase_security_group_rule` / `delete_supabase_security_group_rule`.
+The accepted workflowId is tracked via `show_operation_job_status`.
+
+#### Password change and key reset
+
+`change_supabase_application_password` changes the **application login
+password** only (dashboard user supabase); the managed-instance root login
+password is out of this tool's scope — instance passwords are changed via
+console instance management; old-password sessions are invalidated; the new
+password travels through the local request file, never conversation.
+`reset_supabase_api_key` resets a given key (asynchronous): the old key fades
+out and the new key is a new record, delivered again via
+`deliver_supabase_api_key`; warn downstream consumers in advance.
+
+#### SSL switching
+
+`change_supabase_ssl` requires a certificate ID to enable (three acquisition
+paths per Scenario 3) and must carry none to disable; the switch briefly drops
+connections — off-peak recommended, with a reminder to sync callback URL
+protocols afterwards. EIP bind/unbind, storage-bucket rotation, sign-up
+toggles, and other routine changes follow the same rhythm above.
+
+### Scenario 5: Application deletion (with the managed PG instance)
 
 `delete_supabase_application`'s `delete_managed_instance` is mandatory:
 `false` deletes only the application, with the managed instance retained and
@@ -291,16 +326,16 @@ via `delete_supabase_security_group` behind the tag gate: only groups bearing
 the `AUTO_CREATE=true`/`USE_FOR=Supabase` tag pair and free of references
 may be deleted.
 
-### Scenario 5: Purchase modes
+### Scenario 6: Purchase modes
 
 The RDS Supabase application is free during public beta; charges arise only
-from the managed database instance. The purchase mode is set in
+from the managed instance. The purchase mode is set in
 `managed_instance.charge_info` of the creation request.
 
 #### Billing boundary (application free, instance charged)
 
 - **The application itself**: free during public beta, no charge.
-- **The managed database instance**: the only billing subject - pay-per-use
+- **The managed instance**: the only billing subject - pay-per-use
   bills actual usage, prepaid bills the ordered period.
 - A creation that returns `order_id` means a prepaid order was created and no
   resource provisioned yet; an unpaid order does not mean the instance is
@@ -403,13 +438,14 @@ pre-provisioned into a local request file and referenced by alias.
 | `bind_supabase_eip` | EIP binding: triple validation (in32/ownership/format) | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
 | `create_supabase_new_obs` | Create a private OBS bucket (standard/multi-AZ/block-public-access) | WRITE | `KooCLI OBS mb` |
 | `change_supabase_eip` | Bind or unbind an EIP to open or close public access | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
-| `change_supabase_application_password` | Change the application password via the local request file | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
+| `change_supabase_application_password` | Change the application login password (dashboard user supabase); application password only — the managed-instance root password is out of scope (change instance passwords in the console), and old-password sessions are invalidated; new password via the local request file | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
 | `list_supabase_security_groups` | Browse the security-group list | READ | [ListSecurityGroups](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSecurityGroups) |
 | `show_supabase_security_group` | Inspect a security group and all its rules | READ | [ShowSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ShowSecurityGroup) |
 | `create_supabase_security_group` | Create a dedicated security group, auto-tagged with origin and purpose | WRITE | [CreateSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroup) |
 | `add_supabase_security_group_rule` | Add an inbound or outbound access rule | DANGEROUS | [CreateSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroupRule) |
 | `delete_supabase_security_group_rule` | Remove a specific access rule to narrow the exposed surface | DANGEROUS | [DeleteSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroupRule) |
 | `delete_supabase_security_group` | Delete a security group; flow-created and unreferenced only | DANGEROUS | [DeleteSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroup) |
+| `change_supabase_security_group` | Change the security groups bound to the application, its managed instance, or an attachable instance: multiple groups with full-list replacement (unlisted groups detached — keep-needed groups must be listed), managed and attachable targets strictly validated; two-phase, asynchronous workflowId tracked via `show_operation_job_status` | DANGEROUS | [SetSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SetSecurityGroup) |
 | `show_operation_job_status` | Query the current status of a submitted operation task | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
 | `show_supabase_creation_progress` | Analyze application creation progress across all phases | READ | - |
 | `wait_operation_job_complete` | Poll an operation task to a terminal state within a bounded timeout | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
@@ -424,7 +460,7 @@ lacks one, this server's actual behavior is authoritative.
 Starting, stopping, and restarting an application are asynchronous
 operations: once accepted with a `job_id`, track it to a terminal state with
 `show_operation_job_status` and re-read the application; stopping does not
-stop the managed database instance (it keeps billing) and starting does not
+stop the managed instance (it keeps billing) and starting does not
 start the instance; restarting briefly interrupts the service — prefer
 off-peak windows.
 
@@ -575,17 +611,23 @@ rules:
 
 ### KooCLI integration
 
-The six security-group tools (list/detail, create group, add/remove rules,
+The six VPC security-group tools (list/detail, create group, add/remove rules,
 delete group) already embed the KooCLI capability and work out of the box:
 the native RDS origin does not proxy the VPC API, so the tools call the VPC
 v3 operations through the local KooCLI (`hcloud`) internally, with credential
 injection, result parsing, preview confirmation, origin tagging, and
-wrong-deletion protection. Principle: prefer these tools; fall back to raw
+wrong-deletion protection. Changing which security groups a target binds
+goes through `change_supabase_security_group` (the RDS SetSecurityGroup API,
+not via KooCLI): multiple groups with full-list replacement semantics — the
+given list is the final list, unlisted groups are detached, keep-needed
+groups must be listed, and a missing 8443/5432 allowance after replacement
+makes the application unreachable; rule add/remove within a group stays
+with the existing rule tools. Principle: prefer these tools; fall back to raw
 KooCLI commands only where they do not cover the need.
 
 | Scenario | Use |
 |---|---|
-| Every routine security-group operation (list/detail, create group, add/remove rules, delete group) | This service's tools |
+| Every routine security-group operation (list/detail, create group, add/remove rules, delete group, rebind groups) | This service's tools |
 | Opening 0.0.0.0/0 world-wide ingress (tools refuse by design; requires explicit user confirmation) | Raw KooCLI commands |
 | Edge operations the tools deliberately do not support (e.g. address-group management) | Raw KooCLI commands |
 

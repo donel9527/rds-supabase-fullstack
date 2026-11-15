@@ -1,6 +1,6 @@
 # 本地请求与字段契约
 
-工具参数只传 `application_id`、`request_ref`、`confirm`、`plan_id`。凭据由操作方在模型会话之外写入本地 JSON 文件，设绝对路径 `SUPABASE_REQUESTS_FILE` 后启动 MCP。文件不进代码仓、交付包、云盘或聊天。Windows 须由操作员配置仅运行账户可读的 NTFS ACL（程序不自动核验）；Unix 强制当前用户所有且 0600，拒绝符号链接、重复 JSON 键、超 64KiB 文件。
+工具参数不承载秘密：`request_ref`/`delivery_ref` 只是本地请求文件的别名，配合 `confirm`/`plan_id` 两段式提交；`application_id`、`instance_id`、`security_group_ids` 等标识符参数不含秘密，可直接传入。凭据由操作方在模型会话之外写入本地 JSON 文件，设绝对路径 `SUPABASE_REQUESTS_FILE` 后启动 MCP。文件不进代码仓、交付包、云盘或聊天。Windows 须由操作员配置仅运行账户可读的 NTFS ACL（程序不自动核验）；Unix 强制当前用户所有且 0600，拒绝符号链接、重复 JSON 键、超 64KiB 文件。
 
 文件格式：`{ "别名": { "字段": "值" } }`。别名 1-64 位字母/数字/下划线/连字符。工具每次重新读取同一别名——**预览后改文件会使计划失效，须重新预览**。预览自动隐藏秘密字段（显示"已在本地配置"）并擦除 URL 查询串。不要把秘密放进非秘密字段。
 

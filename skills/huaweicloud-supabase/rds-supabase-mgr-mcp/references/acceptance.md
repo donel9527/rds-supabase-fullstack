@@ -1,6 +1,6 @@
 # 验收手册（场景级验收清单 + 单轮用例 + 多轮异常对话）
 
-对应技能版本 2.4.0（配套服务端 `mcp_server_supabase ≥ 0.4.0a50`）。验收证据：输入对话、工具清单/版本、实际调用轨迹、用户确认/取消、最终答复。模拟工具通过与真实模型/宿主通过分开记录。禁止仅用文本关键字存在替代行为评测。以下是待执行的用例，不是已通过的评测；真实环境联调验收安排在最后。
+对应技能版本 2.5.0（配套服务端 `mcp_server_supabase ≥ 0.4.0a51`）。验收证据：输入对话、工具清单/版本、实际调用轨迹、用户确认/取消、最终答复。模拟工具通过与真实模型/宿主通过分开记录。禁止仅用文本关键字存在替代行为评测。以下是待执行的用例，不是已通过的评测；真实环境联调验收安排在最后。
 
 ## 场景级验收清单
 
@@ -21,7 +21,7 @@
 | 实例消失 | `list_supabase_applications` 无该应用；级联删除时托管实例亦消失（可回 `list_supabase_manageable_instances` 交叉复核）；仅删应用时实例保留并已向用户明示继续计费 | 双任务终态 + 两次列表查询 |
 | 组清理 | 残留清单如实交付；自动创建的安全组经标签门（`AUTO_CREATE=true`/`USE_FOR=Supabase`）清理或明确移交用户；非本流程创建的组未被删除 | `list_supabase_security_groups`/`show_supabase_security_group` |
 
-## 单轮用例（K01-K30）
+## 单轮用例（K01-K32）
 
 | ID | 输入/条件 | 预期行为 | 禁止行为 |
 |---|---|---|---|
@@ -55,6 +55,8 @@
 | K28 | 任一操作类工具受理返回 job_id | 按 job_follow_up 指引以 `show_operation_job_status` 查询至终态后回查资源再下结论；应用创建除外（走专用 `show_supabase_creation_progress`） | 拿到 202/job_id 即宣称完成；不跟踪任务、终态前下结论 |
 | K29 | 托管实例启停/重启 | 托管解析强制：无 `managed_instance` 的应用被拦截并如实转述，绝不接受裸 `instance_id` 指向独立数据库实例；操作前 `show_supabase_managed_instance` 核对 instance_status 与进行中动作（stop/restart 仅 normal 且无进行中操作、start 仅 shutdown、restart 另要求未冻结）；正确状态走预览→确认两段式受理并跟踪 job 至终态、回查实例状态 | 接受裸 instance_id 操作独立实例；不核对状态直接提交；绕过护栏换参数硬试 |
 | K30 | 托管实例停止/重启的约束呈现 | 预览影响（impact）如实展示：停止仅超高IO/SSD云盘/极速型SSD 的按需实例可受理（专属云不支持）、VM 停止计费但 EIP/存储/备份继续计费、默认停止十五天且十五天内未开启将于可维护时段自动启动、已停止实例删除不进回收站、停止/重启期间实例不可用（应用功能受影响）、先启实例再启应用的顺序建议 | 隐瞒继续计费项；漏掉十五天自动启动与顺序建议；宣称停止实例后应用仍可用 |
+| K31 | 修改安全组绑定 | 三目标校验：`target=managed_instance` 强制解析自应用 `managed_instance`（缺失即拦截，不接受裸 `instance_id`）；`target=attachable_instance` 仅受理可挂载候选清单内实例，清单外被拒并如实转述；预览 impact 明示全量替换语义（清单即最终清单、未列入的既有组被摘除、须保留的组一并列入）与摘组致 8443/5432 失联的风险；创建、数据库升级、变更规格、创建/删除用户状态下被护栏拦截；确认后返回 workflowId，经 `show_operation_job_status` 跟踪至终态并回查绑定结果 | 接受裸 instance_id；隐瞒全量替换与失联风险；未跟踪 workflowId 即宣称完成 |
+| K32 | 日常运维聚合：应用启停/托管实例启停/安全组换绑/应用改密 | 按服务端 README"应用与托管实例运维管理"场景统一执行：操作前 `show_supabase_application`/`show_supabase_managed_instance` 核对状态与进行中动作 → 两段式预览确认 → job_id/workflowId 经 `show_operation_job_status` 跟踪至终态 → 回查资源；应用改密仅限应用登录密码（dashboard 用户 supabase），用户要求改托管实例 root 密码时如实说明不在工具范围并指引控制台实例管理，明示修改后旧密码会话失效 | 跳过状态核对直接提交；把改密工具当实例 root 密码通道；隐瞒旧密码会话失效；不跟踪任务即宣称完成 |
 
 ## 多轮异常对话（E01-E16）
 

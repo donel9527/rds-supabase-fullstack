@@ -4,6 +4,7 @@ from mcp_server_supabase.service.instance_catalog import InstanceCatalog, Networ
 from mcp_server_supabase.service.instance_lifecycle import lifecycle as managed_instance_lifecycle
 from mcp_server_supabase.service.instance_lifecycle import show as show_managed_instance
 from mcp_server_supabase.service.operations import Operations
+from mcp_server_supabase.service.security_group_set import change as change_security_group
 
 
 def register(server):
@@ -196,6 +197,16 @@ def register(server):
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
+    async def change_supabase_security_group(target: str, security_group_ids: list[str],
+                                             application_id: str | None = None,
+                                             instance_id: str | None = None,
+                                             confirm: bool = False, plan_id: str | None = None) -> dict:
+        """修改 RDS Supabase 应用自身、其托管实例或待挂载 PG 实例的安全组（SetSecurityGroup，异步任务），一次可配置多个安全组。三种目标模式：target=application（给 application_id，作用于应用自身）；target=managed_instance（给 application_id，目标始终解析自该应用的 managed_instance 字段，绝不接受脱离应用的裸实例操作）；target=attachable_instance（给 instance_id，仅限本环境可挂载到 Supabase 应用的 PG 实例——为挂载场景做前置安全组准备，创建流程不动已有实例的安全组）。security_group_ids 为安全组 UUID 清单，全量替换语义：所给清单即最终清单，需保留的既有组必须一并列入，未列入的既有组将被摘除；替换后 8443/5432 放行缺失将导致应用不可访问。官方约束：实例在创建、数据库升级、变更规格、创建用户、删除用户状态下不能设置；替换期间连接可能短暂中断。两段式：preview（confirm=false）回读目标状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理返回 workflowId，用 show_operation_job_status(job_id) 查询任务状态直至终态。"""
+        return await change_security_group(service, target, security_group_ids,
+                                           application_id, instance_id, confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
     async def reset_supabase_api_key(application_id: str, key_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
         """Preview or reset a key. Existing clients can lose access; does not retrieve the new secret. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.mutate(application_id, "reset_key", {"key_id":key_id}, confirm, plan_id)
@@ -210,11 +221,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def change_supabase_application_password(application_id: str, request_ref: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Change only the Supabase application password using an operator-provisioned local request alias.
-        Never pass a password in tool arguments. Backend password policy remains authoritative.
-        Preview first; explicit confirmation and the unchanged plan are required to submit once.
-        任务受理后用 show_operation_job_status(job_id) 查询任务状态。
-        """
+        """修改 Supabase 应用登录密码（dashboard 用户 supabase），新密码经本地请求文件别名提供，绝不经工具参数传递。范围约束：仅修改应用登录密码；托管实例的 root 登录密码不在本工具范围（实例密码经控制台实例管理修改）。后端密码策略为准：8-32 位、大写/小写/数字/特殊字符至少三类。先预览；显式确认与未变更计划方可一次提交。修改后 dashboard 旧密码立即失效，使用旧密码的会话与自动化需同步更新。任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.mutate_reference(application_id,'password',request_ref,confirm,plan_id)
 
     @server.tool()

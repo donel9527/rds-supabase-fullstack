@@ -209,9 +209,34 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 启动托管实例 | `start_supabase_managed_instance` | 操作前核对 instance_status（状态护栏：start 仅 shutdown 可开启）；启动主实例同时启动只读实例；可能因资源不足开启失败；**顺序建议：先启实例再启应用**（启动应用不会自动拉起实例）；异步 job 跟踪 |
 | 重启托管实例 | `restart_supabase_managed_instance` | 操作前核对 instance_status、冻结状态与进行中动作（状态护栏：restart 仅 normal、未冻结且无进行中操作；创建/扩容/变更规格/备份/恢复/修改端口期间不能重启）；重启期间实例不可用、应用功能受影响；建议低峰执行；异步 job 跟踪 |
 
+### 安全组绑定修改
+
+`change_supabase_security_group`（DANGEROUS，两段式）经 RDS SetSecurityGroup 修改目标绑定的安全组，三目标模式互斥使用：
+
+| 目标 | 入参 | 语义与校验 |
+|---|---|---|
+| `application` | `application_id` | 应用自身的安全组；仅运行态（normal）且无进行中操作可受理 |
+| `managed_instance` | `application_id` | 应用托管实例——目标强制解析自该应用的 `managed_instance` 字段，不接受裸 `instance_id`；无托管实例直接拦截 |
+| `attachable_instance` | `instance_id` | 挂载已有实例创建场景的前置安全组准备——实例必须在本环境可挂载候选清单内（`list_supabase_manageable_instances`），清单外直接拒绝 |
+
+执行纪律：
+
+- **多组全量替换**：`security_group_ids` 为非空安全组 UUID 清单，所给清单即最终清单——须保留的既有组必须一并列入，未列入的既有组被摘除；预览回读当前安全组并在 impact 明示替换语义与 8443/5432 失联风险（摘掉承载 8443 入方向或 5432 出方向的组，应用即不可访问）。
+- **官方状态约束**：实例在创建、数据库升级、变更规格、创建用户、删除用户状态下不能设置；替换期间连接可能短暂中断。被拒如实转述，待任务终态后重新预览。
+- **跟踪**：受理返回 workflowId，经 `show_operation_job_status` 查询至终态后回查目标绑定的安全组。
+- **分工边界**：本工具换“绑哪些组”；组内规则的增删仍走 `add_supabase_security_group_rule` / `delete_supabase_security_group_rule`。
+
+### 应用密码修改
+
+`change_supabase_application_password`（DANGEROUS，两段式）仅修改应用登录密码，新密码只经本地请求文件别名引用：
+
+| 操作 | 工具 | 校验点 |
+|---|---|---|
+| 改应用密码 | `change_supabase_application_password` | 仅修改应用登录密码（dashboard 用户 supabase）；托管实例 root 登录密码不在本工具范围，实例密码经控制台实例管理修改；修改后旧密码会话失效；新密码明文不进对话 |
+
 ## 场景九：包周期订单
 
-计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实例；购买方式在创建请求 `managed_instance.charge_info` 中确定。创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；出现创建任务（job_id）才开始建资源。
+计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买方式在创建请求 `managed_instance.charge_info` 中确定。创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；出现创建任务（job_id）才开始建资源。
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
@@ -237,7 +262,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 排障补充
 
-- **KooCLI 协同**：安全组六个工具内置 KooCLI（hcloud）能力，开箱即用；原生 RDS 入口不代理 VPC API。二进制定位：`HCLOUD_BIN` → 固定安装目录 → PATH，每次调用重新定位。凭据注入：AK/SK 环境变量同时存在时按命令注入，否则回落 hcloud profile；REST Token 模式须本机 `hcloud configure init`。区域取 `HUAWEICLOUD_REGION`；子项目账号在 profile 配 `--cli-project-id`。VPC 后端 error_code/error_msg/request_id 原样透传。
+- **KooCLI 协同**：安全组 VPC 六个工具（查列表/详情、建组、增删规则、删组）内置 KooCLI（hcloud）能力，开箱即用；原生 RDS 入口不代理 VPC API。换绑安全组走 `change_supabase_security_group`（RDS SetSecurityGroup，不经 KooCLI）。二进制定位：`HCLOUD_BIN` → 固定安装目录 → PATH，每次调用重新定位。凭据注入：AK/SK 环境变量同时存在时按命令注入，否则回落 hcloud profile；REST Token 模式须本机 `hcloud configure init`。区域取 `HUAWEICLOUD_REGION`；子项目账号在 profile 配 `--cli-project-id`。VPC 后端 error_code/error_msg/request_id 原样透传。
 - **诊断 CLI**（克隆方式）：`uv run python -m mcp_server_supabase.diagnostics check`（配置与依赖）/ `offline`（stdio 自检）/ `discover`（从凭据发现项目与候选入口，`--probe` 追加只读探测）/ `readonly --allow-cloud-read`（授权环境真实只读检查）。诊断不提交云写操作，摘要不含资源值与凭据。
 - **模式配错症状**：只填 AK/SK 不设 `SUPABASE_TRANSPORT=sdk_core`，服务端按 REST 模式启动并完全忽略 AK/SK，每次调用报 MCP_PERMISSION_DENIED；REST 模式缺 `HUAWEICLOUD_AUTH_TOKEN` 同样报错。
 - **术语表**：plan_id——预览凭证，10 分钟有效、单次使用；request_ref——本地请求文件里含秘密配置的别名；job_id——云端异步任务编号；本地执行记录——每笔写操作在本机留下的结果记录（成功/失败/结果不明），出问题时核对用，永不删除；受理——服务端收到请求，不代表做完。

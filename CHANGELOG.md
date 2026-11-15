@@ -7,6 +7,48 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a51 - security-group set tool,
+  password scope guard and doc-wide operations consolidation
+  (52 -> 53 tools, skill v2.5.0):
+  - `change_supabase_security_group` (DANGEROUS, preview/confirm;
+    SetSecurityGroup): one tool, three mutually exclusive targets -
+    the application itself (addressed by its in32 id through the
+    instance endpoint, same pattern as AttachEip), the application's
+    managed instance (always resolved from managed_instance, never a
+    bare instance id), or an attachable instance (must appear in the
+    manageable-candidates list - serving the attach-existing-PG
+    creation scenario's pre-creation group preparation). Multiple
+    group ids are supported with full-replacement semantics: the
+    submitted list is the final list, omitted groups are detached,
+    and the preview impact states that losing 8443/5432 rules makes
+    the application unreachable. Official constraint surfaced:
+    creating, upgrading, resizing, and user create/delete states
+    reject the call. The response's workflowId is tracked through
+    show_operation_job_status like any other job id.
+  - `change_supabase_application_password` scope guard: the tool
+    docstring, preview warnings and all docs now state explicitly
+    that only the application login password (dashboard user
+    supabase) is changed - the managed instance's root login
+    password is out of scope for this tool and is managed through
+    the console's instance administration; sessions on the old
+    password stop working once the change lands.
+  - Documentation consolidation across the MCP READMEs and the
+    skill (v2.5.0, server >= 0.4.0a51): the feature lists are
+    rewritten as 18 core-point entries of at most 20 Chinese
+    characters each (English mirrored as noun phrases), now covering
+    every capability added through a47-a51 - grouped flavor
+    discovery, SSL certificate purchase, application lifecycle,
+    managed-instance operations and security-group rebinding. A new
+    business-scenario chapter "application and managed-instance
+    operations" aggregates start/stop/restart, security-group
+    rebinding, password change and key reset under one rhythm:
+    verify status and in-flight actions, preview/confirm, track the
+    job to terminal state, recheck. The skill's scenario eight gains
+    the same operations overview; acceptance reaches K32; stale
+    38-tool counts in the skill's README/INSTALL are corrected.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a50 - managed-instance lifecycle
   tools (48 -> 52 tools, skill v2.4.0): four new tools for the managed
   PostgreSQL instance, all keyed by application_id - the target

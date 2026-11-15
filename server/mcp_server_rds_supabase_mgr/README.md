@@ -4,11 +4,11 @@
 
 ## 版本
 
-当前版本：`0.4.0a50`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；52 个工具。
+当前版本：`0.4.0a51`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；53 个工具。
 
 ## 概述
 
-该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单、应用启停与重启（应用与托管实例两层）、SSL/密码/安全组日常变更以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
+该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单、应用启停与重启（应用与托管实例两层）、安全组绑定修改、SSL/密码/安全组规则等日常变更以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
 
 ## 快速开始
 
@@ -57,30 +57,24 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 ## 功能
 
-- **编排与发现**：场景化创建编排基线——托管实例两种来源、三大必选参数模块与 OBS 桶存储
-  对接（关键可选，创建前必须确认）、SSL 配置与公网访问（EIP）两个独立模块与步骤化创建
-  流程；应用、实例、网络与安全组四类发现工具，参数实时固化并给出推荐。
-- **场景化创建**：`create_supabase_with_new_instance`（推荐）与
-  `create_supabase_link_exist_instance` 严格按编排执行资源准备——专用安全组与
-  OBS 桶自动创建、参数回填注入、一次提交；回显应用/实例标识与工作流 ID。
-- **网络与安全组**：VPC/子网选址（空闲 IP 优选与默认推荐）、专用组建组与规则、
-  标签防护（AUTO_CREATE/USE_FOR）、入方向来源三选一（自动探测/全开放/自定义）。
-- **EIP**：空闲优先采购（按需推荐、全动态 BGP 独享带宽 5-1000M、推荐 300M、
-  自动打标）；绑定三重校验（in32 应用 ID、归属、格式），经 RDS AttachEip 执行。
-- **SSL 证书**：账号已有证书盘点（`list_ssl_certificates`，SCM 全局服务）、两段式
-  证书购买与申请（`purchase_supabase_ssl_cert`：免费档 DV_SSL_CERT_BASIC 推荐、
-  付费档生成待支付订单、纯 EIP 公网 IP 证书仅文件验证）、SSL 开关变更。
-- **OBS 存储**：获取两选择（复用/新建，新建为推荐）与新桶完整规格（私有/标准/
-  多AZ/阻止公共访问）；临时凭证检测与读测试。
-- **认证与登录**：注册开关、Auth URL、邮箱/GitHub 登录、确认模板；应用密码变更。
-- **密钥交付**：Key 元数据查询、重置、受保护本地文件交付，密钥值不进入对话。
-- **订单**：包周期订单查询、余额支付与取消，金额币种逐项核对。
-- **应用启停与重启**：启动（不自动拉起托管实例）、停止（不停托管实例、继续计费）与重启（短暂中断、建议低峰）；状态护栏校验，异步任务经 `show_operation_job_status` 跟踪至终态。
-- **托管实例生命周期**：`show_supabase_managed_instance` 查询托管实例详情（引擎/版本/状态/规格/磁盘/可用区/进行中动作，附计费与十五天自动启动说明）；启停/重启均以 `application_id` 入参，目标实例强制解析自该应用的 `managed_instance` 字段，不接受裸 `instance_id`，杜绝误操作独立数据库实例；停止仅超高IO/SSD云盘/极速型SSD 的**按需**实例可受理（专属云不支持），VM 停止计费但 EIP/存储/备份继续计费，默认停止十五天、十五天内未开启将于可维护时段自动启动；重启期间实例不可用；先启实例再启应用是正确顺序；异步任务经 `show_operation_job_status` 跟踪至终态。
-- **变更与删除**：SSL、EIP 与存储对接变更；应用删除（可选级联托管实例）与托管
-  实例单独拆除；任务查询与有界等待。
-- **安全与体验**：只读模式与风险分级、敏感字段脱敏、JSONL 审计、图表化输出、
-  删除类四层防误校验。
+- **编排与发现**：来源两决策，参数实时固化
+- **规格发现**：分组全量展示，磁盘实时兼容
+- **场景化创建**：资源自动备齐，一次提交
+- **网络选址**：VPC 子网空闲 IP 优选
+- **安全组管理**：建组增删规则，标签防误删
+- **安全组换绑**：三目标修改，多组全量替换
+- **EIP**：空闲优先采购，三重校验绑定
+- **SSL 证书**：盘点复用，两段式购买申请
+- **OBS 存储**：复用或新建，临时凭证检测
+- **认证与登录**：注册开关、邮箱/GitHub
+- **密钥交付与重置**：查元数据，值只入本地文件
+- **应用启停与重启**：状态护栏，任务跟踪
+- **托管实例运维**：强制解析，启停重启与详情
+- **日常变更**：SSL/EIP/存储/应用密码
+- **订单**：核对金额币种，支付与取消
+- **删除**：应用与托管实例，四层校验
+- **安全护栏**：只读默认、两段确认与脱敏
+- **运维体验**：JSONL 审计与图表化输出
 
 ## 业务场景
 
@@ -133,7 +127,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
    uuid）；全部回填注入后一次提交。
 6. 回显 `application_id`/`instance_id` 与双工作流 ID，经
    `show_supabase_creation_progress` 持续查询：整体约 20-30 分钟，实例先就绪、
-   应用任务才开始；预付费按场景五支付订单后才开始建资源。
+   应用任务才开始；预付费按场景六支付订单后才开始建资源。
 7. `show_supabase_application` 验证就绪，随后按需执行公网开通（场景三）、SSL
    （证书三路径：复用/购买/导入自有）、登录配置与接入信息交付。
 
@@ -172,7 +166,57 @@ OAuth 回调依赖该地址），并探活验证。
 申请——免费档 DV_SSL_CERT_BASIC 推荐，付费档生成待支付订单，纯 EIP 公网 IP 证书
 仅支持文件验证；取得 `cert_id` 后经 `change_supabase_ssl` 开启。
 
-### 场景四：应用删除（关联 PG 实例）
+### 场景四：应用与托管实例运维管理
+
+上线后的日常运维——应用启停与重启、托管实例详情/启停/重启、安全组换绑、应用改密、
+Key 重置与 SSL 开关——共用统一节奏：**操作前核对**（`show_supabase_application`
+或 `show_supabase_managed_instance` 确认目标状态与进行中动作，状态护栏不满足即拦截
+并如实转述）→ **两段式提交**（`confirm=false` 预览取 `plan_id`，确认后一次提交）→
+**任务跟踪**（受理返回 `job_id`/`workflowId`，经 `show_operation_job_status` 跟踪至
+终态）→ **回查**（只读工具确认业务结果）。启停与重启短暂影响可用性，建议低峰执行。
+
+#### 应用启停与重启
+
+`start_supabase_application` 仅停止态可受理，且不自动拉起托管实例（实例状态异常
+可能启动失败）；`stop_supabase_application` 仅运行态可受理，停止期间应用功能不可用，
+不停托管实例、实例继续计费；`restart_supabase_application` 仅运行态可受理，重启内部
+组件、短暂服务中断并释放内存缓存，已停止应用须先启动。
+
+#### 托管实例详情与启停重启
+
+`show_supabase_managed_instance` 与启停重启三工具均以 `application_id` 入参，目标
+实例强制解析自应用的 `managed_instance` 字段——不接受裸 `instance_id`，杜绝误操作
+独立数据库实例。详情查询返回引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中
+动作，附计费与十五天自动启动说明。停止仅 normal 且无进行中操作、仅超高IO/SSD云盘/
+极速型SSD 的按需实例可停（专属云不支持）：VM 停止计费，EIP/存储/备份继续计费，十五
+天内未开启将于可维护时段自动启动，已停止实例删除不进回收站，主实例连带只读实例；
+启动仅 shutdown 可受理、可能因资源不足失败；重启仅 normal 未冻结且无进行中操作，
+重启期间实例不可用。**先启实例、再启应用**是正确顺序——启动应用不会自动拉起实例。
+
+#### 安全组换绑
+
+`change_supabase_security_group` 支持三目标（应用自身/托管实例/挂载已有实例场景的
+待挂载实例），按**多组全量替换**执行——清单即最终清单，未列入的既有组被摘除，须保留
+的组一并列入；摘掉承载 8443/5432 放行的组会导致应用不可访问。实例处于创建、数据库
+升级、变更规格、创建/删除用户状态时不能设置。本工具决定目标绑哪些组；组内规则增删
+仍走 `add_supabase_security_group_rule` / `delete_supabase_security_group_rule`。
+受理返回 workflowId，经 `show_operation_job_status` 跟踪至终态。
+
+#### 应用密码修改与 Key 重置
+
+`change_supabase_application_password` 仅修改**应用登录密码**（dashboard 用户
+supabase）；托管实例 root 登录密码不在本工具范围，实例密码经控制台实例管理修改；
+修改后旧密码会话失效；新密码经本地请求文件承载，不进对话。`reset_supabase_api_key`
+重置指定 Key（异步）：旧 Key 逐渐失效、新 Key 是一条新记录，新值经
+`deliver_supabase_api_key` 重新交付，提前告知下游会断。
+
+#### SSL 开关
+
+`change_supabase_ssl` 开启需证书 ID（获取三路径见场景三），关闭必须不带证书；切换会
+闪断，建议低峰执行，生效后提醒同步回调地址协议。EIP 绑定/解绑、存储桶轮换与注册
+开关等其余日常变更同样按上述统一节奏执行。
+
+### 场景五：应用删除（关联 PG 实例）
 
 `delete_supabase_application` 的 `delete_managed_instance` 为必选项：`false` 仅删
 应用，托管实例保留并继续计费；`true` 应用与实例并发双删——实例删除不可逆，仅
@@ -184,15 +228,15 @@ ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 四层校验。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
 允许删除带 `AUTO_CREATE=true`/`USE_FOR=Supabase` 双标签且无引用的安全组。
 
-### 场景五：购买方式
+### 场景六：购买方式
 
-RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实例；购买方式在创建请求
+RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买方式在创建请求
 `managed_instance.charge_info` 中确定。
 
 #### 计费边界（应用免费，实例计费）
 
 - **应用本身**：公测期免费，不产生任何费用。
-- **托管数据库实例**：唯一计费主体——按需按实际使用计费，包周期按订购时长计费。
+- **托管实例**：唯一计费主体——按需按实际使用计费，包周期按订购时长计费。
 - 创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；待支付订单不代表
   实例已开通，出现创建任务（`job_id`）才开始建资源。
 
@@ -279,13 +323,14 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 | `bind_supabase_eip` | EIP 绑定：in32/归属/格式三重校验 | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
 | `create_supabase_new_obs` | 新建私有 OBS 桶（标准/多AZ/阻止公共访问） | WRITE | `KooCLI OBS mb` |
 | `change_supabase_eip` | 绑定或解绑 EIP，开关公网访问 | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
-| `change_supabase_application_password` | 修改应用密码，新密码经本地请求文件 | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
+| `change_supabase_application_password` | 修改应用登录密码（dashboard 用户 supabase）；仅应用密码——托管实例 root 密码不在范围（实例密码经控制台修改），修改后旧密码会话失效；新密码经本地请求文件 | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
 | `list_supabase_security_groups` | 浏览安全组列表 | READ | [ListSecurityGroups](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSecurityGroups) |
 | `show_supabase_security_group` | 查看安全组详情与全部规则 | READ | [ShowSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ShowSecurityGroup) |
 | `create_supabase_security_group` | 创建专用安全组，自动标记来源与用途 | WRITE | [CreateSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroup) |
 | `add_supabase_security_group_rule` | 新增出入方向访问规则 | DANGEROUS | [CreateSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroupRule) |
 | `delete_supabase_security_group_rule` | 删除指定访问规则，收窄开放面 | DANGEROUS | [DeleteSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroupRule) |
 | `delete_supabase_security_group` | 删除安全组，仅限本流程创建且无引用 | DANGEROUS | [DeleteSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroup) |
+| `change_supabase_security_group` | 修改应用、托管实例或待挂载实例绑定的安全组：多组全量替换（未列入即摘除，须保留的组一并列入），托管与可挂载目标强校验；两段式，异步 workflowId 经 `show_operation_job_status` 跟踪 | DANGEROUS | [SetSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SetSecurityGroup) |
 | `show_operation_job_status` | 查询下发操作任务的当前状态 | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
 | `show_supabase_creation_progress` | 综合分析应用创建进展全阶段 | READ | - |
 | `wait_operation_job_complete` | 有界轮询操作任务至终态 | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
@@ -295,7 +340,7 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 
 ## 使用指南
 
-应用的启动、停止与重启均为异步操作：受理返回 `job_id` 后用 `show_operation_job_status` 跟踪至终态再回查应用；停止不会停止托管数据库实例（实例继续计费），启动不自动拉起实例；重启短暂中断，建议低峰期执行。
+应用的启动、停止与重启均为异步操作：受理返回 `job_id` 后用 `show_operation_job_status` 跟踪至终态再回查应用；停止不会停止托管实例（实例继续计费），启动不自动拉起实例；重启短暂中断，建议低峰期执行。
 
 托管实例的停止与重启同为异步操作，同样以 `show_operation_job_status` 跟踪至终态、以 `show_supabase_managed_instance` 回查实例状态：目标实例强制解析自该应用的 `managed_instance` 字段（不接受裸 `instance_id`，杜绝误操作独立数据库实例）；仅超高IO/SSD云盘/极速型SSD 的按需实例可停止（专属云不支持），VM 停止计费但 EIP/存储/备份继续计费，默认停止十五天、十五天内未开启将于可维护时段自动启动；停止主实例同时停止只读实例，重启亦同步作用于只读实例；停止/重启期间实例不可用，应用功能将受影响（应用仍会产生请求失败）；可能因资源不足开启失败。**先启实例再启应用**是正确顺序——启动应用不会自动拉起托管实例。
 
@@ -414,14 +459,17 @@ rules:
 
 ### KooCLI 协同
 
-安全组六个工具（查列表/详情、建组、加规则、删规则、删组）已内置 KooCLI 能力，
-开箱即用：原生 RDS 入口不代理 VPC API，工具内部经本机 KooCLI（`hcloud`）调用
+安全组 VPC 六个工具（查列表/详情、建组、加规则、删规则、删组）已内置 KooCLI
+能力，开箱即用：原生 RDS 入口不代理 VPC API，工具内部经本机 KooCLI（`hcloud`）调用
 VPC v3 操作，自动完成凭据注入与结果解析，并提供预览确认、来源标签与误删防护。
+更换目标绑定的安全组走 `change_supabase_security_group`（RDS SetSecurityGroup，不经
+KooCLI）：多组全量替换——清单即最终清单，未列入的既有组被摘除，须保留的组一并列入，
+替换后 8443/5432 放行缺失会导致应用不可访问；组内规则的增删仍走既有规则工具。
 使用原则：优先用本服务工具，工具未覆盖的场景再用 KooCLI 原生命令。
 
 | 场景 | 用什么 |
 |---|---|
-| 安全组全部常规操作（查列表/详情、建组、加规则、删规则、删组） | 本服务工具 |
+| 安全组全部常规操作（查列表/详情、建组、加/删规则、删组、换绑绑定） | 本服务工具 |
 | 放行 0.0.0.0/0 全网入方向（工具按设计拒绝，需用户明确确认） | KooCLI 原生命令 |
 | 工具明确不支持的边缘操作（如地址组管理） | KooCLI 原生命令 |
 
