@@ -158,13 +158,19 @@ class InstanceCatalog:
             'ha.mode':{'fixed':mode},
             'ha.replication_mode':{'values':['async','sync'],'recommended':'async'},
             'availability_zone':{'values':sorted(normal_azs),'note':'Ha 模式需两个不同 AZ（主+备）'},
+            'basic_config.time_zone':{'values':['UTC%+03d:00'%offset for offset in range(-12,13)],
+                                      'recommended':'UTC+08:00',
+                                      'note':'时区，可省略；随 basic_config.time_zone 提交。PostgreSQL 引擎仅支持整段 '
+                                             'UTC-12:00~UTC+12:00（不支持半点，如 UTC+08:30）；时区名称与 UTC 偏移量对照见 '
+                                             'RDS for SQL Server 时区对照表（China Standard Time = UTC+08:00，北京/重庆/香港/乌鲁木齐）；'
+                                             '默认推荐中国北京（UTC+08:00）'},
             'port':{'recommended':5432,'note':'默认端口，可省略'},
             'enterprise_project_id':{'recommended':'0','note':'默认项目；多企业项目时让用户确认'},
             'password':{'note':'8-32 位三类字符，用户经本地请求文件提供，工具不生成'},
             'security_group_id':{'values':[],'recommended':None,
                                  'note':'新建专用数据库组，不推荐既有组、不复用共享组；'
                                         '建组与出入方向规则由 discover_network_for_create（scenario 同 manage_type）给出'},
-            'configuration_id':{'note':'参数模板，可选，默认不传'},
+            'configuration_id':{'note':'参数模板 ID，可选，默认不传；取值范围为 ListConfigurations 返回的参数模板 id'},
         }
         status=lambda error:'error: '+error if error else 'ok'
         return {'scenario':'newly_instance',

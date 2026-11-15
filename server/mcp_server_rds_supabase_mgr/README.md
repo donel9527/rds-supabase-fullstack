@@ -57,8 +57,9 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 ## 功能
 
-- **编排与发现**：场景化创建编排基线——托管实例两种来源、三大参数模块、EIP/OBS
-  依赖与步骤化创建流程；应用、实例、网络与安全组四类发现工具，参数实时固化并给出推荐。
+- **编排与发现**：场景化创建编排基线——托管实例两种来源、三大必选参数模块与 OBS 桶存储
+  对接（关键可选，创建前必须确认）、EIP 购买基线与步骤化创建流程；应用、实例、网络与安全组
+  四类发现工具，参数实时固化并给出推荐。
 - **场景化创建**：`create_supabase_with_new_instance`（推荐）与
   `create_supabase_link_exist_instance` 严格按编排执行资源准备——专用安全组与
   OBS 桶自动创建、参数回填注入、一次提交；回显应用/实例标识与工作流 ID。
@@ -82,7 +83,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 创建前置准备由 `plan_supabase_creation_arrangement` 一次完成，仅做规划，不创建任何
 资源。它先明确呈现托管实例的两种来源，并要求用户给出确定性结论：新建实例为推荐
-与默认，挂载已有实例为备选。随后将三大参数模块实时固化：
+与默认，挂载已有实例为备选。随后将关键参数模块实时固化——三大必选模块与一个关键可选模块：
 
 - **Supabase 基本信息**：名称建议与命名规则、版本、部署模式与规格，来自
   `discover_supabase_create_basic_options`。
@@ -93,10 +94,12 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 - **网络控制**：VPC/子网选址与双组安全组规格——应用组 8443 入方向三选一加 5432
   出方向、数据库组 5432 入方向，网段均为所选子网 CIDR，来自
   `discover_network_for_create`。
+- **OBS 桶存储对接（关键可选）**：是否大文件存储场景（图片/视频/大文件）须经用户
+  明确答复——创建后不可再启用；确认启用时输出复用/新建两选择、新桶完整规格与
+  临时凭证提示，随创建请求一次提交。
 
-确认大文件存储场景后附加 OBS 桶对接模块（复用/新建两选择、新桶完整规格、临时
-凭证提示），并给出 EIP 购买基线：按需购买、全动态 BGP 独享带宽 5-1000M、推荐
-300M。输出为步骤编号的创建流程与创建后动作清单，供创建阶段 1:1 严格执行。
+同时给出 EIP 购买基线：按需购买、全动态 BGP 独享带宽 5-1000M、推荐 300M。输出为
+步骤编号的创建流程与创建后动作清单，供创建阶段 1:1 严格执行。
 
 ### 场景二：应用创建全流程
 
@@ -108,7 +111,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 1. 意图确认：托管来源取新建实例；是否大文件存储（创建后不可再启用）、是否
    公网访问、是否 HTTPS。
-2. 编排基线（场景一）固化三模块参数；`az_code` 触发实时发现，无 VPC 时采纳
+2. 编排基线（场景一）固化必选模块参数与 OBS 对接方案（若启用存储）；`az_code` 触发实时发现，无 VPC 时采纳
    默认推荐并按 `default_create` 建网。
 3. 组装本地请求文件：全部参数与敏感字段（应用密码、数据库密码、存储 AK/SK）
    只入文件，不进对话。
@@ -119,7 +122,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
    uuid）；全部回填注入后一次提交。
 6. 回显 `application_id`/`instance_id` 与双工作流 ID，经
    `show_supabase_creation_progress` 持续查询：整体约 20-30 分钟，实例先就绪、
-   应用任务才开始；预付费须先经订单工具支付。
+   应用任务才开始；预付费按场景五支付订单后才开始建资源。
 7. `show_supabase_application` 验证就绪，随后按需执行公网开通（场景三）、SSL、
    登录配置与接入信息交付。
 
@@ -165,6 +168,51 @@ ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 四层校验。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
 允许删除带 `AUTO_CREATE=true`/`USE_FOR=Supabase` 双标签且无引用的安全组。
 
+### 场景五：购买方式
+
+RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实例；购买方式在创建请求
+`managed_instance.charge_info` 中确定。
+
+#### 计费边界（应用免费，实例计费）
+
+- **应用本身**：公测期免费，不产生任何费用。
+- **托管数据库实例**：唯一计费主体——按需按实际使用计费，包周期按订购时长计费。
+- 创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；待支付订单不代表
+  实例已开通，出现创建任务（`job_id`）才开始建资源。
+
+#### 购买方式选择（强烈建议按需）
+
+- **按需（postPaid，强烈建议）**：`charge_info` 仅携带 `charge_mode`；随用随停，
+  试运行与变更期成本可控，删除实例即停止计费。
+- **包周期（prePaid）**：`period_type` 为字符串 `month`（时长 1-9 个月）或
+  `year`（1-3 年）；创建返回订单，经订单工具支付后才开始建资源；适合长期
+  稳定运行。
+- 提交前先取得用户对购买方式与费用的明确授权。
+
+#### 包周期订单支付
+
+1. 创建返回 `order_id` 后，先 `get_supabase_order(order_id)` 查询订单状态、
+   金额、币种与明细（默认 20 条，`marker` 分页）；`amount_after_discount` 为
+   优惠后、不含券与卡的金额，金额须结合返回币种与度量单位解释。
+2. 核对并取得用户对准确金额与币种的授权后，调用
+   `pay_supabase_order(order_id, expected_amount, currency, confirm=true)`：
+   `expected_amount` 必须同时等于 `official_amount` 与 `amount_after_discount`——
+   两者不同即为存在折扣或券，工具拒绝支付以防丢失优惠，此类订单请在费用中心
+   处理；托管账户的最终扣款以账单为准。
+3. 单次确认单次提交，不自动重试；返回 `payment_submitted` 与
+   `payment_verified`，支付后复查订单状态与支付时间确认到账。超时等异常可能
+   使提交结果未知（`payment_submitted=false`）：先查询同一订单，不自动再次付款。
+4. 支付完成、订单开通后出现创建任务，再按场景二跟踪创建进度并验证。
+
+#### 包周期订单取消
+
+1. 弃用未支付订单：先 `get_supabase_order` 确认订单准确，再
+   `cancel_supabase_order(order_id, confirm=true)`。
+2. 服务重新核验云端待支付状态、产品范围与全部明细，仅未支付订单可取消；取消
+   不可逆；已取消订单返回幂等结果。
+3. 返回 `cancellation_verified`；为 false 时继续用 `get_supabase_order` 查询，
+   不盲目重复提交。已支付资源须走控制台退订流程，本工具不受理。
+
 ## 可用工具
 
 全部写工具执行两阶段确认：先以预览模式返回变更内容与计划编号，经确认后才真正提交。
@@ -185,7 +233,7 @@ ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 | `update_supabase_storage` | 对接或变更 OBS 存储桶 | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与凭证检测 | READ | `KooCLI OBS ls` |
 | `discover_supabase_create_basic_options` | 应用基本要素发现与推荐 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：三模块参数固化与流程设计 | READ | 实时组合（三个发现工具的只读查询） |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：必选参数模块固化、OBS 对接（关键可选）与流程设计 | READ | 实时组合（发现工具的只读查询） |
 | `list_supabase_flavors_with_azs` | 查询应用规格及各规格支持的可用区 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | 查询可挂载的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | 查询托管实例可用 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
@@ -402,7 +450,7 @@ mcp-huaweicloud-rds-supabase-mgr -t streamable-http
 ### 工作流一：从零创建一个能访问的应用
 
 1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管
-   来源决策与意图（含 `needs_storage` 存储答复）取得端到端编排基线：三大模块参数
+   来源决策与意图（含 `needs_storage` 存储答复）取得端到端编排基线：必选模块参数
    固化、EIP 购买基线、OBS 桶对接方案与步骤编号的创建流程。
 2. 按编排逐步执行：网络就绪（默认推荐场景按 `default_create` 建网）→ 存储就绪
    （`discover_supabase_storage` 定复用或新建，新建桶走 `create_supabase_new_obs`）

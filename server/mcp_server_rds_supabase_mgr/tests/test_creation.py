@@ -165,3 +165,19 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         text=message(error)
         self.assertIn('HTTP 400',text);self.assertIn('error_code=DBS.280002',text);self.assertIn('error_msg=flavor not available',text)
         self.assertEqual(message(http_failure(503,None)),'API returned HTTP 503')
+class TimeZoneContractTests(unittest.TestCase):
+    def test_whole_hour_offsets_accepted(self):
+        from mcp_server_supabase.service.creation import validate_creation
+        for tz in ('UTC+08:00','UTC-12:00','UTC+12:00','UTC+00:00'):
+            body=copy.deepcopy(REAL_NEW_PG)
+            body['basic_config']['time_zone']=tz
+            validate_creation(body)
+
+    def test_half_hours_and_names_rejected(self):
+        from mcp_server_supabase.service.creation import validate_creation
+        for tz in ('UTC+08:30','UTC+13:00','UTC-13:00','China Standard Time','Asia/Shanghai','UTC+8:00'):
+            body=copy.deepcopy(REAL_NEW_PG)
+            body['basic_config']['time_zone']=tz
+            with self.assertRaises(McpToolError) as ctx:
+                validate_creation(body)
+            self.assertIn('whole-hour UTC offset',str(ctx.exception))

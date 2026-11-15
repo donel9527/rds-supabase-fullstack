@@ -82,7 +82,9 @@ database hosting.
 ## Features
 
 - **Arrangement and discovery**: scenario-based creation arrangement
-  baseline — two managed-instance sources, three parameter modules, EIP/OBS
+  baseline — two managed-instance sources, three mandatory parameter modules plus
+  the OBS bucket integration (a key optional module that must be confirmed before
+  creation), the EIP purchase
   dependencies, and a step-numbered creation flow; four discovery tool
   families (application, instance, network, security group) that consolidate
   parameters live with recommendations.
@@ -124,7 +126,8 @@ Pre-creation preparation is completed in one call of
 `plan_supabase_creation_arrangement`; it plans only and creates no resource. It first presents the two managed-instance
 sources and requires a definitive conclusion from the user: a new instance is
 the recommended default, attaching an existing instance the alternative. It
-then consolidates three parameter modules live:
+then consolidates the key parameter modules live - three mandatory modules and
+one key optional module:
 
 - **Supabase basics**: name suggestion and naming rules, version, deployment
   mode, and flavor, from `discover_supabase_create_basic_options`.
@@ -139,13 +142,16 @@ then consolidates three parameter modules live:
   specification — application group 8443 ingress three-way choice plus 5432
   egress, database group 5432 ingress, all CIDRs from the chosen subnet, from
   `discover_network_for_create`.
+- **OBS bucket storage integration (key optional)**: whether large-file
+  storage applies (images, videos, large files) must be answered explicitly —
+  it cannot be enabled after creation; once confirmed, the module carries the
+  reuse/new choice, the complete new-bucket specification, and the temporary-
+  credential notice, submitted once with the creation request.
 
-After the large-file storage scenario is confirmed, an OBS bucket module is
-appended (reuse/create two options, full new-bucket specification,
-temporary-credential hints), together with the EIP purchase baseline:
-pay-per-use, dedicated full-dynamic BGP bandwidth 5-1000M, 300M recommended.
-The output is a step-numbered creation flow plus a post-creation action list,
-to be followed 1:1 during creation.
+Alongside, the EIP purchase baseline is given: pay-per-use,
+dedicated full-dynamic BGP bandwidth 5-1000M, 300M recommended. The output
+is a step-numbered creation flow plus a post-creation action list, to be
+followed 1:1 during creation.
 
 ### Scenario 2: Full application creation flow
 
@@ -177,8 +183,8 @@ identifier into the request before one successful submission.
 6. application_id/instance_id and both workflow IDs are echoed; keep
    querying via `show_supabase_creation_progress`: roughly 20-30 minutes
    overall, the instance becomes ready first and only then does the
-   application task start; prepaid requires payment through the order tools
-   first.
+   application task start; prepaid resources begin only after the order is
+   paid per Scenario 5.
 7. Verify readiness with `show_supabase_application`; then proceed as needed
    with public access (Scenario 3), SSL, login configuration, and access
    information delivery.
@@ -239,6 +245,67 @@ same four verification layers. Auto-created security groups are cleaned up
 via `delete_supabase_security_group` behind the tag gate: only groups bearing
 the `AUTO_CREATE=true`/`USE_FOR=Supabase` tag pair and free of references
 may be deleted.
+
+### Scenario 5: Purchase modes
+
+The RDS Supabase application is free during public beta; charges arise only
+from the managed database instance. The purchase mode is set in
+`managed_instance.charge_info` of the creation request.
+
+#### Billing boundary (application free, instance charged)
+
+- **The application itself**: free during public beta, no charge.
+- **The managed database instance**: the only billing subject - pay-per-use
+  bills actual usage, prepaid bills the ordered period.
+- A creation that returns `order_id` means a prepaid order was created and no
+  resource provisioned yet; an unpaid order does not mean the instance is
+  provisioned - resources are built only once a creation task (`job_id`)
+  appears.
+
+#### Purchase-mode choice (pay-per-use strongly recommended)
+
+- **Pay-per-use (postPaid, strongly recommended)**: `charge_info` carries
+  `charge_mode` only; start and stop at any time, controllable cost during
+  trial and change periods, billing stops when the instance is deleted.
+- **Prepaid (prePaid)**: `period_type` is the string `month` (1-9 months) or
+  `year` (1-3 years); creation returns an order and resources are built only
+  after payment through the order tools; suited to long-term stable runs.
+- Obtain the user's explicit approval of the purchase mode and cost before
+  submitting.
+
+#### Prepaid order payment
+
+1. Once the creation returns `order_id`, first query the order status,
+   amounts, currency and lines with `get_supabase_order(order_id)` (20 lines
+   by default, `marker` pagination); `amount_after_discount` is the
+   post-discount amount excluding coupons and cards, and amounts must be read
+   together with the returned currency and unit.
+2. After verifying and obtaining the user's approval of the exact amount and
+   currency, call `pay_supabase_order(order_id, expected_amount, currency,
+   confirm=true)`: `expected_amount` must equal both `official_amount` and
+   `amount_after_discount` - a difference means a discount or coupon exists,
+   and the tool rejects the payment to avoid losing it; such orders are
+   handled in the billing center. For managed accounts the final charge
+   follows the bill.
+3. One confirmation, one submission, no automatic retry; the result carries
+   `payment_submitted` and `payment_verified`, and the order status and
+   payment time are re-checked after payment. Timeouts may leave the outcome
+   unknown (`payment_submitted=false`): query the same order first and never
+   pay automatically again.
+4. Once the payment completes and the order provisions, a creation task
+   appears - track and verify per Scenario 2.
+
+#### Prepaid order cancellation
+
+1. To abandon an unpaid order: confirm it accurately with `get_supabase_order`
+   first, then `cancel_supabase_order(order_id, confirm=true)`.
+2. The service re-checks the cloud-side pending-payment state, product scope
+   and every order line; only unpaid orders qualify; cancellation is
+   permanent; already-cancelled orders return an idempotent result.
+3. The result carries `cancellation_verified`; when false, keep querying with
+   `get_supabase_order` instead of blindly resubmitting. Paid resources must
+   go through the console unsubscription workflow, which this tool does not
+   handle.
 
 ## Available tools
 

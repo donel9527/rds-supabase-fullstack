@@ -26,7 +26,12 @@ def validate_creation(body):
         az=segment(body['availability_zone']);password_rule(body['password'],'password')
         basic=body['basic_config'];fields(basic,('region','vpc_id','subnet_id','time_zone'),('region','vpc_id','subnet_id'))
         for key in ('region','vpc_id','subnet_id'):segment(basic[key])
-        if 'time_zone' in basic:text(basic['time_zone'],64)
+        if 'time_zone' in basic:
+            # Official CreateInstance contract: PostgreSQL accepts whole-hour UTC
+            # offsets in UTC-12:00~UTC+12:00 only (half hours such as UTC+08:30
+            # are unsupported); timezone names belong to the SQL Server table.
+            if not isinstance(basic['time_zone'],str) or not re.fullmatch(r'UTC(?:\+|-)(?:0\d|1[0-2]):00',basic['time_zone']):
+                raise ValueError("time_zone must be a whole-hour UTC offset like UTC+08:00 within UTC-12:00~UTC+12:00 (half hours and timezone names are unsupported)")
         if 'data_vip' in body:ipaddress.IPv4Address(body['data_vip'])
         if 'security_group_id' in body:identifier(body['security_group_id'])
         validate_request('storage',body['storage_component'])

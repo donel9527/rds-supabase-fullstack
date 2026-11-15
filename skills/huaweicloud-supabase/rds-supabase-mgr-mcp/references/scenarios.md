@@ -38,7 +38,7 @@ SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与�
 | 要从公网访问吗？ | 要 → 创建后走 EIP + 安全组 + api_external_url 同步；不要 → 明确告知用户只能内网访问 |
 | 要 https 吗？ | 要 → 买 CCM 证书、创建后切 SSL；不要 → 走 http |
 
-**执行纪律**：逐个问、拿到明确答复才往下走；答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`——托管来源必须先拿到确定性结论（推荐新建实例），编排会实时固化三大模块参数，needs_storage 明确答复后输出 OBS 桶获取（复用/新建两场景）与配置方案，并输出步骤编号的 creation_flow（含 obs_integration 步骤），实际创建严格 1:1 执行。用户一笔带过需求时（"帮我建个应用"），四问一个都不能少——没问就默认等于替用户做了业务决定，走偏的根源就在这。部署模式是否支持 Ha 也别猜：`list_supabase_flavors_with_azs(az_code, mode='Ha')` 成功 → Single/Ha 都可选；400 → 该环境仅 Single，如实告知。
+**执行纪律**：逐个问、拿到明确答复才往下走；答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`——托管来源必须先拿到确定性结论（推荐新建实例），编排会实时固化关键参数模块——三大必选模块与 OBS 桶存储对接（关键可选：needs_storage 必须明确答复，创建后不可再启用，答复确认即输出复用/新建两场景与配置方案），并输出步骤编号的 creation_flow（含 obs_integration 步骤），实际创建严格 1:1 执行。用户一笔带过需求时（"帮我建个应用"），四问一个都不能少——没问就默认等于替用户做了业务决定，走偏的根源就在这。部署模式是否支持 Ha 也别猜：`list_supabase_flavors_with_azs(az_code, mode='Ha')` 成功 → Single/Ha 都可选；400 → 该环境仅 Single，如实告知。
 
 ### 配置字段来源分类（谁提供什么）
 

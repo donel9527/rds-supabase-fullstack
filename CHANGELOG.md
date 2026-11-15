@@ -7,6 +7,56 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` v0.4.0a45: the creation timezone becomes a
+  first-class field option with its official value range, and the README
+  business scenarios gain purchase modes plus elevate the OBS integration.
+  discover_db_instance_for_create adds basic_config.time_zone: 25 whole-hour
+  values UTC-12:00~UTC+12:00 with UTC+08:00 (China Beijing) recommended,
+  grounded in the official CreateInstance contract (PostgreSQL whole hours
+  only; the SQL Server timezone/UTC-offset reference table is cited in the
+  note). The creation validator tightens basic_config.time_zone from a loose
+  text check to the same whole-hour rule; the configuration_id option note
+  now states its value source (ListConfigurations ids). READMEs and skill
+  guidance present the arrangement as three mandatory parameter modules plus
+  the OBS bucket storage integration as a key optional module. A new
+  Scenario 5 (purchase modes) inherits the GaussDB MCP order documentation
+  and adapts it: the billing boundary is explicit (the application is free
+  during public beta; only the managed instance is charged), pay-per-use is
+  strongly recommended (charge_info: period_type is the string month/year,
+  1-9 months or 1-3 years prepaid), prepaid payment walks get/pay_supabase_
+  order (amount and currency verification, expected_amount must equal both
+  official_amount and amount_after_discount so discounted orders are
+  rejected, one submission without automatic retry, unknown outcomes are
+  re-queried never repaid), and cancellation walks get/cancel_supabase_order
+  (unpaid-only, permanent, idempotent, cancellation_verified follow-up).
+  Verified live in cn-east-3: the field renders with UTC+08:00 recommended
+  and the arrangement embeds it. Tool count unchanged (43); skill v0.9.16.
+
+- `mcp_server_rds_supabase_mgr` v0.4.0a44: both READMEs are systematically
+  rewritten, following the GaussDB MCP server README's layout, typography
+  and register. The overview is one consolidated professional summary; the
+  feature list is regrouped into terse capability statements; every
+  tool-table scenario is compressed to one line with all 43 rows and 37
+  API-doc links preserved; a new Business Scenarios chapter carries
+  pre-creation preparation, the full application creation flow split into
+  new-instance and existing-instance sub-sections, EIP creation and
+  binding, and application deletion with the managed PG instance.
+  Skill v0.9.15.
+
+- `mcp_server_rds_supabase_mgr` v0.4.0a43: the scenario creation tools
+  provision the OBS bucket too. create_supabase_with_new_instance and
+  create_supabase_link_exist_instance ensure the storage_component bucket
+  before submission (existing kept, missing created per the fixed private/
+  standard/multi-AZ/block-public-access rules, short-uuid retry on global
+  collision) and backfill the final bucket name so one submission succeeds.
+  Previews carry obs_plan with the credential mode and warn on temporary
+  credentials. This release also finalizes the scenario split of
+  create_supabase_application (43 tools): the generic tool is removed, the
+  arrangement's creation_flow routes through the two scenario tools with
+  security-group and OBS preparation executed automatically inside the
+  tool. Verified live in cn-east-3 against a temporary VPC/subnet (cleaned
+  up after). Skill v0.9.14.
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a42: OBS storage tooling, developed in
   parallel by three agents (OBS service, storage visual renderer,
   documentation) plus integration fixes caught live.
