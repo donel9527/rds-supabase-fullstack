@@ -22,6 +22,9 @@ For execution logic, see [SKILL.md](SKILL.md).
 
 ## Installation
 
+Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-usage` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+
+
 See [INSTALL.md](INSTALL.md).
 
 ## Usage

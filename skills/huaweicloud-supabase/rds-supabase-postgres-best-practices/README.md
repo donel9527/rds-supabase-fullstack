@@ -26,7 +26,7 @@ Postgres 规则库技能，源自 Supabase 维护的通用规则集（"for Postg
 
 ## 安装
 
-见 [INSTALL.md](INSTALL.md)。
+快速安装：`npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-postgres-best-practices`（Node.js ≥ 22.20；详见 [INSTALL.md](INSTALL.md)）。
 
 ## 使用
 

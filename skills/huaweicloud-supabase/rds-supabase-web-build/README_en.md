@@ -14,6 +14,9 @@ Five bands from top to bottom: the orchestration bar (web-build + the webapp.jso
 
 ## Installation
 
+Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-web-build` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+
+
 See [INSTALL.md](INSTALL.md).
 
 ## MCP Installation Sources (used when the workflow installs them dynamically; the only allowed full URLs)

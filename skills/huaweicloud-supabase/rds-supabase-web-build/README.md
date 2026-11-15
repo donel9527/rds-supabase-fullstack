@@ -12,7 +12,7 @@
 
 ## 安装
 
-见 [INSTALL.md](INSTALL.md)。
+快速安装：`npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-web-build`（Node.js ≥ 22.20；详见 [INSTALL.md](INSTALL.md)）。
 
 ## MCP 安装来源（工作流动态安装时使用；唯一允许的完整 URL）
 

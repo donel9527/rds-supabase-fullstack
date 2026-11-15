@@ -22,6 +22,9 @@ Transparent errors: local validation names the specific field, backend rejection
 
 ## Installation
 
+Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-mgr-mcp` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+
+
 See [INSTALL.md](INSTALL.md).
 
 ## Usage

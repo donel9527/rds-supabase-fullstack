@@ -17,7 +17,7 @@ Agent 按本文四节执行。安装范围**仅本技能**——不安装、不�
 
 **编排依赖说明**：本技能是编排者，步骤路由指向六个专项技能（mgr-mcp / mcp / usage / frontend / postgres-best-practices / function-graph，均在 `skills/huaweicloud-supabase/` 下）。路由目标缺失时对应环节如实降级：提示用户安装该专项技能后继续，或按能力边界自行执行可直接完成的部分。完整编排体验建议连带安装全部技能。
 
-前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（不可达见方式 B）。
+前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（不可达见方式 C）。
 
 ## 二、安装位置选择（必须交互，默认项目级）
 
@@ -43,13 +43,19 @@ Agent 按本文四节执行。安装范围**仅本技能**——不安装、不�
 - CodeArts 的 `~/.codeartsdoer/skills` 与项目级 `<项目根>/.codeartsdoer/skills` 同名不同根，极易装错——选 ② 时逐字核对完整路径
 - 凭据与 MCP 配置始终只在项目级（本技能红线），装到用户级/系统级不会改变这一点
 
-- 安装路径仅本文两条（git 克隆 / ZIP 归档）；**禁用 `npx skills add` 等一切 CLI/包管理器自动安装**——技能包未发布至此类来源渠道，命令不可用；Agent 不得自行尝试
-
 ## 三、三步安装
 
-### 第 1 步 · 安装技能文件（方式 A/B 择一）
+### 第 1 步 · 安装技能文件（方式 A/B/C 按序择一，A 为主路径）
 
-**方式 A**（git 克隆复制，主路径）：
+**方式 A**（`npx skills add`，主路径，推荐）：标准 Agent Skills 生态 CLI（Vercel 开源，支持 OpenCode、Claude Code 等 75+ 宿主）直接从本仓 GitHub 源安装；前置 Node.js ≥ 22.20。
+
+```bash
+npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-web-build -a <宿主> -y
+```
+
+`-a <宿主>` 取 `opencode` / `claude-code` / `cursor` 等（省略则交互选择本机已检测的宿主）；`-g` 装用户级（默认项目级）。安装即生成 `skills-lock.json` 锁定来源 commit；更新 `npx skills update`，卸载 `npx skills remove`。失败或行为异常时切方式 B，不反复重试。
+
+**方式 B**（git 克隆复制，备选——npx 失败、无 Node.js ≥22.20 或需精确控制复制内容时）：
 
 ```bash
 TMP=$(mktemp -d)   # 克隆落唯一临时目录，不污染项目目录与家目录
@@ -60,7 +66,7 @@ rm -rf "$TMP"     # 复制完成即清理
 
 （连带安装全部技能时，把复制源换成 `"$TMP/repo/skills/huaweicloud-supabase/"*`。）
 
-**方式 B**（网络逃生通道——git 失败即切，不反复重试）：连续失败 2 次或 30 秒无进展即判失败 → 下载 ZIP 归档解压：
+**方式 C**（ZIP 归档，网络逃生通道——git 失败即切，不反复重试）：连续失败 2 次或 30 秒无进展即判失败 → 下载 ZIP 归档解压：
 
 ```bash
 TMP=$(mktemp -d)

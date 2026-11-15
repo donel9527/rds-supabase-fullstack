@@ -43,7 +43,21 @@
 
 ## 三、安装方式（A/B 择一）
 
-### 方式 A：git 克隆复制（主路径）
+### 方式 A：`npx skills add`（主路径，推荐）
+
+标准 Agent Skills 生态 CLI（Vercel 开源，支持 OpenCode、Claude Code 等 75+ 宿主）直接从本仓 GitHub 源安装；前置 Node.js ≥ 22.20。
+
+```bash
+npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-mgr-mcp -a <宿主> -y
+```
+
+- `--skill rds-supabase-mgr-mcp`：只装本技能（省略则交互列出本仓全部 8 个技能供勾选）
+- `-a <宿主>`：`opencode` / `claude-code` / `cursor` 等（省略则交互选择本机已检测的宿主）
+- `-g`：装到用户级（默认项目级——与本文件第一节的位置选择对应；CLI 默认落 `.agents/skills/`，宿主按其发现规则识别）
+- 安装即生成 `skills-lock.json` 锁定来源 commit；更新用 `npx skills update`，卸载用 `npx skills remove`
+- 失败或行为异常时切方式 B，不反复重试
+
+### 方式 B：git 克隆复制（备选——npx 失败、无 Node.js ≥22.20 或需精确控制复制内容时）
 
 ```bash
 TMP=$(mktemp -d)   # 克隆落唯一临时目录，不污染项目目录与家目录
@@ -52,7 +66,7 @@ cp -r "$TMP/repo/skills/huaweicloud-supabase/rds-supabase-mgr-mcp" <项目技能
 rm -rf "$TMP"     # 复制完成即清理
 ```
 
-### 方式 B：ZIP 归档（网络逃生通道——git 连续失败 2 次或 30 秒无进展即切，不反复重试）
+### 方式 C：ZIP 归档（网络逃生通道——git 连续失败 2 次或 30 秒无进展即切，不反复重试）
 
 ```bash
 TMP=$(mktemp -d)
@@ -111,5 +125,5 @@ curl -sSL https://cn-north-4-hdn-koocli.obs.cn-north-4.myhuaweicloud.com/cli/lat
 
 ## 六、更新与卸载
 
-- **更新**：`git pull` 后重新复制（重复方式 A；版本 pin 等价形式 `.../archive/<commit>.zip`）；更新作用于所选安装位置，用户级/系统级安装时提醒影响面
+- **更新**：方式 A 安装的用 `npx skills update`（按 skills-lock.json 锁定的 commit 前滚）；git 复制的 `git pull` 后重新复制（重复方式 B；版本 pin 等价形式 `.../archive/<commit>.zip`）；更新作用于所选安装位置，用户级/系统级安装时提醒影响面
 - **卸载**：删除所选安装位置中本技能目录；技能曾动态安装管理面 MCP 的，另移除项目级 MCP 配置中对应条目

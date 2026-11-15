@@ -28,6 +28,9 @@ Usage: while performing SQL-related tasks, the agent locates the relevant rule f
 
 ## Installation
 
+Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-postgres-best-practices` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+
+
 See [INSTALL.md](INSTALL.md).
 
 ## Usage

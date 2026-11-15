@@ -31,7 +31,7 @@
 
 ## 安装
 
-见 [INSTALL.md](INSTALL.md)。
+快速安装：`npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-function-graph`（Node.js ≥ 22.20；详见 [INSTALL.md](INSTALL.md)）。
 
 ## 使用
 

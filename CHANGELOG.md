@@ -7,6 +7,29 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a54 - `npx skills add` becomes the
+  primary skill-installation channel, verified end to end: the Vercel
+  open-source skills CLI (npm `skills`, 75+ agents including OpenCode
+  and Claude Code) discovers all eight skills in this repository
+  through its standard catalog walk (`skills/<category>/<name>/
+  SKILL.md`, three levels deep - the existing layout fits without any
+  change), and a live `npx skills add huaweicloud/rds-supabase-
+  fullstack --skill rds-supabase-usage -a opencode -y` run installed
+  the complete skill folder with a skills-lock.json pinning the source
+  commit. All seven skill INSTALL.md files restructure their
+  installation section: method A is now `npx skills add` (primary,
+  recommended - with the --skill/-a/-g flag guidance, lock-file and
+  update/remove lifecycle), git clone becomes method B (fallback for
+  CLI failure, missing Node.js >= 22.20, or exact copy control), and
+  the ZIP archive becomes method C (network escape hatch); the stale
+  "CLI/package-manager installation forbidden" statements - written
+  when the skills were not yet on a CLI-servable channel - are
+  removed everywhere. All fourteen skill READMEs (Chinese and the
+  newly added English mirrors) gain a one-line quick-install command
+  in their installation section.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a53 - concise tool descriptions,
   feature-overview restructure, and English READMEs for all seven skills:
   - All 53 MCP tool descriptions (the docstrings agents preview in

@@ -31,9 +31,23 @@
 - 用户级/系统级会把技能暴露给无关项目与无关用户，本项目后续升级、卸载都会波及它们
 - CodeArts 的 `~/.codeartsdoer/skills` 与项目级 `<项目根>/.codeartsdoer/skills` 同名不同根，极易装错——选 ② 时逐字核对完整路径
 
-## 二、安装方式（A/B 择一）
+## 二、安装方式（A/B/C 按序择一，A 为主路径）
 
-### 方式 A：git 克隆复制（主路径）
+### 方式 A：`npx skills add`（主路径，推荐）
+
+标准 Agent Skills 生态 CLI（Vercel 开源，支持 OpenCode、Claude Code 等 75+ 宿主）直接从本仓 GitHub 源安装；前置 Node.js ≥ 22.20。
+
+```bash
+npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-function-graph -a <宿主> -y
+```
+
+- `--skill rds-supabase-function-graph`：只装本技能（省略则交互列出本仓全部 8 个技能供勾选）
+- `-a <宿主>`：`opencode` / `claude-code` / `cursor` 等（省略则交互选择本机已检测的宿主）
+- `-g`：装到用户级（默认项目级——与本文件第一节的位置选择对应；CLI 默认落 `.agents/skills/`，宿主按其发现规则识别）
+- 安装即生成 `skills-lock.json` 锁定来源 commit；更新用 `npx skills update`，卸载用 `npx skills remove`
+- 失败或行为异常时切方式 B，不反复重试
+
+### 方式 B：git 克隆复制（备选——npx 失败、无 Node.js ≥22.20 或需精确控制复制内容时）
 
 ```bash
 TMP=$(mktemp -d)   # 克隆落唯一临时目录，不污染项目目录与家目录
@@ -42,7 +56,7 @@ cp -r "$TMP/repo/skills/huaweicloud-supabase/rds-supabase-function-graph" <项�
 rm -rf "$TMP"     # 复制完成即清理
 ```
 
-### 方式 B：ZIP 归档（网络逃生通道——git 连续失败 2 次或 30 秒无进展即切，不反复重试）
+### 方式 C：ZIP 归档（网络逃生通道——git 连续失败 2 次或 30 秒无进展即切，不反复重试）
 
 ```bash
 TMP=$(mktemp -d)
@@ -53,7 +67,7 @@ cp -r "$TMP/rds-supabase-fullstack-main/skills/huaweicloud-supabase/rds-supabase
 rm -rf "$TMP"
 ```
 
-浏览器直接下载该 ZIP URL 亦可（下载物同样落临时目录）。ZIP 归档属本仓官方源；**禁用 `npx skills add` 等一切 CLI/包管理器自动安装**——技能包未发布至此类来源渠道。
+浏览器直接下载该 ZIP URL 亦可（下载物同样落临时目录）。ZIP 归档属本仓官方源，为无 Node.js 环境时的备选。
 
 ## 三、校验与完成报告
 
@@ -62,5 +76,5 @@ rm -rf "$TMP"
 
 ## 四、更新与卸载
 
-- **更新**：`git pull` 后重新复制（重复方式 A；版本 pin 等价形式 `.../archive/<commit>.zip`）
+- **更新**：方式 A 安装的用 `npx skills update`（按 skills-lock.json 锁定的 commit 前滚）；git 复制的 `git pull` 后重新复制（重复方式 B；版本 pin 等价形式 `.../archive/<commit>.zip`）
 - **卸载**：删除项目级技能目录中本技能；已部署的云函数属云端资源，卸载技能不影响，按 SKILL.md 下线规程另行处理

@@ -33,6 +33,9 @@ Secrets live only in function environment variables (`--cli-json-file` is assemb
 
 ## Installation
 
+Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-function-graph` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+
+
 See [INSTALL.md](INSTALL.md).
 
 ## Usage
