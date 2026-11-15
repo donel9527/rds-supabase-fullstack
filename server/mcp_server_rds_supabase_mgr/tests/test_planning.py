@@ -106,6 +106,10 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         m3 = result['step_modules']['network_control']
         self.assertEqual(m3['placement']['vpc_id'], 'v1')
         self.assertEqual(m3['security_group_plan']['plan_type'], 'specification')
+        obs = result['step_modules']['obs_integration']
+        self.assertEqual(obs['acquisition']['recommended'], 'new')
+        self.assertTrue(obs['new_bucket_spec']['bucket_name'].startswith('supabase-'))
+        self.assertTrue(any(s['phase'] == 'obs_integration' for s in result['creation_flow']))
         eip = result['eip_baseline']
         self.assertEqual(eip['purchase_method']['recommended']['charge_mode'], 'postPaid')
         self.assertEqual(eip['bandwidth']['recommended_size_mbps'], 300)
@@ -196,6 +200,8 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any('接入信息交付' in str(p.get('action')) for p in post))
         self.assertEqual(result['eip_baseline']['applies_when'],
                          '本编排未启用公网访问——不购买 EIP，接入用 private_ip')
+        self.assertNotIn('obs_integration', result['step_modules'])
+        self.assertFalse(any(s['phase'] == 'obs_integration' for s in result['creation_flow']))
 
     async def test_omitted_intents_become_decisions(self):
         result = await self.make().arrangement('newly_instance')

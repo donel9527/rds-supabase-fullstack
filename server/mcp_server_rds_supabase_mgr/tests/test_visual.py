@@ -409,5 +409,160 @@ class ToleranceTests(unittest.TestCase):
             self.assertTrue(isinstance(output,str))
 
 
+def storage_options_fixture():
+    return {'mode':'storage_options',
+            'credential':{'temporary':True,
+                          'detail':'OBS 临时凭证含 SecurityToken，有效期约 1 小时',
+                          'notice':'临时凭证过期后需重新获取，长期运行建议固定 AK/SK'},
+            'reuse':{'option':'reuse','note':'私有桶优先；Public 桶须评估风险后再复用',
+                     'buckets':[
+                         {'name':'fitz-assets-private','location':'cn-east-3','public_status':'私有',
+                          'risk_note':'-'},
+                         {'name':'fitz-assets-public','location':'cn-east-3','public_status':'Public',
+                          'risk_note':'公网可读，存在数据泄露风险，不建议复用'}],
+                     'read_test':{'passed':True,'detail':'全部桶 ListObjects 读探测通过'}},
+            'new_bucket':{'option':'new','note':'私有 STANDARD 桶并阻断公共访问，参数全链路可控',
+                          'spec':{'bucket_name':'supabase-storage-1115',
+                                  'storage_class':'STANDARD','bucket_type':'OBJECT','redundancy':'多AZ',
+                                  'block_public_access':True,'region':'cn-east-3','enterprise_project':'0',
+                                  'storage_component_hint':{
+                                      'bucket':'supabase-storage-1115',
+                                      'ak_sk':'经本地请求文件提供，不落盘不回显'}}},
+            'storage_component_note':'桶名即 spec.bucket_name；AK/SK 经本地请求文件提供'}
+
+
+def storage_created_fixture():
+    return {'status':'ok',
+            'spec':{'bucket_name':'supabase-storage-1115','storage_class':'STANDARD','bucket_type':'OBJECT',
+                    'redundancy':'多AZ','block_public_access':True,'region':'cn-east-3',
+                    'enterprise_project':'0'},
+            'storage_component_hint':{'bucket':'supabase-storage-1115',
+                                      'ak_sk':'AKSK 经本地请求文件提供，不落盘不回显'},
+            'note':'桶 supabase-storage-1115 已创建并完成 storage_component 对接',
+            'warnings':[]}
+
+
+def storage_pending_fixture():
+    return {'status':'confirmation_required',
+            'bucket':{'bucket_name':'supabase-storage-1115','storage_class':'STANDARD','bucket_type':'OBJECT',
+                      'redundancy':'多AZ','block_public_access':True,'region':'cn-east-3',
+                      'enterprise_project':'0'},
+            'note':'预览完成，等待确认后创建',
+            'warnings':['确认后才会真正创建桶','包周期实例的订单需控制台支付']}
+
+
+def arrangement_obs_fixture():
+    result=arrangement_fixture()
+    result['step_modules']['obs_integration']={
+        'source_tool':'discover_supabase_storage',
+        'acquisition':{'recommended':'new',
+                       'options':[{'key':'reuse','name':'复用已有桶','note':'私有桶优先，需读探测通过'},
+                                  {'key':'new','name':'新建桶','note':'私有 STANDARD 桶，阻断公共访问'}]},
+        'new_bucket_spec':{'bucket_name':'supabase-storage-1115','storage_class':'STANDARD',
+                           'bucket_type':'OBJECT','redundancy':'多AZ','block_public_access':True,
+                           'region':'cn-east-3','enterprise_project':'0'},
+        'credential':{'temporary':True,'notice':'临时凭证含 SecurityToken，过期需重新获取'}}
+    return result
+
+
+class RenderStorageTests(unittest.TestCase):
+    def test_storage_options_full(self):
+        out=visual.render_storage(storage_options_fixture())
+        self.assertIn('【OBS 存储方案（大文件/图片/视频承载）】',out)
+        self.assertIn('- 复用已有桶：私有桶优先；Public 桶须评估风险后再复用',out)
+        self.assertIn('- 新建桶（推荐、默认）：私有 STANDARD 桶并阻断公共访问，参数全链路可控',out)
+        self.assertIn('【凭证模式】',out)
+        self.assertIn('临时凭证（含 SecurityToken）',out)
+        self.assertIn('【可复用桶（私有优先）】',out)
+        self.assertIn('桶名',out)
+        self.assertIn('公共状态',out)
+        self.assertIn('风险提示',out)
+        self.assertIn('fitz-assets-public',out)
+        self.assertIn('公网可读，存在数据泄露风险，不建议复用',out)
+        self.assertIn('【新桶完整参数配置（推荐）】',out)
+        self.assertIn('supabase-storage-1115',out)
+        self.assertIn('STANDARD',out)
+        self.assertIn('多AZ',out)
+        self.assertIn('经本地请求文件提供，不落盘不回显',out)
+        self.assertIn('挂载',out)
+        self.assertIn('【storage_component 对应】',out)
+        self.assertIn('桶名即 spec.bucket_name；AK/SK 经本地请求文件提供',out)
+
+    def test_storage_options_read_test_failed(self):
+        result=storage_options_fixture()
+        result['reuse']['read_test']={'passed':False,'detail':'fitz-assets-public 无 ListObjects 权限'}
+        out=visual.render_storage(result)
+        self.assertIn('读测试未通过：fitz-assets-public 无 ListObjects 权限',out)
+
+    def test_storage_options_notice_omitted_when_none(self):
+        result=storage_options_fixture()
+        del result['credential']['notice']
+        out=visual.render_storage(result)
+        self.assertNotIn('notice',out)
+
+    def test_long_note_wraps_without_truncation(self):
+        note='存储对接说明'*25
+        result=storage_options_fixture()
+        result['storage_component_note']=note
+        out=visual.render_storage(result)
+        section=out.split('【storage_component 对应】\n',1)[1]
+        lines=section.split('\n')
+        self.assertGreater(len(lines),1)
+        self.assertNotIn('…',section)
+        for line in lines:
+            self.assertLessEqual(visual.width(line),90)
+        self.assertEqual(''.join(lines),note)
+
+    def test_created_ok(self):
+        out=visual.render_storage(storage_created_fixture())
+        self.assertIn('【新桶参数规格】',out)
+        self.assertIn('supabase-storage-1115',out)
+        self.assertIn('STANDARD',out)
+        self.assertIn('【状态】',out)
+        self.assertIn('已创建：桶 supabase-storage-1115 已创建并完成 storage_component 对接',out)
+        self.assertIn('AKSK 经本地请求文件提供，不落盘不回显',out)
+        self.assertIn('挂载',out)
+        self.assertNotIn('【注意】',out)
+
+    def test_confirmation_required(self):
+        out=visual.render_storage(storage_pending_fixture())
+        self.assertIn('【新桶参数规格】',out)
+        self.assertIn('supabase-storage-1115',out)
+        self.assertIn('【状态】',out)
+        self.assertIn('待确认（预览返回 plan_id）',out)
+        self.assertIn('【注意】',out)
+        self.assertIn('确认后才会真正创建桶',out)
+        self.assertIn('包周期实例的订单需控制台支付',out)
+
+    def test_missing_keys_do_not_raise(self):
+        for payload in ({},None,{'mode':'storage_options'},{'status':'ok'}):
+            with self.subTest(payload=payload):
+                self.assertTrue(isinstance(visual.render_storage(payload),str))
+
+
+class RenderArrangementObsTests(unittest.TestCase):
+    def test_obs_integration_block(self):
+        out=visual.render_arrangement(arrangement_obs_fixture())
+        self.assertIn('【OBS 桶对接（大文件存储场景）】',out)
+        self.assertIn('- 复用已有桶：私有桶优先，需读探测通过',out)
+        self.assertIn('- 新建桶：私有 STANDARD 桶，阻断公共访问（推荐/默认）',out)
+        self.assertIn('supabase-storage-1115',out)
+        self.assertIn('凭证提示：临时凭证含 SecurityToken，过期需重新获取',out)
+        self.assertIn('【模块三：网络控制】',out)
+        self.assertIn('【EIP 购买基线】',out)
+
+    def test_without_obs_key_output_unchanged(self):
+        out=visual.render_arrangement(arrangement_fixture())
+        self.assertNotIn('OBS 桶对接',out)
+
+    def test_credential_line_only_when_temporary(self):
+        result=arrangement_obs_fixture()
+        result['step_modules']['obs_integration']['credential']={'temporary':False,
+                                                                 'notice':'长期 AK/SK'}
+        out=visual.render_arrangement(result)
+        self.assertIn('【OBS 桶对接（大文件存储场景）】',out)
+        self.assertNotIn('凭证提示',out)
+
+
 if __name__=='__main__':
     unittest.main()

@@ -7,6 +7,38 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` v0.4.0a42: OBS storage tooling, developed in
+  parallel by three agents (OBS service, storage visual renderer,
+  documentation) plus integration fixes caught live.
+  create_supabase_new_obs creates a brand-new private OBS bucket for the
+  application's storage needs (the storage_component target) through the
+  KooCLI embedded obsutil: the bucket name derives from the application
+  name (sanitized, supabase- prefix, short-uuid retry on collision),
+  storage class fixed to standard, bucket type fixed to private, data
+  redundancy as a parameter (multi_az default, single_az optional), public
+  access blocked (fixed, put-public-access-block with all four switches),
+  region from the current project, enterprise project default.
+  discover_supabase_storage presents the acquisition options once the
+  storage need is confirmed - reuse (buckets listed, private first, public
+  ones risk-flagged) or new (recommended/default, complete spec) - and
+  detects temporary credentials (SecurityToken), explicitly prompting for
+  persistent AK/SK with an OBS read test.
+  plan_supabase_creation_arrangement gains the obs_integration module and
+  two flow steps when needs_storage is confirmed, plus an
+  update_supabase_storage credential-rotation post step.
+  Live-caught integration fixes: the embedded obsutil rejects the JSON-API
+  --cli-* flags (exit 3 with usage) - the obs channel now uses its native
+  -i/-k/-t credentials and a -e=obs.<region> endpoint, with a per-bucket
+  region override for bucket-local probes; the real ls bucket rows carry
+  the obs:// prefix (the parser now matches the verified format and the
+  live account lists its bucket correctly); get-bucket-public-status
+  returns 405 on the current account, degrading to an explicit unknown
+  status. Also fixed: the README version lines had been silently frozen
+  at 0.4.0a23 for many releases (a replace chain broke unverified) -
+  both now read 0.4.0a42. Tool count 40 -> 42; skill v0.9.13.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a41: chart-rendered visualization for every
   discovery and arrangement response, plus two EIP tools developed in parallel
   by three agents (visual engine, EIP purchase service, EIP bind service).

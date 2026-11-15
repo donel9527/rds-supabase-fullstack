@@ -34,18 +34,18 @@ SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与�
 | 问题 | 答案的后果 |
 |---|---|
 | 数据库怎么办？新建还是用已有 PG？ | 路线 A（newly_instance）/ 路线 B（existed_instance） |
-| **要传文件吗？**（图片、视频、附件都算） | 要 → **创建前**定 OBS 桶（复用私有桶 or 新建专用多 AZ 桶，也问用户），桶名+AK/SK 进 storage_component——**存储事后无法补开**；不要 → storage_component 写 {enabled:false} |
+| **要传文件吗？**（图片、视频、附件都算） | 要 → **创建前**定 OBS 桶：`discover_supabase_storage` 给两个选择——复用已有桶（私有优先，公共桶标注匿名公开风险尽量不用，无可选转新建）或新建桶（推荐、默认，走 `create_supabase_new_obs`），复用还是新建也问用户；桶名+AK/SK 进 storage_component——**存储事后无法补开**；不要 → storage_component 写 {enabled:false} |
 | 要从公网访问吗？ | 要 → 创建后走 EIP + 安全组 + api_external_url 同步；不要 → 明确告知用户只能内网访问 |
 | 要 https 吗？ | 要 → 买 CCM 证书、创建后切 SSL；不要 → 走 http |
 
-**执行纪律**：逐个问、拿到明确答复才往下走；答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`——托管来源必须先拿到确定性结论（推荐新建实例），编排会实时固化三大模块参数并输出步骤编号的 creation_flow，实际创建严格 1:1 执行。用户一笔带过需求时（"帮我建个应用"），四问一个都不能少——没问就默认等于替用户做了业务决定，走偏的根源就在这。部署模式是否支持 Ha 也别猜：`list_supabase_flavors_with_azs(az_code, mode='Ha')` 成功 → Single/Ha 都可选；400 → 该环境仅 Single，如实告知。
+**执行纪律**：逐个问、拿到明确答复才往下走；答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`——托管来源必须先拿到确定性结论（推荐新建实例），编排会实时固化三大模块参数，needs_storage 明确答复后输出 OBS 桶获取（复用/新建两场景）与配置方案，并输出步骤编号的 creation_flow（含 obs_integration 步骤），实际创建严格 1:1 执行。用户一笔带过需求时（"帮我建个应用"），四问一个都不能少——没问就默认等于替用户做了业务决定，走偏的根源就在这。部署模式是否支持 Ha 也别猜：`list_supabase_flavors_with_azs(az_code, mode='Ha')` 成功 → Single/Ha 都可选；400 → 该环境仅 Single，如实告知。
 
 ### 配置字段来源分类（谁提供什么）
 
 | 来源 | 字段 |
 |---|---|
 | MCP 工具可查 | 应用规格与各规格支持的 AZ 列表（`list_supabase_flavors_with_azs`，需先有 AZ；返回的 AZ 信息兼作可用区选择依据）；路线 B 的数据库实例（`list_supabase_manageable_instances`）；安全组（可新建） |
-| 可查（优先 MCP 工具） | **应用基础要素一次调 `discover_supabase_create_basic_options(az_code)`（版本/Single-Ha 探测/可售规格，附安全组推荐策略：应用组 8443 入/实例端口 5432 出，具体规则见网络工具）**；PG 引擎版本、数据库规格、磁盘类型（均有专用工具，内部走 KooCLI）；**托管实例按来源分场景：`discover_db_instance_for_create(scenario)`——新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐，已有实例（existed_instance）返回可托管候选，传 instance_id 获取该实例基础/配置/网络信息**；**EIP 采购用 `create_supabase_eip`（空闲优先：先列未绑定 EIP 供用户选定，无空闲按基线新建——按需购买、全动态 BGP 独享 5-1000M 推荐 300M、自动打标），绑定用 `bind_supabase_eip`（in32 结尾应用 ID/归属/格式三重校验，经 RDS AttachEip）；网络与安全组一次调 `discover_network_for_create(scenario)`——新建实例场景选定 VPC/子网并给出双组建组配置（应用组 8443 入方向三选一：默认全 0/当前设备网段/自定义 + 5432 出方向；数据库组 5432 入方向，网段均为所选子网 CIDR），已有实例场景取实例 VPC/子网、数据库组不动、应用组同规则；**发现工具一律不创建资源，只输出配置规格（含可照抄的 apply_steps）供真实创建严格遵循** |
+| 可查（优先 MCP 工具） | **应用基础要素一次调 `discover_supabase_create_basic_options(az_code)`（版本/Single-Ha 探测/可售规格，附安全组推荐策略：应用组 8443 入/实例端口 5432 出，具体规则见网络工具）**；PG 引擎版本、数据库规格、磁盘类型（均有专用工具，内部走 KooCLI）；**托管实例按来源分场景：`discover_db_instance_for_create(scenario)`——新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐，已有实例（existed_instance）返回可托管候选，传 instance_id 获取该实例基础/配置/网络信息**；**EIP 采购用 `create_supabase_eip`（空闲优先：先列未绑定 EIP 供用户选定，无空闲按基线新建——按需购买、全动态 BGP 独享 5-1000M 推荐 300M、自动打标），绑定用 `bind_supabase_eip`（in32 结尾应用 ID/归属/格式三重校验，经 RDS AttachEip）；**OBS 桶获取用 `discover_supabase_storage`（复用已有桶：私有优先，公共桶标注匿名公开风险尽量不用，无可选转新建；新建桶：推荐、默认，输出新桶完整参数规格；优先复用环境变量 AK/SK，检测到临时凭证（含 SecurityToken）时明确提示经本地请求文件提供长期 AK/SK，避免凭证过期后应用无法访问 OBS；附 OBS 读测试结果），新建桶走 `create_supabase_new_obs`（桶名按应用/业务名推导：非法字符折叠、小写、supabase- 前缀，重名自动追加 4 位短 uuid 重试；标准存储、私有桶；数据冗余策略 multi_az 默认/single_az 可选；阻止公共访问默认开启且固定不可修改；预览/确认两段式）**；网络与安全组一次调 `discover_network_for_create(scenario)`——新建实例场景选定 VPC/子网并给出双组建组配置（应用组 8443 入方向三选一：默认全 0/当前设备网段/自定义 + 5432 出方向；数据库组 5432 入方向，网段均为所选子网 CIDR），已有实例场景取实例 VPC/子网、数据库组不动、应用组同规则；**发现工具一律不创建资源，只输出配置规格（含可照抄的 apply_steps）供真实创建严格遵循** |
 | KooCLI 可查（工具未覆盖，兜底） | 可用区（用 `list_supabase_flavors_with_azs` 的 AZ 信息或 ECS NovaListAvailabilityZones）、空闲 EIP |
 | 网络自动发现 | **`discover_network_for_create(scenario=newly_instance)`**（一步锁定 IP 充足的 VPC+子网：优先 2 个空闲 IP、兜底 1 个；返回 vpc_id/subnet_id/subnet_cidr 直接填 basic_config，并附双组安全组配置——应用组 8443 入方向【默认全 0（走 KooCLI）/当前设备网段（detect_access_ip=true）/自定义】+ 5432 出方向，数据库组 5432 入方向，网段均为所选子网 CIDR；区域无可用网络时不报错，返回默认推荐 default_vpc 192.168.0.0/16 + default_subnet 192.168.0.0/24（建在实例所在 AZ、网关 192.168.0.1）——按 default_create 建好后再跑一次发现取真实 ID；已有实例场景传 instance_id，取实例 VPC/子网，数据库组不动、应用组同规则） |
 | 必须用户提供 | 应用名称、区域（环境里已有则免）、回调地址类 URL |

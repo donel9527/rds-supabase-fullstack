@@ -162,6 +162,20 @@ class PlanningService:
                               "security_group_plan": network_result.get("security_group_plan"),
                               "note": "实例安全组不动；应用组按 plan 建组配规则"}
 
+        module_obs = None
+        if needs_storage is True:
+            from mcp_server_supabase.service.obs import ObsService
+            obs = ObsService()
+            suggested = (module_basics.get("baseline") or {}).get("name") or "supabase-app"
+            module_obs = {"source_tool": "discover_supabase_storage",
+                          "acquisition": {"options": [
+                              {"key": "reuse", "name": "复用已有桶", "note": "私有桶优先；公共桶提示匿名公开风险尽量不用；无可选则转新建"},
+                              {"key": "new", "name": "新建桶", "note": "全新私有桶，完全隔离，安全可靠"}],
+                              "recommended": "new"},
+                          "new_bucket_spec": obs.new_bucket_spec(obs.bucket_name_for(suggested), "multi_az"),
+                          "credential": obs.credential_mode(),
+                          "note": "先调 discover_supabase_storage 确定获取方式；新建走 create_supabase_new_obs；storage_component（bucket + 持久 AK/SK 经本地请求文件）随创建请求一次提交"}
+
         # EIP purchase baseline
         eip = {"applies_when": ("本编排未启用公网访问——不购买 EIP，接入用 private_ip" if needs_public_access is False
                                 else "公网访问（needs_public_access；建议默认启用）"),
@@ -203,9 +217,16 @@ class PlanningService:
                   note="带 action 锁（重启/升级/变更中）的实例下发任务会冲突失败")
         for sg in sg_steps:
             _step("security_groups", sg.get("tool"), args=sg.get("args"), returns=sg.get("returns"))
+        if needs_storage is True:
+            _step("obs_integration", "discover_supabase_storage",
+                  action="确定 OBS 获取方式：复用已有桶（私有优先）或新建（推荐、默认）",
+                  note="临时凭证（SecurityToken）时须先取得长期 AK/SK 再对接")
+            _step("obs_integration", "create_supabase_new_obs",
+                  args={"app_name": "<应用名>", "redundancy": "multi_az"},
+                  note="新建场景执行；桶名自动推导、重名自动加短 uuid；阻止公共访问固定开启")
         if manage_type == "newly_instance":
             _step("request_file", "本地请求文件",
-                  action="按基线组装 create_supabase_application 请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline，security_group_id 回填）+ storage_component%s" % ("（模块1 baseline）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：创建后不可再启用）"),
+                  action="按基线组装 create_supabase_application 请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline，security_group_id 回填）+ storage_component%s" % ("（OBS 方案：bucket=新桶名或复用桶名，AK/SK 经文件）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：创建后不可再启用）"),
                   note="敏感字段（应用密码/数据库密码/存储 AK/SK）只进文件，不进对话")
         else:
             _step("request_file", "本地请求文件",
@@ -247,6 +268,8 @@ class PlanningService:
             post.append({"tool": "change_supabase_ssl",
                          "args": {"application_id": "<id>", "enable_ssl": True, "cert_id": "<证书 ID>"},
                          "note": "切换短暂中断，低峰执行；完成后复核 api_external_url 协议"})
+        if needs_storage is True:
+            post.append({"tool": "update_supabase_storage", "action": "存储凭据轮换/更新：桶名与持久 AK/SK 经本地请求文件（创建后 storage_component 已定型，仅凭据可轮换）"})
         if needs_email_login is True:
             post.append({"tool": "update_supabase_auth_config", "action": "邮箱登录：SMTP 非密字段对话收集、SMTP 密码入请求文件；真实邮件验证"})
         elif needs_email_login is None:
@@ -260,7 +283,7 @@ class PlanningService:
 
         decision_points = []
         if az_code is None: decision_points.append("az_code：可售 AZ 待选（list_supabase_flavors_with_azs）")
-        if needs_storage is None: decision_points.append("needs_storage：OBS 存储——创建后不可再启用，创建前必须确认")
+        if needs_storage is None: decision_points.append("needs_storage：是否存在大文件存储场景（图片/视频/大文件）——创建后不可再启用，创建前必须确认")
         if needs_public_access is None: decision_points.append("needs_public_access：公网访问（建议启用）")
         if needs_ssl is None: decision_points.append("needs_ssl：https（CCM 证书外购）")
 
@@ -272,9 +295,10 @@ class PlanningService:
                                                         {"value": "existed_instance", "name": "已有实例",
                                                          "note": "挂载现有可托管 PG；实例参数不可改，其安全组不动"}],
                                             "requirement": "两种方式必须先向用户明确呈现并拿到确定性结论，本编排按该结论展开"},
-                "step_modules": {"supabase_basics": module_basics,
-                                 "managed_instance": module_instance,
-                                 "network_control": module_network},
+                "step_modules": {**({"supabase_basics": module_basics,
+                                    "managed_instance": module_instance,
+                                    "network_control": module_network}),
+                                **({"obs_integration": module_obs} if module_obs else {})},
                 "eip_baseline": eip,
                 "creation_flow": flow,
                 "post_creation_flow": post,

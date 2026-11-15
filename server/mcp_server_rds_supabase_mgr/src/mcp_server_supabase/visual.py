@@ -352,7 +352,8 @@ def render_network(result):
 
 def render_arrangement(result):
     """plan_supabase_creation_arrangement -> source decision, the three step modules,
-    the EIP purchase baseline, the step-numbered creation flow and post-creation flow."""
+    the optional OBS integration module, the EIP purchase baseline, the step-numbered
+    creation flow and post-creation flow."""
     result=_dict(result)
     source=_dict(result.get('managed_instance_source'))
     lines=[]
@@ -368,6 +369,9 @@ def render_arrangement(result):
             _module_supabase(_dict(modules.get('supabase_basics'))),
             _module_instance(_dict(modules.get('managed_instance'))),
             _module_network(_dict(modules.get('network_control')))]
+    obs=modules.get('obs_integration')
+    if isinstance(obs,dict) and obs:
+        blocks.append(_module_obs(obs))
     eip=_dict(result.get('eip_baseline'))
     purchase=_dict(eip.get('purchase_method'))
     recommended=_dict(purchase.get('recommended'))
@@ -424,3 +428,104 @@ def render_eip(result):
     if result.get('order_id') is not None:
         rows.append(['订单 ID（控制台支付后生效）',result.get('order_id')])
     return block('弹性 EIP',table(['属性','值'],rows))
+
+
+def _wrap(text,columns):
+    """Wrap to the display width without truncating; embedded newlines are kept."""
+    if text is None:return ''
+    if not isinstance(text,str):text=str(text)
+    if columns<1:return text
+    wrapped=[]
+    for line in text.split('\n'):
+        current='';used=0
+        for char in line:
+            step=2 if unicodedata.east_asian_width(char) in ('W','F') else 1
+            if used+step>columns and current:
+                wrapped.append(current);current='';used=0
+            current+=char;used+=step
+        wrapped.append(current)
+    return '\n'.join(wrapped)
+
+
+def _bucket_spec_rows(spec,hint=None):
+    spec=_dict(spec)
+    if hint is None:hint=spec.get('storage_component_hint')
+    rows=[[key,_scalar(spec.get(key))] for key in
+          ('bucket_name','storage_class','bucket_type','redundancy','block_public_access',
+           'region','enterprise_project')]
+    if isinstance(hint,dict) and hint:
+        rows.append(['ak_sk',_scalar(hint.get('ak_sk'))])
+        rows.append(['挂载',_scalar(hint.get('bucket'))])
+    return rows
+
+
+def _module_obs(module):
+    module=_dict(module)
+    acquisition=_dict(module.get('acquisition'))
+    recommended=acquisition.get('recommended')
+    lines=[]
+    for option in _list(acquisition.get('options')):
+        option=_dict(option)
+        badge='（推荐/默认）' if option.get('key')==recommended or option.get('recommended') else ''
+        lines.append('- %s：%s%s' % (_scalar(option.get('name')),_scalar(option.get('note')),badge))
+    lines.append(table(['项','值'],_bucket_spec_rows(module.get('new_bucket_spec'))))
+    credential=_dict(module.get('credential'))
+    if credential.get('temporary'):
+        lines.append('凭证提示：%s' % _scalar(credential.get('notice')))
+    return block('OBS 桶对接（大文件存储场景）',lines)
+
+
+def _render_storage_options(result):
+    result=_dict(result)
+    reuse=_dict(result.get('reuse'))
+    new_bucket=_dict(result.get('new_bucket'))
+    plan_lines=['- 复用已有桶：%s' % _scalar(reuse.get('note')),
+                '- 新建桶（推荐、默认）：%s' % _scalar(new_bucket.get('note'))]
+    credential=_dict(result.get('credential'))
+    credential_rows=[['凭证类型','临时凭证（含 SecurityToken）' if credential.get('temporary') else '长期 AK/SK'],
+                     ['detail',_scalar(credential.get('detail'))]]
+    if credential.get('notice') is not None:
+        credential_rows.append(['notice',_scalar(credential.get('notice'))])
+    bucket_rows=[[_dict(bucket).get('name'),_dict(bucket).get('location'),
+                  _dict(bucket).get('public_status'),_dict(bucket).get('risk_note')]
+                 for bucket in _list(reuse.get('buckets'))]
+    bucket_table=table(['桶名','区域','公共状态','风险提示'],bucket_rows)
+    read_test=_dict(reuse.get('read_test'))
+    if read_test.get('passed') is False:
+        bucket_table='%s\n读测试未通过：%s' % (bucket_table,_scalar(read_test.get('detail')))
+    blocks=[block('OBS 存储方案（大文件/图片/视频承载）',plan_lines),
+            block('凭证模式',table(['项','值'],credential_rows)),
+            block('可复用桶（私有优先）',bucket_table),
+            block('新桶完整参数配置（推荐）',
+                  table(['项','值'],_bucket_spec_rows(new_bucket.get('spec')))),
+            block('storage_component 对应',_wrap(result.get('storage_component_note'),90) or '-')]
+    return '\n\n'.join(blocks)
+
+
+def _render_storage_bucket(result):
+    result=_dict(result)
+    spec=_dict(result.get('spec') or result.get('bucket'))
+    blocks=[block('新桶参数规格',
+                  table(['项','值'],_bucket_spec_rows(spec,result.get('storage_component_hint'))))]
+    status=result.get('status')
+    if status=='ok':
+        status_text='已创建：%s' % _clip(result.get('note'),70)
+    elif status=='confirmation_required':
+        status_text='待确认（预览返回 plan_id）'
+    else:
+        status_text=_scalar(status)
+    blocks.append(block('状态',status_text))
+    warnings=_list(result.get('warnings'))
+    if warnings:
+        blocks.append(block('注意',[str(item) for item in warnings]))
+    return '\n\n'.join(blocks)
+
+
+def render_storage(result):
+    """discover_supabase_storage -> the reuse-vs-new scheme, credential mode,
+    reusable-bucket table and new-bucket spec; create_supabase_new_obs -> the
+    new-bucket spec, creation status and warnings."""
+    result=_dict(result)
+    if result.get('mode')=='storage_options':
+        return _render_storage_options(result)
+    return _render_storage_bucket(result)

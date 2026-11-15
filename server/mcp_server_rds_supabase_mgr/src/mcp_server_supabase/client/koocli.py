@@ -125,6 +125,44 @@ class KoocliClient:
                                 (stdout or b'').decode('utf-8', 'replace') + (stderr or b'').decode('utf-8', 'replace'))
         return parse_payload((stdout or b'').decode('utf-8', 'replace'))
 
+    async def obs(self,operation,args=None,flags=None,region=None):
+        """obsutil-style commands (hcloud OBS <cmd>): positional cloud_url args, -x=y
+        flags and plain-text output - unlike the JSON-API services. The optional region
+        overrides the endpoint for bucket-local probes (buckets in other regions)."""
+        if not self.binary:
+            raise McpToolError('MCP_CLI_MISSING','KooCLI (hcloud) is not available',
+                               hint='Install KooCLI per the skill INSTALL.md section 4, or point HCLOUD_BIN at the binary.')
+        # The embedded obsutil accepts only its own credential flags (-i/-k/-t) and an
+        # explicit endpoint (-e); the JSON-API --cli-* flags are rejected here (exit 3
+        # with the command usage, verified live).
+        argv=[self.binary,'OBS',operation,*(args or []),*(flags or [])]
+        if self._ak and self._sk:
+            argv.append(f'-i={self._ak}')
+            argv.append(f'-k={self._sk}')
+            if self._security_token:
+                argv.append(f'-t={self._security_token}')
+        endpoint_region=region or self.region
+        if endpoint_region:
+            argv.append(f'-e=obs.{endpoint_region}.myhuaweicloud.com')
+        try:
+            process=await asyncio.create_subprocess_exec(
+                *argv,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL)
+        except (FileNotFoundError,PermissionError):
+            raise McpToolError('MCP_CLI_MISSING','KooCLI (hcloud) is not executable',
+                               hint='Install KooCLI per the skill INSTALL.md section 4, or point HCLOUD_BIN at the binary.') from None
+        try:
+            stdout,stderr=await asyncio.wait_for(process.communicate(),self.timeout)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            raise McpToolError('MCP_CLI_TIMEOUT',f'KooCLI {operation} timed out after {self.timeout}s',
+                               hint='A timed-out call may still have been applied; reconcile the resource state before retrying.') from None
+        if process.returncode!=0:
+            self._raise_failure(operation,process.returncode,
+                                (stdout or b'').decode('utf-8','replace')+(stderr or b'').decode('utf-8','replace'))
+        return (stdout or b'').decode('utf-8','replace').strip()
+
     def _raise_failure(self, operation, returncode, text):
         if any(signature in text for signature in PRIVACY_SIGNATURES):
             raise McpToolError('MCP_CLI_BLOCKED', 'KooCLI first-run privacy agreement has not been accepted',

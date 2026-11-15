@@ -1,11 +1,11 @@
 ---
 name: rds-supabase-mgr-mcp
-description: RDS Supabase 应用全生命周期管理技能：从零创建一个能访问的应用（创建、公网开通 EIP 与安全组配置、接入信息交付）、使用已有应用、按需增强（存储对接、邮箱登录、GitHub 登录）、日常变更（改密码、重置 Key、SSL、EIP）、查询接入信息、删除收尾。管理面 MCP 40 个工具 + KooCLI 协同。Use when：管理 RDS Supabase 应用的创建、配置、网络开通、认证对接、变更与删除。不用于 SQL 与数据操作。
+description: RDS Supabase 应用全生命周期管理技能：从零创建一个能访问的应用（创建、公网开通 EIP 与安全组配置、接入信息交付）、使用已有应用、按需增强（存储对接、邮箱登录、GitHub 登录）、日常变更（改密码、重置 Key、SSL、EIP）、查询接入信息、删除收尾。管理面 MCP 42 个工具 + KooCLI 协同。Use when：管理 RDS Supabase 应用的创建、配置、网络开通、认证对接、变更与删除。不用于 SQL 与数据操作。
 ---
 
 # RDS Supabase 应用全生命周期管理
 
-版本 0.9.12；配套服务端 mcp_server_supabase ≥ 0.4.0a41（uvx 规范入口 mcp-huaweicloud-rds-supabase-mgr）。工具存在不代表服务端已在真实环境联调。
+版本 0.9.13；配套服务端 mcp_server_supabase ≥ 0.4.0a42（uvx 规范入口 mcp-huaweicloud-rds-supabase-mgr）。工具存在不代表服务端已在真实环境联调。
 
 贯穿所有场景的四条铁律：
 1. **写操作两段式**：先预览（confirm=false），把参数、影响、费用展示给用户；用户确认后才提交（confirm=true + 预览返回的 plan_id）。预览 10 分钟有效，参数变了重新预览。
@@ -82,11 +82,11 @@ https://github.com/huaweicloud/rds-supabase-fullstack
 **这一步是提问环节，不是猜测环节。** 逐个把四个问题抛给用户、拿到明确答复才往下走；用户没答全就照 `plan_supabase_creation_arrangement` 返回的 decision_points 继续追问。**禁止**凭"用户没提存储"就默认不要 OBS、凭"看着像测试"就默认 Single——没问就默认，等于把用户的业务决定偷走了：
 
 - **数据库怎么办？** 路线 A：一起新建（推荐新用户，干净、自动配好）；路线 B：用已有的 PG 实例纳入托管
-- **要传文件吗？**（图片、视频、附件都算）要 → 按场景三第 1 节**先备好 OBS 桶**（复用私有桶还是新建专用桶，也问用户），桶名和凭据进创建请求的 storage_component；不要 → storage_component 写 `{enabled:false}`。**存储事后无法补开**，所以这一问必须在创建前问清
+- **要传文件吗？**（图片、视频、附件都算）要 → 按场景三第 1 节**先备好 OBS 桶**（`discover_supabase_storage` 给复用/新建两个方案，新建桶走 `create_supabase_new_obs`；复用还是新建也问用户），桶名和凭据进创建请求的 storage_component；不要 → storage_component 写 `{enabled:false}`。**存储事后无法补开**，所以这一问必须在创建前问清
 - **要从公网访问吗？** 要 → EIP + 安全组开通（第 4 步）；不要 → 创建完成后提示用户当前只能内网访问
 - **要 https 吗？** 要 → 买 CCM 证书（场景四 SSL 行）
 
-把答案喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`（意图参数同前，可加 `needs_email_login`/`needs_github_login`），拿回**端到端编排基线**：托管来源决策（两种方式明确呈现，推荐且默认新建实例；已有实例场景输出分页 20/页的可托管清单并标注 action 锁——正在重启/升级/变更的实例必须排除，避免任务冲突失败）/ 三大步骤模块参数固化（Supabase 基本信息、托管实例、网络控制，深度结合三个 discover 工具实时推荐）/ EIP 购买基线（按需购买 + 全动态 BGP 独享带宽 5-1000M 推荐 300M）/ 步骤编号的 creation_flow（实际创建 1:1 严格逐步执行，不偏离目标与计划）/ 创建后动作（公网开通与 api_external_url 同步、SSL、登录配置、接入信息交付）/ decision_points / 秘密边界。
+把答案喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`（意图参数同前，可加 `needs_storage`/`needs_email_login`/`needs_github_login`），拿回**端到端编排基线**：托管来源决策（两种方式明确呈现，推荐且默认新建实例；已有实例场景输出分页 20/页的可托管清单并标注 action 锁——正在重启/升级/变更的实例必须排除，避免任务冲突失败）/ 三大步骤模块参数固化（Supabase 基本信息、托管实例、网络控制，深度结合三个 discover 工具实时推荐）/ EIP 购买基线（按需购买 + 全动态 BGP 独享带宽 5-1000M 推荐 300M）/ OBS 桶对接（needs_storage 明确答复后输出复用/新建两场景获取与配置方案，创建流程插入 obs_integration 步骤）/ 步骤编号的 creation_flow（实际创建 1:1 严格逐步执行，不偏离目标与计划）/ 创建后动作（公网开通与 api_external_url 同步、SSL、登录配置、接入信息交付）/ decision_points / 秘密边界。
 
 ### 第 2 步：确定配置项
 
@@ -179,15 +179,15 @@ https://github.com/huaweicloud/rds-supabase-fullstack
 
 ### 1. 存储对接（要传文件时）
 
-先问用户选哪种：
-- **用已有的桶**：列出桶（KooCLI `hcloud obs ls`），**优先私有桶**，公共桶显式提示风险；没有可选的就转新建
-- **新建专用桶**：桶名按应用名推导（转小写、非法字符转连字符），重名加短 uuid；**私有**；默认多 AZ（KooCLI `hcloud obs mb -acl=private`）
+先问用户选哪种，获取方案一次调 `discover_supabase_storage`（READ，附 OBS 读测试结果）：
+- **复用已有桶**：列出可用桶，**优先私有桶**，公共桶标注匿名公开风险尽量不用；没有可选的就转新建
+- **新建专用桶**：推荐、默认（完全隔离，安全可靠），输出新桶完整参数规格；确认后走 `create_supabase_new_obs` 预览→确认——桶名按应用/业务名推导（非法字符折叠、小写、supabase- 前缀），重名自动追加 4 位短 uuid 重试；标准存储、私有桶；数据冗余策略 multi_az（默认）/single_az 可选；阻止公共访问默认开启且固定不可修改；区域取当前项目区域，企业项目优先 default
 
 对接凭据（桶名/AK/SK）写入本地请求文件，走 `update_supabase_storage`：
 - **首次启用必须给全**：桶名 + AK + SK
 - 已启用且 AK 没变：换桶名时**仍须带上原 AK**（省略 SK 的前提是提交里有相同 AK 供服务端比对），只省略 SK
 - 换 AK：必须重新给全
-- **注意**：环境里是临时密钥（带 SecurityToken）时，存储对接要用持久 AK/SK——提示用户单独提供
+- **注意**：环境里是临时密钥（带 SecurityToken）时，存储对接要用持久 AK/SK——`discover_supabase_storage` 检测到临时凭证会明确提示，引导用户经本地请求文件提供长期 AK/SK，避免凭证过期后应用无法访问 OBS
 
 ### 2. 邮箱登录
 
@@ -309,8 +309,8 @@ Key 值**永远不会出现在对话里**——这是红线，用户要也是本
 | 查 VPC / 子网 | `hcloud VPC ListVpcs` / `hcloud VPC ListSubnets --cli-region=<region>` |
 | 查 EIP（找空闲的） | `hcloud EIP ListPublicips --cli-region=<region>` |
 | 创建 EIP | `hcloud EIP CreatePublicip --cli-json-file=<配置文件>`（逐项确认后执行）。**json 里必须带标签**：`"tags": [{"key": "USAGE_FOR", "value": "Supabase应用公网访问，自动创建的"}]`——标记这条 EIP 是流程自动创建、供 Supabase 应用公网访问用的 |
-| 列 OBS 桶 | `hcloud obs ls` |
-| 建 OBS 桶 | `hcloud obs mb obs://<桶名> -location=<region> -acl=private`（多 AZ 加 -multiAZ） |
+| 列 OBS 桶 | **MCP 工具 `discover_supabase_storage`**（复用/新建两方案+读测试，内部走 KooCLI，直接用）；KooCLI 兜底：`hcloud obs ls` |
+| 建 OBS 桶 | **MCP 工具 `create_supabase_new_obs`**（预览/确认两段式：桶名自动推导、私有、默认多 AZ）；KooCLI 兜底：`hcloud obs mb obs://<桶名> -location=<region> -acl=private`（多 AZ 加 -multiAZ） |
 | 加全网入方向安全组规则（0.0.0.0/0） | `hcloud VPC` 安全组规则命令（先 --help 核实；仅用户明确确认后执行——MCP 工具按设计不放行全网规则，出方向规则已由 MCP 工具支持） |
 
 **环境变量**：凭据两模式（AK/SK：`HUAWEICLOUD_ACCESS_KEY/SECRET_KEY/SECURITY_TOKEN` + `SUPABASE_TRANSPORT=sdk_core`；Token：`HUAWEICLOUD_AUTH_TOKEN`）、`HUAWEICLOUD_REGION`（核心变量：驱动端点推导、项目 IAM 发现与安全组工具）、`HUAWEICLOUD_PROJECT_ID`（可选覆盖，子项目账号必配）、`SUPABASE_RDS_ENDPOINT`（可选覆盖）、`SUPABASE_REQUESTS_FILE`（请求文件路径）、`SUPABASE_STATE_FILE`（本地记录库路径）、`SUPABASE_ENABLE_WRITES`（写开关）、`HUAWEICLOUD_MCP_READ_ONLY`（只读拦截）。完整清单见[安装手册](references/install.md)。
