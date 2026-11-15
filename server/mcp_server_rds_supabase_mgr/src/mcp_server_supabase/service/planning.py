@@ -173,8 +173,8 @@ class PlanningService:
                "bandwidth": {"share_type": "PER（独享带宽）",
                              "type": "全动态 BGP（publicip.type=5_bgp）",
                              "size_range_mbps": "5-1000", "recommended_size_mbps": 300},
-               "purchase": "控制台或 KooCLI 购买：按需 hcloud EIP CreatePublicip（publicip.type=5_bgp，bandwidth.share_type=PER，bandwidth.size=300），包周期 hcloud EIP CreatePrePaidPublicip + 订单支付；自动创建的 EIP 打标 USAGE_FOR=Supabase应用公网访问，自动创建的（hcloud EIP BatchCreatePublicipTags）",
-               "bind": "change_supabase_eip(application_id, is_bind=true, public_ip_id, public_ip_address)",
+               "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
+               "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
                "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}
 
         # Step-numbered creation flow - executed strictly, one by one
@@ -231,9 +231,12 @@ class PlanningService:
         if needs_public_access is False:
             post.append({"tool": "show_supabase_application", "action": "内网交付 private_ip；不购买 EIP、不开公网入方向"})
         else:
-            post.append({"tool": "console/KooCLI", "action": "按 eip_baseline 购买 EIP（按需 + 全动态 BGP + 300M 独享）并打标"})
-            post.append({"tool": "change_supabase_eip",
-                         "args": {"application_id": "<id>", "is_bind": True, "public_ip_id": "<EIP ID>", "public_ip_address": "<EIP 地址>"}})
+            post.append({"tool": "create_supabase_eip",
+                         "action": "按 eip_baseline 采购：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、300M 独享、自动打标）",
+                         "args": {"prefer_idle": True, "charge_mode": "postPaid", "bandwidth_size_mbps": 300}})
+            post.append({"tool": "bind_supabase_eip",
+                         "args": {"instance_id": "<应用 ID（in32 结尾）>", "public_ip_id": "<EIP ID>", "public_ip": "<EIP 地址>"},
+                         "note": "预览确认后绑定；in32/归属/格式三重校验"})
             post.append({"tool": "update_supabase_auth_config", "action": "同步 api_external_url 为公网地址",
                          "note": "邮箱链接与 OAuth 回调依赖此地址"})
             post.append({"tool": "probe", "action": "探活访问地址（任意 HTTP 状态即可达）"})

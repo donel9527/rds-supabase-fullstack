@@ -1,4 +1,5 @@
 from huaweicloud_mcp_core.security import ToolRisk, guard
+from mcp_server_supabase import visual
 from mcp_server_supabase.service.instance_catalog import InstanceCatalog, NetworkDiscovery, BasicOptionsDiscovery
 from mcp_server_supabase.service.operations import Operations
 
@@ -262,7 +263,9 @@ def register(server):
         for new instances and left untouched for existing ones. Guidance only - nothing is
         created here.
         """
-        return await BasicOptionsDiscovery().discover(az_code)
+        result = await BasicOptionsDiscovery().discover(az_code)
+        result['visual'] = visual.render_basic_options(result)
+        return result
 
     @server.tool()
     @guard(risk=ToolRisk.READ)
@@ -283,7 +286,9 @@ def register(server):
         (create_supabase_security_group / add_supabase_security_group_rule, KooCLI for /0 rules).
         """
         network = NetworkDiscovery()
-        return await network.discover_network_for_create(scenario, availability_zone, instance_id, detect_access_ip)
+        result = await network.discover_network_for_create(scenario, availability_zone, instance_id, detect_access_ip)
+        result['visual'] = visual.render_network(result)
+        return result
 
     @server.tool()
     @guard(risk=ToolRisk.READ)
@@ -298,4 +303,6 @@ def register(server):
         security-group planning belong to discover_network_for_create. Read-only: nothing
         is created or changed here.
         """
-        return await catalog.discover_db_instance_for_create(scenario, mode, instance_id)
+        result = await catalog.discover_db_instance_for_create(scenario, mode, instance_id)
+        result['visual'] = visual.render_db_instance(result)
+        return result

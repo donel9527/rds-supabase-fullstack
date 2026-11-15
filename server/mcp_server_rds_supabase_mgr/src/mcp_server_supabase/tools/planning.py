@@ -1,5 +1,6 @@
 from huaweicloud_mcp_core.security import ToolRisk, guard
 from mcp_server_supabase.service.planning import PlanningService
+from mcp_server_supabase import visual
 
 
 def register(server):
@@ -29,7 +30,10 @@ def register(server):
         open decision point, true = plan the branch, false = plan the exclusion. Planning only -
         nothing is created here.
         """
-        return await service.arrangement(manage_type, az_code, mode, page, instance_id, detect_access_ip, needs_storage, needs_public_access, needs_ssl, needs_email_login, needs_github_login)
+        result = await service.arrangement(manage_type, az_code, mode, page, instance_id, detect_access_ip, needs_storage, needs_public_access, needs_ssl, needs_email_login, needs_github_login)
+        if result.get('status') == 'arrangement_baseline':
+            result['visual'] = visual.render_arrangement(result)
+        return result
 
     @server.tool()
     @guard(risk=ToolRisk.READ)

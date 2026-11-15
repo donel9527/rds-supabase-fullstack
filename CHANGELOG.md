@@ -5,6 +5,38 @@ semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- `mcp_server_rds_supabase_mgr` v0.4.0a41: chart-rendered visualization for every
+  discovery and arrangement response, plus two EIP tools developed in parallel
+  by three agents (visual engine, EIP purchase service, EIP bind service).
+  All discovery tools (discover_supabase_create_basic_options,
+  discover_db_instance_for_create, discover_network_for_create) and
+  plan_supabase_creation_arrangement now attach a `visual` field: CJK-aware
+  box-drawing tables (network placement, security-group rule specs, action-lock
+  candidate lists, parameter baselines) and a step-numbered flowchart of the
+  creation flow, so agents can present results to users directly.
+  `create_supabase_eip` provisions the public entry EIP via KooCLI, idle-first:
+  prefer_idle=true lists unbound EIPs for the user to pick one (returned
+  directly, nothing created); with none idle it falls through to the purchase
+  baseline - pay-per-use recommended (prepaid documented with its console
+  order), dedicated full-dynamic-BGP bandwidth (publicip.type=5_bgp,
+  share_type PER) sized 5-1000M with 300M recommended; a newly created
+  postPaid EIP is auto-tagged USAGE_FOR=Supabase应用公网访问，自动创建的.
+  `bind_supabase_eip` binds via the RDS AttachEip API with triple validation
+  to prevent mistaken and stray operations: the instance ID must end with
+  in32 (Supabase application pattern) and exist in this environment's
+  application list (a backend 400 on the exact-ID filter maps to the same
+  ownership rejection - caught live), and the EIP ID/address must be a
+  canonical UUID/IPv4. The arrangement's EIP baseline and post-creation flow
+  now route through the two new tools. Agent contract discoveries: EIP v3
+  names take publicip.alias (no name key), prepaid periods live under
+  extendParam.*, and tag creation requires action=create. Tool count 38 -> 40.
+  Verified live in cn-east-3: idle-first with an empty inventory falls to
+  preview with plan_id, previews render the visual, suffix and ownership
+  rejections behave correctly, and the arrangement returns a 111-line visual
+  with the full flowchart. Skill v0.9.12.
+
 ### Changed
 
 - `mcp_server_rds_supabase_mgr` v0.4.0a40: plan_supabase_creation is

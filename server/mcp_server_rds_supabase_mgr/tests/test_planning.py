@@ -121,6 +121,10 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flow[-1]['tool'], 'show_supabase_application')
         self.assertEqual(result['decision_points'], [])
         self.assertTrue(any('文件' in note for note in result['security_notes']))
+        post_tools = [p.get('tool') for p in result['post_creation_flow']]
+        self.assertIn('create_supabase_eip', post_tools)
+        self.assertIn('bind_supabase_eip', post_tools)
+        self.assertIn('bind_supabase_eip', result['eip_baseline']['bind'])
 
     async def test_default_recommendation_adds_network_creation_step(self):
         service = self.make(network_newly=NETWORK_NEWLY_DEFAULT)

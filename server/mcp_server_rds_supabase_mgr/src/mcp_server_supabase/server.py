@@ -13,6 +13,9 @@ register_network(mcp)
 from mcp_server_supabase.tools.billing import register as register_billing
 register_billing(mcp)
 
+from mcp_server_supabase.tools.eip import register as register_eip
+register_eip(mcp)
+
 # Product input validation precedes shared argument logging and SDK coercion.
 import os
 from huaweicloud_mcp_core.guardrails.middleware import GuardrailsMiddleware
