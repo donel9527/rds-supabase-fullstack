@@ -45,9 +45,9 @@ SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与�
 | 来源 | 字段 |
 |---|---|
 | MCP 工具可查 | 应用规格与各规格支持的 AZ 列表（`list_supabase_flavors_with_azs`，需先有 AZ；返回的 AZ 信息兼作可用区选择依据）；路线 B 的数据库实例（`list_supabase_manageable_instances`）；安全组（可新建） |
-| 可查（优先 MCP 工具） | **应用基础要素一次调 `discover_supabase_create_basic_options(az_code)`（版本/Single-Ha 探测/可售规格，附安全组推荐策略：应用组 8443 入/实例端口 5432 出，数据库组由实例工具生成）**；PG 引擎版本、数据库规格、磁盘类型（均有专用工具，内部走 KooCLI）；**新建实例场景可一次调 `discover_db_instance_create_options(mode)` 并发查引擎版本/规格/磁盘并返回逐字段推荐配置；网络用 `discover_available_network_for_create` 选定（无 VPC 时采纳其默认推荐）后，把子网网段经 `network` 参数传入，直接生成专用数据库组规则（5432 入方向，出方向默认放行）** |
+| 可查（优先 MCP 工具） | **应用基础要素一次调 `discover_supabase_create_basic_options(az_code)`（版本/Single-Ha 探测/可售规格，附安全组推荐策略：应用组 8443 入/实例端口 5432 出，具体规则见网络工具）**；PG 引擎版本、数据库规格、磁盘类型（均有专用工具，内部走 KooCLI）；**托管实例按来源分场景：`discover_db_instance_for_create(scenario)`——新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐，已有实例（existed_instance）返回可托管候选，传 instance_id 获取该实例基础/配置/网络信息**；**网络与安全组一次调 `discover_network_for_create(scenario)`——新建实例场景选定 VPC/子网并给出双组建组配置（应用组 8443 入方向三选一：默认全 0/当前设备网段/自定义 + 5432 出方向；数据库组 5432 入方向，网段均为所选子网 CIDR），已有实例场景取实例 VPC/子网、数据库组不动、应用组同规则** |
 | KooCLI 可查（工具未覆盖，兜底） | 可用区（用 `list_supabase_flavors_with_azs` 的 AZ 信息或 ECS NovaListAvailabilityZones）、空闲 EIP |
-| 网络自动发现 | **`discover_available_network_for_create`**（一步锁定 IP 充足的 VPC+子网：优先 2 个空闲 IP、兜底 1 个；返回 vpc_id/subnet_id/subnet_cidr 直接填 basic_config；区域无可用网络时不报错，返回默认推荐 default_vpc 192.168.0.0/16 + default_subnet 192.168.0.0/24（建在实例所在 AZ、网关 192.168.0.1）——按 default_create 建好后再跑一次发现取真实 ID） |
+| 网络自动发现 | **`discover_network_for_create(scenario=newly_instance)`**（一步锁定 IP 充足的 VPC+子网：优先 2 个空闲 IP、兜底 1 个；返回 vpc_id/subnet_id/subnet_cidr 直接填 basic_config，并附双组安全组配置——应用组 8443 入方向【默认全 0（走 KooCLI）/当前设备网段（detect_access_ip=true）/自定义】+ 5432 出方向，数据库组 5432 入方向，网段均为所选子网 CIDR；区域无可用网络时不报错，返回默认推荐 default_vpc 192.168.0.0/16 + default_subnet 192.168.0.0/24（建在实例所在 AZ、网关 192.168.0.1）——按 default_create 建好后再跑一次发现取真实 ID；已有实例场景传 instance_id，取实例 VPC/子网，数据库组不动、应用组同规则） |
 | 必须用户提供 | 应用名称、区域（环境里已有则免）、回调地址类 URL |
 | 本地请求文件（秘密） | 应用密码（本地生成）、路线 B 的 database_pwd、路线 A 的数据库密码、存储 AK/SK、OBS 桶名 |
 | 外部资源 | EIP（用户已有或 KooCLI 新购） |

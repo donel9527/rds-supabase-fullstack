@@ -7,6 +7,36 @@ semantic versioning.
 
 ### Changed
 
+- `mcp_server_rds_supabase_mgr` v0.4.0a38: the two creation-scenario discovery
+  tools are renamed and restructured around the managed-instance source, with
+  the security-group planning consolidated into the network tool.
+  `discover_db_instance_create_options` becomes `discover_db_instance_for_create
+  (scenario, mode?, instance_id?)`: newly_instance keeps the field-option logic
+  (engine versions, flavors, storage) and drops the network input and
+  security-group plan; existed_instance lists the attachable PG candidates
+  (same source as list_supabase_manageable_instances - a live probe showed the
+  empty inventory is {"total_count": 0} with no list key, now treated as a
+  valid empty state) and, with instance_id, returns that instance's
+  basic/configuration/network sections.
+  `discover_available_network_for_create` becomes `discover_network_for_create
+  (scenario, availability_zone?, instance_id?, detect_access_ip?)`:
+  newly_instance keeps the VPC/subnet walk and default recommendation and now
+  states both groups' creation configuration - application group 8443 ingress
+  (three source options: default 0.0.0.0/0 via KooCLI, current-device CIDR
+  via detect_access_ip with a best-effort probe fixed to use certifi's CA
+  bundle - python.org macOS builds lack the system CA store, which failed
+  every https probe - or custom) plus 5432 egress, database group 5432
+  ingress, all CIDRs from the chosen subnet; existed_instance takes VPC/subnet
+  from the given instance, leaves its security group untouched and applies
+  the same application-group rules. Verified live in cn-east-3: empty
+  candidate inventory, MCP_NOT_FOUND for unknown ids, default-recommendation
+  plan with precondition, detected egress 117.88.75.25/32.
+  `discover_supabase_create_basic_options` keeps its guidance-only strategy,
+  now pointing at discover_network_for_create. Tool count unchanged (38);
+  skill v0.9.9.
+
+### Changed
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a37: both discovery tools now carry
   the security-group knowledge their scenarios need, closing the gap left
   when group discovery was removed in a35.

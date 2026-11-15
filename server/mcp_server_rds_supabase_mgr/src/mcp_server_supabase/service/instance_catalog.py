@@ -22,11 +22,39 @@ def _failure(error):
     return '（查询失败：'+error+'）'
 
 
+async def _manageable_rows(ops):
+    """Attachable PG instances for application_type=supabase (the same source as
+    list_supabase_manageable_instances); the row shape follows the origin response."""
+    result=await ops.creation_candidates('manageable')
+    data=result.get('data') if isinstance(result,dict) else result
+    rows=None
+    if isinstance(data,dict):
+        for key in ('instances','items','data'):
+            if isinstance(data.get(key),list):rows=data[key];break
+        if rows is None:rows=[]   # an object without a list key is a valid empty inventory (live: {"total_count": 0})
+    elif isinstance(data,list):rows=data
+    elif data is None:rows=[]
+    else:
+        raise McpToolError('MCP_SDK_ERROR','manageable-instance list unreadable')
+    return [row for row in rows if isinstance(row,dict) and row.get('id')]
+
+
+async def _find_manageable(ops,instance_id):
+    rows=await _manageable_rows(ops)
+    match=next((row for row in rows if row.get('id')==instance_id),None)
+    if match is None:
+        raise McpToolError('MCP_NOT_FOUND','instance_id is not an attachable PG instance',
+                           hint='List the candidates first: discover_db_instance_for_create(existed_instance) '
+                                'or list_supabase_manageable_instances.')
+    return match
+
+
 class InstanceCatalog:
     """Read-only RDS engine-level catalogs; the Supabase origin does not serve them, so they run through KooCLI."""
 
-    def __init__(self,koocli=None):
+    def __init__(self,koocli=None,operations=None):
         self.koocli=koocli or KoocliClient()
+        self.operations=operations
 
     async def list_engine_versions(self):
         data=await self.koocli.call('RDS','ListDatastores',{'database_name':'PostgreSQL'})
@@ -49,17 +77,26 @@ class InstanceCatalog:
                                     {'database_name':'PostgreSQL','version_name':version_name,'ha_mode':mode})
         return {'data':safe(self._rows(data,'storage_type')),'note':NOTE}
 
-    async def discover_link_create_options(self,mode,network=None):
-        """One-call dependency discovery for manage_type=newly_instance: engine versions,
-        instance flavors with per-AZ sale status and mode-filtered storage types,
-        assembled into a recommended value for every managed_instance request-body
-        field. Each source fails independently. Security groups are not discovered
-        from the cloud: the caller passes the selected network (from
-        discover_available_network_for_create or its default recommendation) and the
-        dedicated database group's rules are generated from it."""
+    def _ops(self):
+        if self.operations is None:
+            from mcp_server_supabase.service.operations import Operations
+            self.operations=Operations()
+        return self.operations
+
+    async def discover_db_instance_for_create(self,scenario,mode=None,instance_id=None):
+        """Per-source discovery for the managed-instance step of create_supabase_application.
+        newly_instance: engine versions, instance flavors with per-AZ sale status and
+        mode-filtered storage types, assembled into a recommended value for every
+        managed_instance request-body field; each source fails independently.
+        existed_instance: the attachable PG candidates, or - with instance_id - that
+        instance's basic/configuration/network information for the attach decision.
+        Security-group planning belongs to discover_network_for_create."""
+        if scenario not in ('newly_instance','existed_instance'):
+            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与 create_supabase_application 的 manage_type 一致)')
+        if scenario=='existed_instance':
+            return await self._existed_instance_options(instance_id)
         if mode not in ('Single','Ha'):
             raise McpToolError('MCP_INVALID_ARGS','mode must be Single or Ha')
-        security_group_plan=self._security_group_plan(network)
         storage_mode='ha' if mode=='Ha' else 'single'
         # Engine versions run first: the storage probe depends on the highest major version.
         version_names=[]
@@ -80,10 +117,8 @@ class InstanceCatalog:
                 seen.add(number);ordered.append(name)
         highest=ordered[-1] if ordered else None
         # The remaining sources run concurrently; a single failure degrades only its own section.
-        # Network (VPC/subnet) belongs to discover_available_network_for_create; security groups
-        # are not discovered from the cloud - the caller passes the selected network (from that
-        # tool or its default recommendation) and the dedicated database group's rules are
-        # generated from it (see _security_group_plan).
+        # Network placement and the security-group plan belong to discover_network_for_create
+        # (same scenario values as manage_type); this tool no longer touches either.
         flavors_result,storage_result=await asyncio.gather(
             self.list_flavors(),
             self.list_storage_types(highest,storage_mode) if highest is not None else _skipped_probe(),
@@ -127,58 +162,43 @@ class InstanceCatalog:
             'enterprise_project_id':{'recommended':'0','note':'默认项目；多企业项目时让用户确认'},
             'password':{'note':'8-32 位三类字符，用户经本地请求文件提供，工具不生成'},
             'security_group_id':{'values':[],'recommended':None,
-                                 'note':'新建专用数据库组（create_supabase_security_group，描述用 数据库接入（自动创建）），不推荐既有组、不复用共享组；'
-                                        '规则配置见响应 security_group_plan：传入 network（选定子网网段）可直接生成'},
+                                 'note':'新建专用数据库组，不推荐既有组、不复用共享组；'
+                                        '建组与出入方向规则由 discover_network_for_create（scenario 同 manage_type）给出'},
             'configuration_id':{'note':'参数模板，可选，默认不传'},
         }
         status=lambda error:'error: '+error if error else 'ok'
-        return {'mode':mode,
+        return {'scenario':'newly_instance',
+                'mode':mode,
                 'managed_instance_field_options':options,
-                'security_group_plan':security_group_plan,
                 'top_level_reminder':['availability_zone 必须与顶层一致（服务端强制校验）',
                                       '数据库密码与应用密码同规则，可同值',
                                       '本工具只服务新建实例场景；托管已有实例用 list_supabase_manageable_instances',
-                                      '网络用 discover_available_network_for_create 选定（无 VPC 时采纳其默认推荐）；选定后传本工具 network 参数，直接生成专用数据库组的规则配置'],
+                                      '网络与安全组：调 discover_network_for_create（scenario 与 manage_type 一致）选定网络，并按其 security_group_plan 建组配规则'],
                 'discovery_status':{'engine_versions':status(version_error),
                                     'flavors':status(flavor_error),
                                     'storage_types':status(storage_error)}}
 
-    def _security_group_plan(self,network):
-        """The dedicated database group's rules, generated from the caller's network
-        selection (the discover_available_network_for_create result or its default
-        recommendation) instead of being discovered from the cloud: 5432 ingress from
-        the chosen subnet, egress left at the default allow-all."""
-        egress={'direction':'egress','destination_cidr':'0.0.0.0/0','note':'默认放行，无需额外规则'}
-        if network is None:
-            return {'ready':False,
-                    'ingress':{'direction':'ingress','protocol':'tcp','port':5432,'source_cidr':None},
-                    'egress':egress,
-                    'method':'入方向来源必须填写选定子网的网段：先用 discover_available_network_for_create 选定网络'
-                             '（无 VPC 时采纳其默认推荐），再带 network={scenario, subnet_cidr} 调用本工具直接生成规则'}
-        if not isinstance(network,dict):
-            raise McpToolError('MCP_INVALID_ARGS',
-                               'network must be an object: {"scenario": "discovered"|"default_recommendation", "subnet_cidr": "..."}')
-        if set(network)-{'scenario','subnet_cidr'}:
-            raise McpToolError('MCP_INVALID_ARGS','network accepts only scenario and subnet_cidr')
-        scenario=network.get('scenario');cidr=network.get('subnet_cidr')
-        if scenario not in ('discovered','default_recommendation'):
-            raise McpToolError('MCP_INVALID_ARGS',
-                               'network.scenario must be discovered (已有网络) or default_recommendation (尚未建网，采纳默认推荐)')
-        try:
-            subnet=ipaddress.ip_network(cidr,strict=True)
-            if subnet.prefixlen==0:raise ValueError()
-        except (ValueError,TypeError):
-            raise McpToolError('MCP_INVALID_ARGS',
-                               'network.subnet_cidr must be a bounded canonical CIDR like 192.168.0.0/24') from None
-        plan={'ready':True,'scenario':scenario,
-              'ingress':{'direction':'ingress','protocol':'tcp','port':5432,'source_cidr':str(subnet)},
-              'egress':egress,
-              'apply':['新建专用数据库组 create_supabase_security_group（描述：数据库接入（自动创建）），组 ID 填入 managed_instance.security_group_id',
-                       'add_supabase_security_group_rule(group_id, direction=ingress, protocol=tcp, port=5432, source_cidr=%s)'%subnet],
-              'rule_note':'5432 随 port 字段定制值移动；出方向默认放行；专用组不复用共享组'}
-        if scenario=='default_recommendation':
-            plan['precondition']='先执行 discover_available_network_for_create 返回的 default_create 建好默认 VPC/子网，再建组配规则'
-        return plan
+    async def _existed_instance_options(self,instance_id):
+        rows=await _manageable_rows(self._ops())
+        if instance_id is None:
+            return {'scenario':'existed_instance',
+                    'acquisition':'候选与 list_supabase_manageable_instances 同源（可挂载到 Supabase 应用的 PG 实例）；'
+                                  '从中选定一个后以 instance_id 再次调用本工具，获取其基础/配置/网络信息；'
+                                  '创建请求走 create_supabase_application(manage_type=existed_instance, '
+                                  'existing_instance={"instance_id":..., "database_name":"root", "database_pwd":...})',
+                    'candidates':rows,
+                    'note':'候选存在不等于可创建成功（规格/状态仍由服务端校验）'}
+        match=await _find_manageable(self._ops(),instance_id)
+        return {'scenario':'existed_instance',
+                'instance_id':instance_id,
+                'basic':{'id':match.get('id'),'name':match.get('name'),'status':match.get('status'),
+                         'spec_code':match.get('spec_code'),'vcpus':match.get('vcpus'),'ram':match.get('ram')},
+                'configuration':{'datastore':match.get('datastore'),'ha':match.get('ha'),
+                                  'port':match.get('port'),'volume':match.get('volume'),
+                                  'enterprise_project_id':match.get('enterprise_project_id')},
+                'network':{'vpc_id':match.get('vpc_id'),'subnet_id':match.get('subnet_id'),
+                           'security_group_id':match.get('security_group_id'),
+                           'note':'子网 CIDR 与应用侧安全组规则见 discover_network_for_create(existed_instance, instance_id)'}}
 
     def _rows_of(self,result,key):
         """Tolerant extraction for gathered probes: exceptions report, missing response keys stay empty."""
@@ -203,20 +223,120 @@ class InstanceCatalog:
 
 
 class NetworkDiscovery:
-    """Auto-discover a VPC and subnet with sufficient free IPs for the create-with-new-instance scenario.
+    """Network placement and the security-group plan for create_supabase_application,
+    by instance source (scenario, same values as manage_type).
 
-    The Supabase creation request carries vpc_id/subnet_id in basic_config; this picker
-    walks the VPC inventory and each VPC's subnets through KooCLI, preferring subnets
-    with at least two free IPv4 addresses (the managed instance reserves more than one),
-    falling back to at least one, and stops at the first match.
-    """
+    newly_instance: walks the VPC/subnet inventory through KooCLI (>=2 free IPs preferred,
+    >=1 fallback) and, with the chosen subnet CIDR, states both groups' creation
+    configuration - application group (8443 ingress with three source options, 5432
+    egress to the subnet) and database group (5432 ingress from the subnet, default
+    allow-all egress). existed_instance: takes VPC/subnet from the given attachable
+    instance, leaves the instance's security group untouched and applies the same
+    application-group rules. All internal rule CIDRs are the chosen subnet's CIDR."""
 
-    def __init__(self,koocli=None):
+    def __init__(self,koocli=None,operations=None):
         self.koocli=koocli or KoocliClient()
+        self.operations=operations
 
-    async def discover(self,minimum_ips=2,fallback_minimum=1,availability_zone=None):
-        if type(minimum_ips) is not int or not 1<=minimum_ips<=254 or type(fallback_minimum) is not int or not 1<=fallback_minimum<=minimum_ips:
-            raise McpToolError('MCP_INVALID_ARGS','minimum_ips must be an integer 1-254 and fallback_minimum must not exceed it')
+    def _ops(self):
+        if self.operations is None:
+            from mcp_server_supabase.service.operations import Operations
+            self.operations=Operations()
+        return self.operations
+
+    async def discover_network_for_create(self,scenario,availability_zone=None,instance_id=None,detect_access_ip=False):
+        if scenario not in ('newly_instance','existed_instance'):
+            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与 create_supabase_application 的 manage_type 一致)')
+        if scenario=='existed_instance':
+            return await self._existed_network(instance_id,detect_access_ip)
+        placement=await self._discover_placement(availability_zone)
+        plan=self._security_group_plan('newly_instance',placement['subnet_cidr'],detect_access_ip)
+        if placement.get('preference')=='default_recommendation':
+            plan['precondition']='先执行 default_create 建好默认 VPC/子网，再建组配规则'
+        return {**placement,'scenario':'newly_instance','security_group_plan':plan}
+
+    async def _existed_network(self,instance_id,detect_access_ip):
+        if not isinstance(instance_id,str) or not instance_id:
+            raise McpToolError('MCP_INVALID_ARGS','existed_instance 需要 instance_id（候选见 discover_db_instance_for_create(existed_instance)）')
+        match=await _find_manageable(self._ops(),instance_id)
+        vpc_id=match.get('vpc_id');subnet_id=match.get('subnet_id')
+        subnet_cidr=None
+        if vpc_id:
+            data=await self.koocli.call('VPC','ListSubnets',{'limit':100,'vpc_id':vpc_id})
+            subnets=data.get('subnets') if isinstance(data,dict) else None
+            for subnet in subnets if isinstance(subnets,list) else []:
+                if isinstance(subnet,dict) and subnet.get('id')==subnet_id:
+                    subnet_cidr=subnet.get('cidr');break
+        if not subnet_cidr:
+            raise McpToolError('MCP_NOT_FOUND','无法从实例的 VPC 中取到子网 CIDR',
+                               hint='确认实例的 vpc_id/subnet_id 有效后重试')
+        plan=self._security_group_plan('existed_instance',subnet_cidr,detect_access_ip)
+        plan['database_group']['current_security_group_id']=match.get('security_group_id')
+        return {'scenario':'existed_instance','instance_id':instance_id,
+                'vpc_id':vpc_id,'subnet_id':subnet_id,'subnet_cidr':subnet_cidr,
+                'basic_config_usage':{'vpc_id':vpc_id,'subnet_id':subnet_id},
+                'security_group_plan':plan}
+
+    def _security_group_plan(self,scenario,subnet_cidr,detect_access_ip):
+        """Creation configuration for the two dedicated groups. The application group
+        gates the product: 8443 ingress without which the app cannot be logged into and
+        5432 egress without which it cannot reach the database; the database group (new
+        instances only) needs the database-port ingress from the chosen subnet CIDR."""
+        detected=self._detect_access_cidr() if detect_access_ip else None
+        detect_note='传 detect_access_ip=true 自动探测当前设备出口 IP'
+        if detect_access_ip:
+            detect_note='已探测' if detected else '探测失败（可自查出口 IP 后改用自定义）'
+        source_options=[
+            {'key':'open','source_cidr':'0.0.0.0/0',
+             'note':'默认全开；/0 规则经 KooCLI CreateSecurityGroupRule 配置（MCP 规则工具拒收 /0）'},
+            {'key':'detected','source_cidr':detected,
+             'note':'当前设备访问网段（出口 IP /32，动态出口可放宽为 /24 或改自定义）。'+detect_note},
+            {'key':'custom','source_cidr':None,'note':'用户自定义网段，须为有界 CIDR'},
+        ]
+        application_group={'create':'create_supabase_security_group（描述：Supabase应用（自动创建））',
+                           'ingress':{'protocol':'tcp','port':8443,
+                                      'purpose':'应用服务入口——不放通无法登录 Supabase 应用',
+                                      'source_cidr_options':source_options},
+                           'egress':{'protocol':'tcp','port':5432,'destination_cidr':subnet_cidr,
+                                     'purpose':'连接托管数据库——不放通则应用异常不可用'}}
+        if scenario=='newly_instance':
+            database_group={'create':'create_supabase_security_group（描述：数据库接入（自动创建））',
+                            'ingress':{'protocol':'tcp','port':5432,'source_cidr':subnet_cidr,
+                                       'purpose':'应用连接数据库——不放通则 Supabase 异常，功能不可用'},
+                            'egress':{'destination_cidr':'0.0.0.0/0','note':'默认放行，无需额外规则'}}
+        else:
+            database_group={'action':'不动',
+                            'current_security_group_id':None,
+                            'note':'已有实例的安全组保持现状，不做任何变更'}
+        return {'application_group':application_group,'database_group':database_group,
+                'note':'规则中的网段均为所选 VPC 子网 CIDR（%s）；应用组入方向来源三选一：默认全 0 / 当前设备网段 / 自定义'%subnet_cidr}
+
+    def _detect_access_cidr(self):
+        """Best-effort probe of the current device public egress IP (the MCP server runs
+        on the user machine): a /32 CIDR or None. Short timeouts, never fatal. The SSL
+        context uses certifi when present - python.org builds on macOS often miss the
+        system CA store, which would otherwise fail every https probe."""
+        import urllib.request
+        import ipaddress
+        import ssl
+        context=None
+        try:
+            import certifi
+            context=ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            pass
+        for url in ('https://ifconfig.me/ip','https://checkip.amazonaws.com','https://api.ipify.org'):
+            try:
+                request=urllib.request.Request(url,headers={'User-Agent':'curl/8.4.0'})
+                with urllib.request.urlopen(request,timeout=3,context=context) as response:
+                    address=ipaddress.ip_address(response.read().decode().strip())
+                return str(address)+'/32'
+            except Exception:
+                continue
+        return None
+
+    async def _discover_placement(self,availability_zone):
+        minimum_ips=2;fallback_minimum=1
         vpcs_data=await self.koocli.call('VPC','ListVpcs/v3',{'limit':100})
         vpcs=vpcs_data.get('vpcs') if isinstance(vpcs_data,dict) else None
         if not isinstance(vpcs,list):
@@ -294,9 +414,9 @@ class BasicOptionsDiscovery:
     """One-call discovery of the Supabase application's own creation basics.
 
     Covers the top-level application fields only - name/version/mode/flavor/
-    availability_zone plus the deployment-mode probe. Network (basic_config
-    vpc/subnet) is owned by NetworkDiscovery; the managed PG instance fields
-    are owned by InstanceCatalog.discover_link_create_options.
+    availability_zone plus the deployment-mode probe. Network placement and the
+    security-group plan are owned by NetworkDiscovery.discover_network_for_create;
+    the managed PG instance fields by InstanceCatalog.discover_db_instance_for_create.
     """
 
     def __init__(self,operations=None):
@@ -309,22 +429,16 @@ class BasicOptionsDiscovery:
         return self.operations
 
     def _security_group_strategy(self):
-        """Guidance-only strategy: at basic-options time the instance does not exist yet,
-        so the subnet CIDR and the instance port cannot be pinned down - the rules
-        become concrete only in discover_db_instance_create_options."""
+        """Guidance-only strategy: instance and network are not chosen yet, so rule CIDRs
+        cannot be pinned down - the concrete plan comes from discover_network_for_create
+        once the scenario is known."""
         return {'determined':False,
-                'reason':'实例尚未创建，子网网段与实例端口还无法落实，以下为推荐方法策略',
+                'reason':'实例与网络尚未选定，以下为推荐方法策略；具体建组与出入方向规则由 discover_network_for_create（scenario 与 manage_type 一致）给出',
                 'application_group':{
-                    'ingress':{'protocol':'tcp','port':8443,'source_cidr':'用户访问网段（公网入口；0.0.0.0/0 须用户确认）'},
-                    'egress':{'protocol':'tcp','port':'被托管数据库实例的端口（默认 5432，实例定后按实际端口配置）',
-                              'destination_cidr':'选定子网网段'}},
+                    'ingress':{'protocol':'tcp','port':8443,'note':'应用服务入口，不放通无法登录；来源三选一：默认全 0 / 当前设备网段 / 自定义'},
+                    'egress':{'protocol':'tcp','port':5432,'note':'放通托管数据库端口，不放通则应用异常不可用'}},
                 'database_group':{
-                    'strategy':'新建专用组，不与其他实例共用；网络选定后调 discover_db_instance_create_options 并传 network，按其 security_group_plan 建组配规则'},
-                'apply_method':[
-                    'create_supabase_security_group 建应用组（描述：Supabase应用（自动创建））',
-                    'add_supabase_security_group_rule：应用组 8443 入方向，来源=用户访问网段',
-                    'add_supabase_security_group_rule：应用组出方向放通数据库实例端口（默认 5432），目的=选定子网网段',
-                    '数据库组按 discover_db_instance_create_options 的 security_group_plan 执行，组 ID 填入 managed_instance.security_group_id']}
+                    'strategy':'新建实例场景：新建专用组并放通数据库端口入方向（来源=所选子网 CIDR）；已有实例场景：保持现状不动'}}
 
     def _suggest_name(self,existing):
         """A rules-compliant, collision-free reference name.
@@ -415,8 +529,8 @@ class BasicOptionsDiscovery:
                 'basic_options':options,
                 'ha_supported':ha_supported,
                 'security_group_strategy':self._security_group_strategy(),
-                'excluded_scopes':['network (basic_config vpc/subnet) -> discover_available_network_for_create',
-                                   'managed instance fields -> discover_db_instance_create_options'],
+                'excluded_scopes':['network (basic_config vpc/subnet) -> discover_network_for_create',
+                                   'managed instance fields -> discover_db_instance_for_create'],
                 'probe_status':probes,
                 'note':'Top-level application basics for create_supabase_application. '
                        'Flavor sale status is per-AZ from the Supabase flavor API; the Ha probe uses the same API - '

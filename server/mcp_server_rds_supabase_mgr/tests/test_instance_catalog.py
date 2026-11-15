@@ -137,9 +137,9 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.koocli.push(subnets if isinstance(subnets,Exception) else {'subnets':subnets})
         self.koocli.push(groups if isinstance(groups,Exception) else {'security_groups':groups})
 
-    async def test_discover_link_options_single_happy_path(self):
+    async def test_discover_db_instance_for_create_single_happy_path(self):
         self._push_sources()
-        result=await self.catalog.discover_link_create_options('Single')
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
         self.assertEqual([c[1] for c in self.koocli.calls],
                          ['ListDatastores','ListFlavors','ListStorageTypes'])
         self.assertEqual(self.koocli.calls[2],('RDS','ListStorageTypes',
@@ -177,15 +177,13 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
                          ['availability_zone 必须与顶层一致（服务端强制校验）',
                           '数据库密码与应用密码同规则，可同值',
                           '本工具只服务新建实例场景；托管已有实例用 list_supabase_manageable_instances'])
-        plan=result['security_group_plan']
-        self.assertFalse(plan['ready'])
-        self.assertEqual(plan['ingress'],{'direction':'ingress','protocol':'tcp','port':5432,'source_cidr':None})
-        self.assertEqual(plan['egress'],{'direction':'egress','destination_cidr':'0.0.0.0/0','note':'默认放行，无需额外规则'})
-        self.assertIn('discover_available_network_for_create',plan['method'])
+        self.assertEqual(result['scenario'],'newly_instance')
+        self.assertNotIn('security_group_plan',result)
+        self.assertIn('discover_network_for_create',result['top_level_reminder'][-1])
 
-    async def test_discover_link_options_ha_mode_shapes_storage_query(self):
+    async def test_discover_db_instance_for_create_ha_mode_shapes_storage_query(self):
         self._push_sources()
-        result=await self.catalog.discover_link_create_options('Ha')
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Ha')
         self.assertEqual(self.koocli.calls[2][2],{'database_name':'PostgreSQL','version_name':'17','ha_mode':'ha'})
         self.assertEqual(result['mode'],'Ha')
         options=result['managed_instance_field_options']
@@ -193,76 +191,93 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('两个不同 AZ',options['availability_zone']['note'])
         self.assertTrue(all(value=='ok' for value in result['discovery_status'].values()))
 
-    async def test_discover_link_options_survives_total_sellout(self):
+    async def test_discover_db_instance_for_create_survives_total_sellout(self):
         self._push_sources(flavors=[{'spec_code':'rds.pg.n1.medium.2','az_status':{'cn-east-3a':'sellout'}}])
-        result=await self.catalog.discover_link_create_options('Single')
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
         options=result['managed_instance_field_options']
         self.assertEqual(options['flavor_ref']['values'],[])
         self.assertIsNone(options['flavor_ref']['recommended'])
         self.assertEqual(options['availability_zone']['values'],[])
         self.assertTrue(all(value=='ok' for value in result['discovery_status'].values()))
 
-    async def test_discover_link_options_has_no_network_or_group_sections(self):
+    async def test_discover_db_instance_for_create_has_no_network_or_group_sections(self):
         self._push_sources()
-        result=await self.catalog.discover_link_create_options('Single')
-        # Network stays out (no probe, no section); groups are not discovered from the cloud -
-        # the plan stays a template until the caller passes the network selection.
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        # Network placement and the security-group plan belong to discover_network_for_create:
+        # no probe, no section here - this tool covers instance fields only.
         self.assertNotIn('network',result)
-        self.assertFalse(result['security_group_plan']['ready'])
+        self.assertNotIn('security_group_plan',result)
         self.assertEqual(set(result['discovery_status']),{'engine_versions','flavors','storage_types'})
         sg=result['managed_instance_field_options']['security_group_id']
         self.assertEqual(sg['values'],[])
         self.assertIsNone(sg['recommended'])
-        self.assertIn('discover_available_network_for_create',result['top_level_reminder'][-1])
-        self.assertNotIn('network',result)
+        self.assertIn('discover_network_for_create',result['top_level_reminder'][-1])
         self.assertEqual(result['managed_instance_field_options']['flavor_ref']['recommended'],'rds.pg.n1.medium.2')
 
-    async def test_discover_link_options_generates_group_plan_from_network(self):
-        self._push_sources()
-        result=await self.catalog.discover_link_create_options('Single',
-            {'scenario':'discovered','subnet_cidr':'10.0.1.0/24'})
-        plan=result['security_group_plan']
-        self.assertTrue(plan['ready'])
-        self.assertEqual(plan['scenario'],'discovered')
-        self.assertEqual(plan['ingress'],{'direction':'ingress','protocol':'tcp','port':5432,'source_cidr':'10.0.1.0/24'})
-        self.assertEqual(plan['egress']['destination_cidr'],'0.0.0.0/0')
-        self.assertTrue(any('add_supabase_security_group_rule' in step and '10.0.1.0/24' in step
-                            for step in plan['apply']))
-        self.assertNotIn('precondition',plan)
-        self.assertEqual(len(self.koocli.calls),3)  # plan generation adds no cloud call
+    async def test_existed_scenario_lists_candidates_without_cloud_catalog_calls(self):
+        async def candidates(kind, az_code=None, mode=None):
+            return {'data': {'instances': [{'id': 'i1', 'name': 'pg-1', 'status': 'ACTIVE'}]}}
+        self.catalog.operations=type('Ops',(),{'creation_candidates':candidates})()
+        result=await self.catalog.discover_db_instance_for_create('existed_instance')
+        self.assertEqual(result['scenario'],'existed_instance')
+        self.assertEqual(result['candidates'],[{'id':'i1','name':'pg-1','status':'ACTIVE'}])
+        self.assertIn('instance_id',result['acquisition'])
+        self.assertEqual(self.koocli.calls,[])
 
-    async def test_discover_link_options_default_recommendation_adds_precondition(self):
-        self._push_sources()
-        result=await self.catalog.discover_link_create_options('Single',
-            {'scenario':'default_recommendation','subnet_cidr':'192.168.0.0/24'})
-        plan=result['security_group_plan']
-        self.assertTrue(plan['ready'])
-        self.assertEqual(plan['ingress']['source_cidr'],'192.168.0.0/24')
-        self.assertIn('default_create',plan['precondition'])
+    async def test_existed_scenario_returns_instance_sections(self):
+        row={'id':'i1','name':'pg-1','status':'ACTIVE','spec_code':'rds.pg.n1.large.2','vcpus':2,'ram':4,
+             'datastore':{'type':'PostgreSQL','version':'17'},'port':5432,
+             'volume':{'type':'ESSD','size':40},'vpc_id':'v1','subnet_id':'s1','security_group_id':'g1'}
+        async def candidates(kind, az_code=None, mode=None):
+            return {'data': {'instances': [row]}}
+        self.catalog.operations=type('Ops',(),{'creation_candidates':candidates})()
+        result=await self.catalog.discover_db_instance_for_create('existed_instance',instance_id='i1')
+        self.assertEqual(result['basic'],{'id':'i1','name':'pg-1','status':'ACTIVE',
+                                           'spec_code':'rds.pg.n1.large.2','vcpus':2,'ram':4})
+        self.assertEqual(result['configuration']['port'],5432)
+        self.assertEqual(result['configuration']['volume'],{'type':'ESSD','size':40})
+        self.assertEqual(result['network']['vpc_id'],'v1')
+        self.assertEqual(result['network']['security_group_id'],'g1')
+        self.assertIn('discover_network_for_create',result['network']['note'])
+        self.assertEqual(self.koocli.calls,[])
 
-    async def test_discover_link_options_rejects_invalid_network_before_any_call(self):
-        for bad in ({'scenario':'other','subnet_cidr':'10.0.0.0/24'},
-                    {'scenario':'discovered'},
-                    {'scenario':'discovered','subnet_cidr':'10.0.0.1/24'},
-                    {'scenario':'discovered','subnet_cidr':'0.0.0.0/0'},
-                    {'scenario':'discovered','subnet_cidr':'10.0.0.0/24','extra':1},
-                    'vpc-1',
-                    ['x']):
+    async def test_existed_scenario_unknown_instance_rejected(self):
+        async def candidates(kind, az_code=None, mode=None):
+            return {'data': {'instances': []}}
+        self.catalog.operations=type('Ops',(),{'creation_candidates':candidates})()
+        with self.assertRaises(McpToolError) as ctx:
+            await self.catalog.discover_db_instance_for_create('existed_instance',instance_id='nope')
+        self.assertEqual(ctx.exception.code,'MCP_NOT_FOUND')
+        self.assertEqual(self.koocli.calls,[])
+
+    async def test_existed_scenario_empty_inventory_is_not_an_error(self):
+        # Live shape on cn-east-3 with no attachable instances: {"data": {"total_count": 0}} - no list key at all.
+        async def candidates(kind, az_code=None, mode=None):
+            return {'data': {'total_count': 0}, 'creation_ready': False}
+        self.catalog.operations=type('Ops',(),{'creation_candidates':candidates})()
+        result=await self.catalog.discover_db_instance_for_create('existed_instance')
+        self.assertEqual(result['candidates'],[])
+        with self.assertRaises(McpToolError) as ctx:
+            await self.catalog.discover_db_instance_for_create('existed_instance',instance_id='nope')
+        self.assertEqual(ctx.exception.code,'MCP_NOT_FOUND')
+
+    async def test_invalid_scenario_rejected_before_any_call(self):
+        for bad in ('new','existed','newly','Newly_Instance',None,1):
             with self.assertRaises(McpToolError) as ctx:
-                await self.catalog.discover_link_create_options('Single',bad)
+                await self.catalog.discover_db_instance_for_create(bad)
             self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
         self.assertEqual(self.koocli.calls,[])
 
-    async def test_discover_link_options_rejects_invalid_mode_before_any_call(self):
+    async def test_discover_db_instance_for_create_rejects_invalid_mode_before_any_call(self):
         for bad in ('single','ha','',None,'Cluster'):
             with self.assertRaises(McpToolError) as ctx:
-                await self.catalog.discover_link_create_options(bad)
+                await self.catalog.discover_db_instance_for_create('newly_instance',bad)
             self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
         self.assertEqual(self.koocli.calls,[])
 
-    async def test_discover_link_options_sorts_shuffled_versions_and_uses_max(self):
+    async def test_discover_db_instance_for_create_sorts_shuffled_versions_and_uses_max(self):
         self._push_sources(versions=('15','18','13'))
-        result=await self.catalog.discover_link_create_options('Single')
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
         options=result['managed_instance_field_options']
         self.assertEqual(options['datastore.version']['values'],['13','15','18'])
         self.assertEqual(options['datastore.version']['recommended'],'18')
@@ -282,10 +297,12 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         server=RecordingServer()
         operations.register(server)
         for name in ('list_db_instance_engine_versions','list_db_instance_flavors_with_azs',
-                     'list_db_instance_storage_types','discover_db_instance_create_options'):
+                     'list_db_instance_storage_types','discover_db_instance_for_create',
+                     'discover_network_for_create'):
             self.assertIn(name,server.names)
         for old in ('list_supabase_engine_versions','list_supabase_instance_flavors',
-                    'list_supabase_instance_storage_types'):
+                    'list_supabase_instance_storage_types','discover_supabase_link_create_options',
+                    'discover_db_instance_create_options','discover_available_network_for_create'):
             self.assertNotIn(old,server.names)
 
 
@@ -293,12 +310,21 @@ if __name__=='__main__':
     unittest.main()
 
 
+def fake_calls(ops):
+    return ops.koocli.calls
+
+
 class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
-    def make(self, pages):
+    def make(self, pages, instances=None):
         fake = FakeKoocli()
         for page in pages:
             fake.push(page)
-        return NetworkDiscovery(fake), fake
+        ops = None
+        if instances is not None:
+            async def candidates(kind, az_code=None, mode=None):
+                return {'data': {'instances': instances}}
+            ops = type('Ops', (), {'creation_candidates': candidates})()
+        return NetworkDiscovery(fake, ops), fake
 
     def vpc(self, vid, name='vpc'):
         return {'id': vid, 'name': name, 'cidr': '192.168.0.0/16'}
@@ -315,19 +341,27 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             {'vpcs': [self.vpc('v1')]},
             {'subnets': [self.subnet('s1', 251, 'v1')]},
         ])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
+        self.assertEqual(result['scenario'], 'newly_instance')
         self.assertEqual(result['subnet_id'], 's1')
         self.assertEqual(result['preference'], 'sufficient')
         self.assertEqual(result['basic_config_usage'], {'vpc_id': 'v1', 'subnet_id': 's1'})
         self.assertEqual(result['available_ip_count'], 251)
         self.assertEqual(fake.calls[1], ('VPC', 'ListSubnets', {'limit': 100, 'vpc_id': 'v1'}))
+        plan = result['security_group_plan']
+        self.assertEqual(plan['application_group']['ingress']['port'], 8443)
+        self.assertEqual(plan['application_group']['egress']['destination_cidr'], '192.168.s1.0/24')
+        self.assertEqual(plan['database_group']['ingress']['source_cidr'], '192.168.s1.0/24')
+        self.assertEqual([o['key'] for o in plan['application_group']['ingress']['source_cidr_options']],
+                         ['open', 'detected', 'custom'])
+        self.assertIsNone(plan['application_group']['ingress']['source_cidr_options'][1]['source_cidr'])
 
     async def test_falls_back_to_one_free_ip(self):
         ops, _ = self.make([
             {'vpcs': [self.vpc('v1')]},
             {'subnets': [self.subnet('s1', 1, 'v1')]},
         ])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
         self.assertEqual(result['preference'], 'fallback')
         self.assertEqual(result['available_ip_count'], 1)
 
@@ -337,7 +371,7 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             {'subnets': [self.subnet('s0', 0, 'v1')]},          # v1: exhausted
             {'subnets': [self.subnet('s1', 5, 'v2')]},            # v2: sufficient
         ])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
         self.assertEqual(result['vpc_id'], 'v2')
         self.assertEqual(result['subnet_id'], 's1')
         self.assertEqual(len(result['inspected_vpcs']), 1)  # v1 recorded, v2 matched
@@ -347,7 +381,7 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             {'vpcs': [self.vpc('v1')]},
             {'subnets': [self.subnet('s1', 251, 'v1', status='ERROR'), self.subnet('s2', None, 'v1')]},
         ])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
         self.assertEqual(result['subnet_id'], 's2')          # unknown availability used as fallback
         self.assertEqual(result['preference'], 'fallback')
 
@@ -358,7 +392,7 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             Err('MCP_CLI_ERROR', 'boom'),                      # v1 subnet query fails
             {'subnets': [self.subnet('s2', 3, 'v2')]},
         ])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
         self.assertEqual(result['vpc_id'], 'v2')
         self.assertTrue(any('boom' in str(item.get('error', '')) for item in result['inspected_vpcs']))
 
@@ -367,7 +401,7 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
             {'vpcs': [self.vpc('v1')]},
             {'subnets': [self.subnet('s1', 0, 'v1')]},
         ])
-        result = await ops.discover(availability_zone='cn-east-3a')
+        result = await ops.discover_network_for_create('newly_instance', availability_zone='cn-east-3a')
         self.assertEqual(result['preference'], 'default_recommendation')
         self.assertIsNone(result['vpc_id'])
         self.assertEqual(result['vpc_name'], 'default_vpc')
@@ -378,19 +412,62 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['default_create']['subnet']['gateway_ip'], '192.168.0.1')
         self.assertIsNone(result['basic_config_usage'])
         self.assertTrue(any(item.get('error') == 'no eligible subnet' for item in result['inspected_vpcs']))
+        plan = result['security_group_plan']
+        self.assertEqual(plan['application_group']['egress']['destination_cidr'], '192.168.0.0/24')
+        self.assertEqual(plan['database_group']['ingress']['source_cidr'], '192.168.0.0/24')
+        self.assertIn('default_create', plan['precondition'])
 
     async def test_empty_region_returns_default_recommendation(self):
         ops, _ = self.make([{'vpcs': []}])
-        result = await ops.discover()
+        result = await ops.discover_network_for_create('newly_instance')
         self.assertEqual(result['preference'], 'default_recommendation')
         self.assertEqual(result['vpc_name'], 'default_vpc')
         self.assertIsNone(result['availability_zone'])
 
-    async def test_invalid_thresholds_rejected(self):
+    async def test_rejects_invalid_scenario_and_missing_instance_id(self):
         ops, _ = self.make([])
-        for bad in ((0, 1), (255, 1), (2, 3), ('2', 1)):
-            with self.assertRaises(Exception):
-                await ops.discover(*bad)
+        with self.assertRaises(McpToolError) as ctx:
+            await ops.discover_network_for_create('new')
+        self.assertEqual(ctx.exception.code, 'MCP_INVALID_ARGS')
+        self.assertEqual(fake_calls(ops), [])
+        with self.assertRaises(McpToolError) as ctx:
+            await ops.discover_network_for_create('existed_instance')
+        self.assertEqual(ctx.exception.code, 'MCP_INVALID_ARGS')
+        ops2, _ = self.make([], instances=[])
+        with self.assertRaises(McpToolError) as ctx:
+            await ops2.discover_network_for_create('existed_instance', instance_id='i1')
+        self.assertEqual(ctx.exception.code, 'MCP_NOT_FOUND')
+
+    async def test_existed_takes_network_from_instance_and_keeps_db_group(self):
+        instances = [{'id': 'i1', 'name': 'pg-1', 'vpc_id': 'v1', 'subnet_id': 's1',
+                      'security_group_id': 'g1'}]
+        ops, fake = self.make([{'subnets': [{'id': 's1', 'cidr': '192.168.5.0/24', 'vpc_id': 'v1'}]}],
+                              instances=instances)
+        result = await ops.discover_network_for_create('existed_instance', instance_id='i1')
+        self.assertEqual(fake.last(), ('VPC', 'ListSubnets', {'limit': 100, 'vpc_id': 'v1'}))
+        self.assertEqual(result['subnet_cidr'], '192.168.5.0/24')
+        self.assertEqual(result['basic_config_usage'], {'vpc_id': 'v1', 'subnet_id': 's1'})
+        plan = result['security_group_plan']
+        self.assertEqual(plan['application_group']['egress']['destination_cidr'], '192.168.5.0/24')
+        self.assertEqual(plan['database_group']['action'], '不动')
+        self.assertEqual(plan['database_group']['current_security_group_id'], 'g1')
+        self.assertNotIn('precondition', plan)
+
+    async def test_detect_access_ip_fills_the_detected_option(self):
+        ops, _ = self.make([{'vpcs': []}])
+        ops._detect_access_cidr = lambda: '1.2.3.4/32'
+        result = await ops.discover_network_for_create('newly_instance', detect_access_ip=True)
+        options = result['security_group_plan']['application_group']['ingress']['source_cidr_options']
+        self.assertEqual(options[1]['source_cidr'], '1.2.3.4/32')
+        self.assertIn('已探测', options[1]['note'])
+
+    async def test_detect_failure_degrades_to_note(self):
+        ops, _ = self.make([{'vpcs': []}])
+        ops._detect_access_cidr = lambda: None
+        result = await ops.discover_network_for_create('newly_instance', detect_access_ip=True)
+        options = result['security_group_plan']['application_group']['ingress']['source_cidr_options']
+        self.assertIsNone(options[1]['source_cidr'])
+        self.assertIn('探测失败', options[1]['note'])
 
 
 class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
@@ -428,7 +505,7 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['basic_options']['version']['recommended'], '1.0.0')
         self.assertEqual(result['basic_options']['flavor_ref']['recommended'], 'rds.supabase.n1.large.2')
         self.assertEqual(fake.calls, [('flavors', 'cn-east-3a', 'Single'), ('flavors', 'cn-east-3a', 'Ha'), ('applications', 100)])
-        self.assertIn('discover_available_network_for_create', str(result['excluded_scopes']))
+        self.assertIn('discover_network_for_create', str(result['excluded_scopes']))
         name_field = result['basic_options']['name']
         self.assertTrue(name_field['suggested'].startswith('supabase-app-'))
         self.assertTrue(any('64 字节' in r for r in name_field['requirements']))
@@ -440,10 +517,10 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['probe_status']['existing_application_names'], 'ok')
         strategy=result['security_group_strategy']
         self.assertFalse(strategy['determined'])
+        self.assertIn('discover_network_for_create',strategy['reason'])
         self.assertEqual(strategy['application_group']['ingress']['port'],8443)
-        self.assertIn('5432',strategy['application_group']['egress']['port'])
-        self.assertIn('discover_db_instance_create_options',strategy['database_group']['strategy'])
-        self.assertEqual(len(strategy['apply_method']),4)
+        self.assertEqual(strategy['application_group']['egress']['port'],5432)
+        self.assertIn('新建实例场景',strategy['database_group']['strategy'])
 
     async def test_ha_probe_rejection_means_single_only(self):
         from huaweicloud_mcp_core.errors import McpToolError as Err
