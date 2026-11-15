@@ -18,8 +18,22 @@ def basic_options_fixture():
             'security_group_strategy':{
                 'determined':False,'reason':'实例与网络尚未选定',
                 'application_group':{'ingress':{'protocol':'tcp','port':8443,'note':'应用服务入口'},
-                                    'egress':{'protocol':'tcp','port':5432,'note':'放通托管数据库端口'}},
+                                     'egress':{'protocol':'tcp','port':5432,'note':'放通托管数据库端口'}},
                 'database_group':{'strategy':'新建实例场景：新建专用组；已有实例场景：保持现状不动'}}}
+
+
+def basic_options_groups_fixture():
+    result=basic_options_fixture()
+    result['basic_options']['flavor_ref']={
+        'values':['rds.supabase.n1.medium.2','rds.supabase.n1.large.2'],
+        'recommended':'rds.supabase.n1.medium.2','note':'应用规格（rds.supabase.*）',
+        'groups':[
+            {'group_type':'general','label':'通用型','specs':[
+                {'spec_code':'rds.supabase.n1.medium.2','vcpus':2,'ram':4,
+                 'instance_mode':'Single','availability_zones':['cn-east-3a']},
+                {'spec_code':'rds.supabase.n1.large.2','vcpus':4,'ram':8,
+                 'instance_mode':'Single','availability_zones':['cn-east-3a']}]}]}
+    return result
 
 
 def candidates_fixture():
@@ -54,6 +68,38 @@ def newly_instance_fixture():
                                'note':'包周期返回订单走订单工具支付'}},
             'top_level_reminder':['availability_zone 必须与顶层一致（服务端强制校验）',
                                   '数据库密码与应用密码同规则，可同值']}
+
+
+def flavor_groups_fixture():
+    return {'scenario':'newly_instance','mode':'Single',
+            'managed_instance_field_options':{
+                'datastore.type':{'fixed':'PostgreSQL'},
+                'datastore.version':{'values':['17','18'],'recommended':'18','note':'PostgreSQL 引擎大版本'},
+                'flavor_ref':{'values':['rds.pg.n1.medium.2','rds.pg.n1.large.2','rds.pg.x1.2xlarge.4.ha'],
+                              'recommended':'rds.pg.n1.medium.2','note':'实例规格，形如 rds.pg.n1.medium.2',
+                              'groups':[
+                                  {'group_type':'general','label':'通用型','specs':[
+                                      {'spec_code':'rds.pg.n1.medium.2','vcpus':2,'ram':4,
+                                       'instance_mode':'single','availability_zones':['cn-east-3a']},
+                                      {'spec_code':'rds.pg.n1.large.2','vcpus':4,'ram':8,
+                                       'instance_mode':'single','availability_zones':['cn-east-3a']}]},
+                                  {'group_type':'rapid','label':'独享型（仅极速型SSD支持）','specs':[
+                                      {'spec_code':'rds.pg.x1.2xlarge.4.ha','vcpus':8,'ram':32,
+                                       'instance_mode':'ha','availability_zones':['cn-east-3a','cn-east-3b']}]}]},
+                'volume.type':{'values':['ESSD','CLOUDSSD','ULTRAHIGH','LOCALSSD'],'recommended':'ESSD',
+                               'note':'按 mode 过滤后的可售盘型',
+                               'options':[
+                                   {'value':'ESSD','label':'极速型SSD','note':'仅支持独享型规格实例',
+                                    'compatible_group_types':['rapid']},
+                                   {'value':'CLOUDSSD','label':'SSD云盘','note':'仅支持通用型和独享型规格实例',
+                                    'compatible_group_types':['general','normal2','dedicated','dedicatenormal',
+                                                              'armFlavors','armlocalssd','normallocalssd','bigmem']},
+                                   {'value':'ULTRAHIGH','label':'SSD','note':'高性能云盘',
+                                    'compatible_group_types':[]},
+                                   {'value':'LOCALSSD','label':'本地SSD','note':'本地盘',
+                                    'compatible_group_types':None}]},
+                'volume.size':{'minimum':40,'maximum':40000,'recommended':40,'note':'GB'}},
+            'top_level_reminder':['availability_zone 必须与顶层一致（服务端强制校验）']}
 
 
 def network_newly_fixture():
@@ -134,6 +180,23 @@ def arrangement_fixture():
                 {'tool':'change_supabase_eip','args':{'application_id':'<id>','is_bind':True,'public_ip_id':'<EIP ID>'}},
                 {'decision':'needs_email_login 是否启用邮箱登录'}],
             'decision_points':['az_code：可售 AZ 待选（list_supabase_flavors_with_azs）']}
+
+
+def arrangement_flavor_match_fixture():
+    result=arrangement_fixture()
+    result['step_modules']['supabase_basics']['flavor_interaction']=(
+        '应用规格与实例规格分开单独询问；应用规格从全部可售规格中选择或自定义，推荐通用型 2U4G')
+    instance=result['step_modules']['managed_instance']
+    instance['baseline']['flavor_match']={
+        'app_flavor_ref':'rds.supabase.n1.medium.2','app_group_type':'general','app_group_label':'通用型',
+        'matched_spec':'rds.pg.n1.medium.2','match_basis':'group_type+vcpus+ram'}
+    instance['baseline']['volume']={'type':'ESSD','size':40,
+                                    'type_basis':'与应用规格档位（通用型）实时兼容'}
+    instance['flavor_interaction']=('实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同档（通用型），'
+                                    '如需其他档位按分组清单另选')
+    instance['volume_interaction']=('磁盘类型展示中文名与实时兼容规格类型；ESSD 仅兼容独享型（极速型SSD）规格，'
+                                    'CLOUDSSD 兼容通用型与独享型')
+    return result
 
 
 class WidthTests(unittest.TestCase):
@@ -229,6 +292,27 @@ class RenderBasicOptionsTests(unittest.TestCase):
         self.assertIn('【安全组推荐策略】',out)
 
 
+class RenderBasicOptionsGroupsTests(unittest.TestCase):
+    def test_application_flavor_groups_block(self):
+        out=visual.render_basic_options(basic_options_groups_fixture())
+        self.assertIn('【应用规格分组】',out)
+        self.assertIn('通用型（general）｜ rds.supabase.n1.medium.2（2 vCPU/4 GB）',out)
+        self.assertIn('rds.supabase.n1.large.2（4 vCPU/8 GB）',out)
+        self.assertIn('【安全组推荐策略】',out)
+
+    def test_groups_block_absent_without_groups(self):
+        out=visual.render_basic_options(basic_options_fixture())
+        self.assertNotIn('【应用规格分组】',out)
+
+    def test_groups_tolerate_missing_label_and_specs(self):
+        payload=basic_options_fixture()
+        payload['basic_options']['flavor_ref']={'recommended':'rds.supabase.n1.medium.2',
+                                                'groups':[{'group_type':'general'}]}
+        out=visual.render_basic_options(payload)
+        self.assertIn('【应用规格分组】',out)
+        self.assertIn('general（general）｜ -',out)
+
+
 class RenderDbInstanceTests(unittest.TestCase):
     def test_candidate_listing(self):
         out=visual.render_db_instance(candidates_fixture())
@@ -264,6 +348,46 @@ class RenderDbInstanceTests(unittest.TestCase):
     def test_missing_keys_do_not_raise(self):
         out=visual.render_db_instance({})
         self.assertIn('托管实例参数基线（mode -）',out)
+
+
+class RenderDbInstanceGroupsTests(unittest.TestCase):
+    def test_flavor_groups_block(self):
+        out=visual.render_db_instance(flavor_groups_fixture())
+        self.assertIn('【实例规格分组】',out)
+        self.assertIn('通用型（general）｜ rds.pg.n1.medium.2（2 vCPU/4 GB） · rds.pg.n1.large.2（4 vCPU/8 GB）',out)
+        self.assertIn('独享型（仅极速型SSD支持）（rapid）｜ rds.pg.x1.2xlarge.4.ha（8 vCPU/32 GB）',out)
+
+    def test_volume_options_block(self):
+        out=visual.render_db_instance(flavor_groups_fixture())
+        self.assertIn('【磁盘类型】',out)
+        header=[line for line in out.split('\n') if line.startswith('│ 值 ')][0]
+        for column in ('中文名','说明','兼容规格类型'):
+            self.assertIn(column,header)
+        self.assertIn('极速型SSD',out)
+        self.assertIn('仅支持独享型规格实例',out)
+        self.assertIn('SSD云盘',out)
+        self.assertIn('仅支持通用型和独享型规格实例',out)
+        self.assertIn('rapid',out)
+        self.assertIn('general,normal2,dedicated',out)
+        ultra=[line for line in out.split('\n') if line.startswith('│ ULTRAHIGH ')]
+        self.assertEqual(len(ultra),1)
+        self.assertEqual([cell.strip() for cell in ultra[0].split('│')][-2],'-')
+
+    def test_blocks_absent_without_groups_and_options(self):
+        out=visual.render_db_instance(newly_instance_fixture())
+        self.assertNotIn('【实例规格分组】',out)
+        self.assertNotIn('【磁盘类型】',out)
+
+    def test_volume_options_tolerate_partial_entries(self):
+        payload={'scenario':'newly_instance','mode':'Single',
+                 'managed_instance_field_options':{
+                     'flavor_ref':{'recommended':'rds.pg.n1.medium.2','groups':[{'group_type':'general'}]},
+                     'volume.type':{'recommended':'ESSD','options':[{'value':'ESSD'}]}}}
+        out=visual.render_db_instance(payload)
+        self.assertIn('【实例规格分组】',out)
+        self.assertIn('general（general）｜ -',out)
+        self.assertIn('【磁盘类型】',out)
+        self.assertIn('ESSD',out)
 
 
 class RenderNetworkTests(unittest.TestCase):
@@ -365,6 +489,38 @@ class RenderArrangementTests(unittest.TestCase):
         self.assertIn('【创建流程（1:1 严格执行）】',out)
         self.assertIn('【创建后动作】',out)
         self.assertNotIn('【待决策】',out)
+
+
+class RenderArrangementFlavorMatchTests(unittest.TestCase):
+    def test_flavor_match_row_and_interactions(self):
+        out=visual.render_arrangement(arrangement_flavor_match_fixture())
+        self.assertIn('规格匹配',out)
+        self.assertIn('rds.pg.n1.medium.2（与应用 rds.supabase.n1.medium.2 同档：通用型，'
+                      '依据 group_type+vcpus+ram）',out)
+        self.assertIn('ESSD（与应用规格档位（通用型）实时兼容）｜ 40 GB',out)
+        self.assertIn('规格交互：应用规格与实例规格分开单独询问',out)
+        self.assertIn('规格交互：实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同档',out)
+        self.assertIn('磁盘类型交互：磁盘类型展示中文名与实时兼容规格类型',out)
+
+    def test_flavor_match_row_defaults_basis_when_missing(self):
+        result=arrangement_flavor_match_fixture()
+        del result['step_modules']['managed_instance']['baseline']['flavor_match']['match_basis']
+        out=visual.render_arrangement(result)
+        self.assertIn('依据 group_type+vcpus+ram）',out)
+
+    def test_flavor_match_absent_without_fields(self):
+        out=visual.render_arrangement(arrangement_fixture())
+        self.assertNotIn('规格匹配',out)
+        self.assertNotIn('规格交互',out)
+        self.assertNotIn('磁盘类型交互',out)
+
+    def test_interactions_render_for_hint_modules_too(self):
+        result=arrangement_fixture()
+        result['step_modules']['managed_instance']={'status':'pending_decision','hint':'先在模块2选定实例',
+                                                    'volume_interaction':'磁盘类型展示中文名与实时兼容规格类型'}
+        out=visual.render_arrangement(result)
+        self.assertIn('先在模块2选定实例',out)
+        self.assertIn('磁盘类型交互：磁盘类型展示中文名与实时兼容规格类型',out)
 
 
 class RenderEipTests(unittest.TestCase):

@@ -45,9 +45,9 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
 | 1. 意图四问 | — | needs_storage/needs_public_access/needs_ssl 三态意图 | 四问全有明确答复；存储答复必须在创建前拿到 |
-| 2. 编排基线 | `plan_supabase_creation_arrangement` | manage_type=newly_instance、az_code、意图参数 | 三必选模块已固化、creation_flow 步骤编号齐全、decision_points 清空或已答复 |
-| 3. 应用要素发现 | `discover_supabase_create_basic_options` | az_code | version 取当前最高（x.y.z 应用版本）；Ha 实时探测结果如实采纳 |
-| 4. 实例要素发现 | `discover_db_instance_for_create` | scenario=newly_instance、mode | 引擎版本、规格、磁盘类型均为实时推荐值 |
+| 2. 编排基线 | `plan_supabase_creation_arrangement` | manage_type=newly_instance、az_code、意图参数 | 三必选模块已固化（应用与实例规格分开单独询问，实例默认推荐与应用同规格）、creation_flow 步骤编号齐全、decision_points 清空或已答复 |
+| 3. 应用要素发现 | `discover_supabase_create_basic_options` | az_code | version 取当前最高（x.y.z 应用版本）；Ha 实时探测结果如实采纳；应用规格按规格类型分组展示全部可售（可选或自定义，推荐通用型 2U4G） |
+| 4. 实例要素发现 | `discover_db_instance_for_create` | scenario=newly_instance、mode | 实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型；引擎版本、规格、磁盘类型均为实时推荐值 |
 | 5. 网络选址 | `discover_network_for_create` | scenario=newly_instance | vpc_id/subnet_id 来自返回；无可用网络时按 default_create 建网后重跑一次取真实 ID |
 | 6. 写请求文件 | 本地操作 | 见"创建请求体" | 秘密全部入文件；预览前过"预览前逐项核对清单" |
 | 7. 预览 | `create_supabase_with_new_instance` | request_ref、public_access_cidr、confirm=false | 脱敏参数、双组安全组方案、obs_plan 交用户核对；plan_id 记录在案 |
@@ -90,8 +90,8 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 10 | datastore | PostgreSQL + 引擎版本 | 17.11.260901 |
 | 11 | ha | mode 与顶层 mode 一致 | {"mode":"Single","replication_mode":"async"} |
 | 12 | charge_info | 按需仅 charge_mode；包周期 period_type 字符串 month/year + period_num | postPaid |
-| 13 | managed flavor_ref | 数据库规格（不等于应用规格） | rds.pg.n1.medium.2 |
-| 14 | volume | 环境支持的盘型 + 容量 | ESSD / 40 |
+| 13 | managed flavor_ref | 数据库规格（不等于应用规格）；按 group_type 十大类分组选择，默认推荐与应用同规格 | rds.pg.n1.medium.2 |
+| 14 | volume | 环境支持的盘型（核对中文名与实时兼容规格类型） + 容量 | ESSD / 40 |
 | 15 | managed availability_zone | 与顶层主 AZ 一致 | cn-east-3a |
 | 16 | managed password | 规则同应用密码，可同值 | （已配置） |
 | 17 | port | 5432 或省略 | 5432 |
@@ -134,7 +134,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
 | 1. 收集意图 | — | manage_type、az_code、mode、instance_id、detect_access_ip | 不确定的意图保持省略（开放决策点），不替用户决定 |
-| 2. 生成基线 | `plan_supabase_creation_arrangement` | 三态意图参数 needs_* | planning_only，不创建任何资源 |
+| 2. 生成基线 | `plan_supabase_creation_arrangement` | 三态意图参数 needs_* | planning_only，不创建任何资源；应用与实例规格分开单独询问，实例规格按 group_type 十大类分组展示全部可售、默认推荐与应用同规格，磁盘类型展示中文名与实时兼容规格类型 |
 | 3. 追问决策点 | — | — | 按 decision_points 逐项追问到明确答复 |
 | 4. 展示 | visual 输出 | — | 表格/流程图直接给用户；三大必选模块参数注明实时来源 |
 

@@ -3,6 +3,11 @@ import os
 from mcp_server_supabase.service.contracts import ssl_body
 from mcp_server_supabase.client.base import OfflineClient, SupabaseClient
 
+try:
+    from mcp_server_supabase.service.instance_catalog import GROUP_TYPE_LABELS as _GROUP_TYPE_LABELS
+except Exception:
+    _GROUP_TYPE_LABELS = {"general": "通用型", "dedicated": "专属型", "bigmem": "大内存型", "arm": "鲲鹏型"}
+
 SCENARIOS = {
     "create": "Creation via local reference available: existing PG (database_name fixed to root) or new PG (Single or Ha mode; postPaid or prepaid 1-9 months / 1-3 years - prepaid returns a console order); intent-driven phase planning via plan_supabase_creation; backend policy/live acceptance pending",
     "delete": "Application-only execution available; PG cascade remains unavailable",
@@ -65,6 +70,31 @@ class PlanningService:
                 "vpc_id":row.get("vpc_id"),"subnet_id":row.get("subnet_id"),
                 "security_group_id":row.get("security_group_id")}
 
+    @staticmethod
+    def _flavor_entries(block):
+        groups = block.get("groups") if isinstance(block, dict) else None
+        for group in groups if isinstance(groups, list) else []:
+            if not isinstance(group, dict):
+                continue
+            specs = group.get("specs")
+            for spec in specs if isinstance(specs, list) else []:
+                if isinstance(spec, dict) and spec.get("spec_code"):
+                    yield group.get("group_type"), spec
+
+    @staticmethod
+    def _same_number(left, right):
+        try:
+            return int(left) == int(right)
+        except (TypeError, ValueError):
+            return str(left) == str(right)
+
+    @staticmethod
+    def _number_key(value):
+        try:
+            return (0, int(value), "")
+        except (TypeError, ValueError):
+            return (1, 0, str(value) if value is not None else "")
+
     async def arrangement(self, manage_type, az_code=None, mode=None, page=1, instance_id=None,
                           detect_access_ip=False, needs_storage=None, needs_public_access=None,
                           needs_ssl=None, needs_email_login=None, needs_github_login=None) -> dict[str, object]:
@@ -79,6 +109,7 @@ class PlanningService:
             return {"error": {"code": "MCP_INVALID_ARGS", "message": "page must be an integer from 1 to 500"}}
 
         # Module 1: Supabase basics (live via discover_supabase_create_basic_options)
+        app_flavor = None
         module_basics = {"source_tool": "discover_supabase_create_basic_options", "status": "pending_decision",
                          "hint": "回填 az_code 重新生成本编排（可售 AZ 见 list_supabase_flavors_with_azs）",
                          "baseline": None}
@@ -90,13 +121,22 @@ class PlanningService:
                 return block.get("suggested") or block.get("recommended")
             module_basics = {"source_tool": "discover_supabase_create_basic_options", "status": "fixed",
                              "baseline": {"name": _pick("name"), "version": _pick("version"),
-                                         "mode": _pick("mode"), "flavor_ref": _pick("flavor_ref"),
-                                         "availability_zone": az_code,
-                                         "storage_component": ({"enabled": True, "note": "桶名与持久 AK/SK 经本地请求文件"} if needs_storage is True
-                                                               else ({"enabled": False} if needs_storage is False
-                                                                     else "决策点：创建后不可再启用，创建前必须确认")),
-                                         "password": "经本地请求文件提供（8-32 位三类字符，dashboard 登录用户 supabase）"},
+                                          "mode": _pick("mode"), "flavor_ref": _pick("flavor_ref"),
+                                          "availability_zone": az_code,
+                                          "storage_component": ({"enabled": True, "note": "桶名与持久 AK/SK 经本地请求文件"} if needs_storage is True
+                                                                else ({"enabled": False} if needs_storage is False
+                                                                      else "决策点：创建后不可再启用，创建前必须确认")),
+                                          "password": "经本地请求文件提供（8-32 位三类字符，dashboard 登录用户 supabase）"},
+                             "flavor_interaction": "应用规格单独询问：展示全部可售规格（按规格类型分组、含 vCPU/内存），供用户选择或自定义输入；推荐通用型 2U4G",
                              "probe_status": result.get("probe_status")}
+            app_baseline_flavor = module_basics["baseline"]["flavor_ref"]
+            if app_baseline_flavor:
+                for group_type, spec in self._flavor_entries(options.get("flavor_ref")):
+                    if spec.get("spec_code") == app_baseline_flavor:
+                        if group_type:
+                            app_flavor = {"spec_code": app_baseline_flavor, "group_type": group_type,
+                                          "vcpus": spec.get("vcpus"), "ram": spec.get("ram")}
+                        break
 
         # Module 2: managed instance (live via discover_db_instance_for_create)
         if manage_type == "newly_instance":
@@ -106,19 +146,72 @@ class PlanningService:
                 block = fields.get(field) if isinstance(fields.get(field), dict) else {}
                 return block.get("recommended")
             az_values = (fields.get("availability_zone") or {}).get("values") or []
+            flavor_baseline = _rec("flavor_ref")
+            flavor_match = None
+            if app_flavor is not None:
+                same_group = [spec for group_type, spec in self._flavor_entries(fields.get("flavor_ref"))
+                              if group_type == app_flavor["group_type"]]
+                matched = None
+                match_basis = None
+                if same_group:
+                    if app_flavor["vcpus"] is not None and app_flavor["ram"] is not None:
+                        exact = sorted((spec for spec in same_group
+                                        if str(spec.get("vcpus")) == str(app_flavor["vcpus"])
+                                        and self._same_number(spec.get("ram"), app_flavor["ram"])),
+                                       key=lambda spec: str(spec.get("spec_code")))
+                        if exact:
+                            matched = exact[0]
+                            match_basis = "group_type+vcpus+ram"
+                    if matched is None:
+                        matched = sorted(same_group, key=lambda spec: (self._number_key(spec.get("vcpus")),
+                                                                       self._number_key(spec.get("ram")),
+                                                                       str(spec.get("spec_code"))))[0]
+                        match_basis = "group_type"
+                if matched is not None:
+                    flavor_baseline = matched.get("spec_code")
+                    flavor_match = {"app_flavor_ref": app_flavor["spec_code"],
+                                    "app_group_type": app_flavor["group_type"],
+                                    "app_group_label": _GROUP_TYPE_LABELS.get(app_flavor["group_type"], app_flavor["group_type"]),
+                                    "matched_spec": matched.get("spec_code"),
+                                    "match_basis": match_basis}
+            volume_type = _rec("volume.type")
+            volume_basis = None
+            volume_block = fields.get("volume.type") if isinstance(fields.get("volume.type"), dict) else {}
+            volume_options = volume_block.get("options")
+            if app_flavor is not None and isinstance(volume_options, list) and volume_options:
+                compatible = [entry for entry in volume_options if isinstance(entry, dict)
+                              and (not entry.get("compatible_group_types")
+                                   or (isinstance(entry.get("compatible_group_types"), list)
+                                       and app_flavor["group_type"] in entry["compatible_group_types"]))]
+                picked = None
+                for preferred in ("ESSD", "CLOUDSSD", "GPSSD2"):
+                    picked = next((entry for entry in compatible if str(entry.get("value")) == preferred), None)
+                    if picked is not None:
+                        break
+                if picked is None and compatible:
+                    picked = compatible[0]
+                if picked is not None and picked.get("value") is not None:
+                    volume_type = picked.get("value")
+                    volume_basis = "与匹配规格（group_type=%s）实时兼容" % app_flavor["group_type"]
             module_instance = {"source_tool": "discover_db_instance_for_create", "status": "fixed",
                                "baseline": {"datastore": {"type": "PostgreSQL", "version": _rec("datastore.version")},
-                                            "flavor_ref": _rec("flavor_ref"),
-                                            "volume": {"type": _rec("volume.type"), "size": _rec("volume.size") or 40},
+                                            "flavor_ref": flavor_baseline,
+                                            "volume": {"type": volume_type, "size": _rec("volume.size") or 40},
                                             "charge_info": _rec("charge_info") or {"charge_mode": "postPaid"},
                                             "ha": {"mode": mode or "Single", "replication_mode": "async"},
                                             "availability_zone": az_code or (az_values[0] if az_values else None),
                                             "port": _rec("port") or 5432,
                                             "enterprise_project_id": _rec("enterprise_project_id") or "0",
                                             "security_group_id": "<建组后回填（模块3 apply_steps）>"},
+                               "flavor_interaction": "实例规格与应用规格分开单独询问：按 group_type 分大类展示全部规格，默认推荐与 Supabase 应用相同的规格（同规格类型且同 vCPU/内存）",
+                               "volume_interaction": "磁盘类型明确展示（中文名+官方说明+实时兼容规格类型）供用户选择，默认推荐与所选规格兼容的类型",
                                "field_options": fields,
                                "discovery_status": instance_result.get("discovery_status"),
                                "top_level_reminder": instance_result.get("top_level_reminder")}
+            if flavor_match is not None:
+                module_instance["baseline"]["flavor_match"] = flavor_match
+            if volume_basis is not None:
+                module_instance["baseline"]["volume"]["type_basis"] = volume_basis
         elif not instance_id:
             listing = await self._catalog_service().discover_db_instance_for_create("existed_instance")
             rows = listing.get("candidates") or []

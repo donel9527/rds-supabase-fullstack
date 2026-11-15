@@ -124,9 +124,84 @@ def _scalar(value):
     return str(value)
 
 
+def _spec_text(spec):
+    """One catalog spec as 'spec_code（vcpus vCPU/ram GB）'; missing sizing keeps the code alone."""
+    spec=_dict(spec)
+    code=_scalar(spec.get('spec_code'))
+    vcpus=spec.get('vcpus');ram=spec.get('ram')
+    if vcpus is None or ram is None:return code
+    return '%s（%s vCPU/%s GB）' % (code,_scalar(vcpus),_scalar(ram))
+
+
+def _flavor_groups_block(title,flavor):
+    """Grouped flavor catalog: one line per group - 'label（group_type）｜ spec · spec' - wrapped
+    at the ' · ' separators once the line passes 90 display columns."""
+    groups=_list(_dict(flavor).get('groups'))
+    if not groups:return None
+    lines=[]
+    for group in groups:
+        group=_dict(group)
+        label=group.get('label')
+        if label is None:label=group.get('group_type')
+        head='%s（%s）｜ ' % (_scalar(label),_scalar(group.get('group_type')))
+        specs=[_spec_text(spec) for spec in _list(group.get('specs'))] or ['-']
+        current=head;used=width(head)
+        for index,spec in enumerate(specs):
+            piece=(' · ' if index else '')+spec
+            if used+width(piece)>90 and used>width(head):
+                lines.append(current);current=spec;used=width(spec)
+            else:
+                current+=piece;used+=width(piece)
+        lines.append(current)
+    return block(title,'\n'.join(lines))
+
+
+def _volume_options_block(volume):
+    """Storage-type catalog: value / Chinese label / official note / live compatible group types."""
+    options=_list(_dict(volume).get('options'))
+    if not options:return None
+    rows=[]
+    for option in options:
+        option=_dict(option)
+        compatible=_list(option.get('compatible_group_types'))
+        rows.append([option.get('value'),option.get('label'),_clip(option.get('note'),50),
+                     ','.join(str(item) for item in compatible) if compatible else '-'])
+    return block('磁盘类型',table(['值','中文名','说明','兼容规格类型'],rows))
+
+
+def _flavor_match_text(match):
+    """The app-to-instance flavor match as one summary line."""
+    match=_dict(match)
+    basis=match.get('match_basis')
+    if basis is None:basis='group_type+vcpus+ram'
+    if not isinstance(basis,str):basis=str(basis)
+    return '%s（与应用 %s 同档：%s，依据 %s）' % (_scalar(match.get('matched_spec')),
+                                                _scalar(match.get('app_flavor_ref')),
+                                                _scalar(match.get('app_group_label')),basis)
+
+
+def _interaction_lines(module):
+    """Interaction notices carried by arrangement modules (flavor/volume), each on its own line."""
+    module=_dict(module)
+    lines=[]
+    for key,label in (('flavor_interaction','规格交互'),('volume_interaction','磁盘类型交互')):
+        text=module.get(key)
+        if text is None:continue
+        lines.append('%s：%s' % (label,_wrap(_scalar(text),88)))
+    return lines
+
+
 def _baseline_rows(baseline):
     rows=[]
     for key,value in _dict(baseline).items():
+        if key=='flavor_match' and isinstance(value,dict):
+            rows.append(['规格匹配',_flavor_match_text(value)])
+            continue
+        if key=='volume' and isinstance(value,dict) and value.get('type_basis') is not None:
+            rows.append(['volume','%s（%s）｜ %s GB' % (_scalar(value.get('type')),
+                                                        _scalar(value.get('type_basis')),
+                                                        _scalar(value.get('size')))])
+            continue
         shown=_clip(value,50) if isinstance(value,dict) else _scalar(value)
         rows.append([key,shown])
     return rows
@@ -203,6 +278,10 @@ def _db_instance_blocks(result):
     mode=result.get('mode')
     blocks=[block('托管实例参数基线（mode %s）' % (mode if mode is not None else '-'),
                   table(['字段','推荐','可选值','说明'],rows))]
+    groups_block=_flavor_groups_block('实例规格分组',fields.get('flavor_ref'))
+    if groups_block is not None:blocks.append(groups_block)
+    volume_block=_volume_options_block(fields.get('volume.type'))
+    if volume_block is not None:blocks.append(volume_block)
     reminder=_list(result.get('top_level_reminder'))
     if reminder:
         blocks.append(block('提醒',[str(item) for item in reminder]))
@@ -211,24 +290,25 @@ def _db_instance_blocks(result):
 
 def _module_supabase(module):
     if module.get('status')=='fixed':
-        body=table(['字段','基线'],_baseline_rows(module.get('baseline')))
+        parts=[table(['字段','基线'],_baseline_rows(module.get('baseline')))]
     else:
-        body=str(module.get('hint') or '-')
-    return block('模块一：Supabase 基本信息',body)
+        parts=[str(module.get('hint') or '-')]
+    parts.extend(_interaction_lines(module))
+    return block('模块一：Supabase 基本信息','\n'.join(parts))
 
 
 def _module_instance(module):
     if 'candidates_page' in module or 'candidates' in module:
-        body=_candidate_table(module)
+        parts=[_candidate_table(module)]
     elif module.get('status')=='fixed':
         parts=[table(['字段','基线'],_baseline_rows(module.get('baseline')))]
         instance=module.get('instance')
         if isinstance(instance,dict) and 'basic' in instance:
             parts.extend(_db_instance_blocks(instance))
-        body='\n\n'.join(parts)
     else:
-        body=str(module.get('hint') or '-')
-    return block('模块二：托管实例',body)
+        parts=[str(module.get('hint') or '-')]
+    parts.extend(_interaction_lines(module))
+    return block('模块二：托管实例','\n\n'.join(parts))
 
 
 def _module_network(module):
@@ -293,10 +373,11 @@ def render_basic_options(result):
         ['应用组','出',egress.get('port'),egress.get('note')],
         ['数据库组','-','-',_clip(database.get('strategy'),60)],
     ]
-    return '\n\n'.join([
-        block('Supabase 基本信息（AZ %s）' % az,table(['字段','推荐','说明'],basics_rows)),
-        block('安全组推荐策略',table(['组','方向','端口','说明'],sg_rows)),
-    ])
+    blocks=[block('Supabase 基本信息（AZ %s）' % az,table(['字段','推荐','说明'],basics_rows))]
+    groups_block=_flavor_groups_block('应用规格分组',options.get('flavor_ref'))
+    if groups_block is not None:blocks.append(groups_block)
+    blocks.append(block('安全组推荐策略',table(['组','方向','端口','说明'],sg_rows)))
+    return '\n\n'.join(blocks)
 
 
 def render_db_instance(result):

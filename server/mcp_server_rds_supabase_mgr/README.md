@@ -85,12 +85,14 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 资源。它先明确呈现托管实例的两种来源，并要求用户给出确定性结论：新建实例为推荐
 与默认，挂载已有实例为备选。随后将关键参数模块实时固化——三大必选模块与一个关键可选模块：
 
-- **Supabase 基本信息**：名称建议与命名规则、版本、部署模式与规格，来自
-  `discover_supabase_create_basic_options`。
+- **Supabase 基本信息**：名称建议与命名规则、版本、部署模式与规格（全部可售规格
+  供选择或自定义，推荐通用型 2U4G），来自 `discover_supabase_create_basic_options`。
 - **托管实例**：新建来源经 `discover_db_instance_for_create` 返回引擎版本、规格与
-  磁盘类型的逐字段推荐；挂载来源分页（每页 20 条）列出可托管实例，版本、部署类型、
-  端口、可用区、创建时间与当前操作（action 锁）齐全——正在重启、升级或变更的实例
-  须排除，以免任务冲突。
+  磁盘类型的逐字段推荐——应用规格与实例规格分两次交互单独询问：实例规格按
+  group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型明确展示
+  中文名、官方说明与实时兼容规格类型供选择。挂载来源分页（每页 20 条）列出可托管
+  实例，版本、部署类型、端口、可用区、创建时间与当前操作（action 锁）齐全——正在
+  重启、升级或变更的实例须排除，以免任务冲突。
 - **网络控制**：VPC/子网选址与双组安全组规格——应用组 8443 入方向三选一加 5432
   出方向、数据库组 5432 入方向，网段均为所选子网 CIDR，来自
   `discover_network_for_create`。
@@ -232,14 +234,14 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 | `update_supabase_auth_config` | 配置 GitHub/SMTP 登录、回调地址与邮件模板 | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
 | `update_supabase_storage` | 对接或变更 OBS 存储桶 | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与凭证检测 | READ | `KooCLI OBS ls` |
-| `discover_supabase_create_basic_options` | 应用基本要素发现与推荐 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：必选参数模块固化、OBS 对接（关键可选）与流程设计 | READ | 实时组合（发现工具的只读查询） |
+| `discover_supabase_create_basic_options` | 应用基本要素发现与推荐，应用规格按规格类型分组展示全部可售规格 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：必选参数模块固化、OBS 对接（关键可选）与流程设计，应用规格与实例规格分开单独询问、实例默认推荐与应用同规格 | READ | 实时组合（发现工具的只读查询） |
 | `list_supabase_flavors_with_azs` | 查询应用规格及各规格支持的可用区 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | 查询可挂载的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | 查询托管实例可用 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
 | `list_db_instance_flavors_with_azs` | 查询托管实例规格及各规格可用区售卖状态 | READ | [ListFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListFlavors) |
 | `list_db_instance_storage_types` | 查询托管实例磁盘类型（按版本与模式过滤） | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
-| `discover_db_instance_for_create` | 托管实例来源分场景探索（含 action 锁候选清单） | READ | 组合查询（ListDatastores/ListFlavors/ListStorageTypes）+ ListManageableInstances |
+| `discover_db_instance_for_create` | 托管实例来源分场景探索（含 action 锁候选清单），实例规格按 group_type 分大类展示全部可售规格、磁盘类型含中文名与实时兼容规格类型 | READ | 组合查询（ListDatastores/ListFlavors/ListStorageTypes）+ ListManageableInstances |
 | `discover_network_for_create` | 网络选址与安全组规格 | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
 | `create_supabase_with_new_instance` | （推荐）新建实例场景端到端创建：安全组/OBS 自动准备回填后一次提交 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `create_supabase_link_exist_instance` | 已有实例挂载场景创建：自动应用组，库组不动 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |

@@ -120,11 +120,19 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         """Push the six probe results in the implementation's call order:
         Datastores, Flavors, StorageTypes, Vpcs, Subnets, SecurityGroups."""
         if flavors is None:
-            flavors=[{'spec_code':'rds.pg.n1.medium.2','az_status':{'cn-east-3a':'normal','cn-east-3b':'sellout'}},
-                     {'spec_code':'rds.pg.n1.large.2','az_status':{'cn-east-3b':'normal'}},
-                     {'spec_code':'rds.pg.n1.xlarge.2','az_status':{'cn-east-3a':'sellout','cn-east-3b':'sellout'}}]
+            flavors=[{'spec_code':'rds.pg.n1.medium.2','vcpus':'2','ram':4,'group_type':'general','instance_mode':'single',
+                      'az_status':{'cn-east-3a':'normal','cn-east-3b':'sellout'}},
+                     {'spec_code':'rds.pg.x1.large.4','vcpus':'4','ram':16,'group_type':'dedicated','instance_mode':'ha',
+                      'az_status':{'cn-east-3a':'normal'}},
+                     {'spec_code':'rds.pg.n1.large.2','vcpus':'4','ram':8,'group_type':'general','instance_mode':'single',
+                      'az_status':{'cn-east-3b':'normal'}},
+                     {'spec_code':'rds.pg.ex.large.2','vcpus':'2','ram':4,'group_type':'exotic','instance_mode':'single',
+                      'az_status':{'cn-east-3a':'normal'}},
+                     {'spec_code':'rds.pg.n1.xlarge.2','vcpus':'8','ram':16,'group_type':'general','instance_mode':'single',
+                      'az_status':{'cn-east-3a':'sellout','cn-east-3b':'sellout'}}]
         if storage is None:
-            storage=[{'name':'SSD','az_status':{'cn-east-3a':'normal'}},{'name':'ESSD','az_status':{'cn-east-3a':'normal'}}]
+            storage=[{'name':'ULTRAHIGH','az_status':{'cn-east-3a':'normal'},'support_compute_group_type':['general','dedicated']},
+                     {'name':'ESSD','az_status':{'cn-east-3a':'normal'},'support_compute_group_type':['general','dedicated','armFlavors']}]
         if vpcs is None:vpcs=[{'id':'vpc-1','name':'net-a'}]
         if subnets is None:subnets=[{'id':'subnet-1','name':'sub-a','vpc_id':'vpc-1'}]
         if groups is None:
@@ -150,10 +158,28 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(options['datastore.type'],{'fixed':'PostgreSQL'})
         self.assertEqual(options['datastore.version']['values'],['15','17'])
         self.assertEqual(options['datastore.version']['recommended'],'17')
-        self.assertEqual(options['flavor_ref']['values'],['rds.pg.n1.medium.2','rds.pg.n1.large.2'])
+        self.assertEqual(options['flavor_ref']['values'],
+                         ['rds.pg.n1.medium.2','rds.pg.x1.large.4','rds.pg.n1.large.2','rds.pg.ex.large.2'])
         self.assertEqual(options['flavor_ref']['recommended'],'rds.pg.n1.medium.2')
-        self.assertEqual(options['volume.type']['values'],['SSD','ESSD'])
+        self.assertEqual(options['flavor_ref']['groups'],
+                         [{'group_type':'general','label':'通用型','specs':[
+                               {'spec_code':'rds.pg.n1.medium.2','vcpus':'2','ram':4,'instance_mode':'single','availability_zones':['cn-east-3a']},
+                               {'spec_code':'rds.pg.n1.large.2','vcpus':'4','ram':8,'instance_mode':'single','availability_zones':['cn-east-3b']}]},
+                          {'group_type':'dedicated','label':'独享型（仅云盘SSD支持）','specs':[
+                               {'spec_code':'rds.pg.x1.large.4','vcpus':'4','ram':16,'instance_mode':'ha','availability_zones':['cn-east-3a']}]},
+                          {'group_type':'exotic','label':'exotic','specs':[
+                               {'spec_code':'rds.pg.ex.large.2','vcpus':'2','ram':4,'instance_mode':'single','availability_zones':['cn-east-3a']}]}])
+        expanded=[spec['spec_code'] for group in options['flavor_ref']['groups'] for spec in group['specs']]
+        self.assertEqual(sorted(expanded),sorted(options['flavor_ref']['values']))
+        self.assertIn('分开单独询问',options['flavor_ref']['note'])
+        self.assertIn('不截断',options['flavor_ref']['note'])
+        self.assertEqual(options['volume.type']['values'],['ULTRAHIGH','ESSD'])
         self.assertEqual(options['volume.type']['recommended'],'ESSD')
+        self.assertEqual(options['volume.type']['options'],
+                         [{'value':'ULTRAHIGH','label':'SSD','note':'','compatible_group_types':['general','dedicated']},
+                          {'value':'ESSD','label':'极速型SSD','note':'仅支持独享型规格实例','compatible_group_types':['general','dedicated','armFlavors']}])
+        self.assertIn('中文名',options['volume.type']['note'])
+        self.assertIn('support_compute_group_type',options['volume.type']['note'])
         self.assertEqual(options['volume.size'],{'minimum':40,'maximum':40000,'recommended':40,'note':'GB'})
         self.assertEqual(options['charge_info']['values'],
                          [{'charge_mode':'postPaid'},
@@ -200,13 +226,69 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(value=='ok' for value in result['discovery_status'].values()))
 
     async def test_discover_db_instance_for_create_survives_total_sellout(self):
-        self._push_sources(flavors=[{'spec_code':'rds.pg.n1.medium.2','az_status':{'cn-east-3a':'sellout'}}])
+        self._push_sources(flavors=[{'spec_code':'rds.pg.n1.medium.2','vcpus':'2','ram':4,'group_type':'general',
+                                     'instance_mode':'single','az_status':{'cn-east-3a':'sellout'}}])
         result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
         options=result['managed_instance_field_options']
         self.assertEqual(options['flavor_ref']['values'],[])
+        self.assertEqual(options['flavor_ref']['groups'],[])
         self.assertIsNone(options['flavor_ref']['recommended'])
         self.assertEqual(options['availability_zone']['values'],[])
         self.assertTrue(all(value=='ok' for value in result['discovery_status'].values()))
+
+    async def test_flavor_values_are_not_truncated_and_match_groups(self):
+        flavors=[{'spec_code':'rds.pg.gen.medium.%d'%index,'vcpus':str(index%8+1),'ram':index%16+1,'group_type':'general',
+                  'instance_mode':'single','az_status':{'cn-east-3a':'normal'}} for index in range(1,26)]
+        self._push_sources(flavors=flavors)
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        flavor=result['managed_instance_field_options']['flavor_ref']
+        self.assertEqual(len(flavor['values']),25)
+        expanded=[spec['spec_code'] for group in flavor['groups'] for spec in group['specs']]
+        self.assertEqual(len(expanded),25)
+        self.assertEqual(sorted(expanded),sorted(flavor['values']))
+
+    async def test_flavor_groups_sort_general_before_dedicated_and_keep_unknown_last(self):
+        flavors=[{'spec_code':'rds.pg.x1.large.4','vcpus':'4','ram':16,'group_type':'dedicated','instance_mode':'ha',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.n1.medium.2','vcpus':'2','ram':4,'group_type':'general','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.arm.large.2','vcpus':'4','ram':8,'group_type':'armFlavors','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.mystery.large.2','vcpus':'4','ram':8,'group_type':'mystery','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.bare.large.2','vcpus':'4','ram':8,'instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}}]
+        self._push_sources(flavors=flavors)
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        groups=result['managed_instance_field_options']['flavor_ref']['groups']
+        self.assertEqual([group['group_type'] for group in groups],['general','dedicated','armFlavors','mystery','未知'])
+        self.assertEqual([group['label'] for group in groups],
+                         ['通用型','独享型（仅云盘SSD支持）','鲲鹏通用增强型','mystery','未知'])
+
+    async def test_flavor_groups_sort_specs_by_vcpus_ram_and_spec_code(self):
+        flavors=[{'spec_code':'rds.pg.n1.c','vcpus':'4','ram':8,'group_type':'general','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.n1.a','vcpus':'8','ram':8,'group_type':'general','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.n1.b','vcpus':'4','ram':4,'group_type':'general','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}},
+                 {'spec_code':'rds.pg.n1.d','vcpus':'bad','ram':None,'group_type':'general','instance_mode':'single',
+                  'az_status':{'cn-east-3a':'normal'}}]
+        self._push_sources(flavors=flavors)
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        specs=result['managed_instance_field_options']['flavor_ref']['groups'][0]['specs']
+        self.assertEqual([spec['spec_code'] for spec in specs],['rds.pg.n1.d','rds.pg.n1.b','rds.pg.n1.c','rds.pg.n1.a'])
+
+    async def test_volume_options_label_unknown_storage_names(self):
+        storage=[{'name':'QUANTUMSSD','az_status':{'cn-east-3a':'normal'}},
+                 {'name':'ESSD','az_status':{'cn-east-3a':'normal'},'support_compute_group_type':['dedicated']}]
+        self._push_sources(storage=storage)
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        volume=result['managed_instance_field_options']['volume.type']
+        self.assertEqual(volume['values'],['QUANTUMSSD','ESSD'])
+        self.assertEqual(volume['options'][0],{'value':'QUANTUMSSD','label':'QUANTUMSSD','note':'','compatible_group_types':[]})
+        self.assertEqual(volume['options'][1],{'value':'ESSD','label':'极速型SSD','note':'仅支持独享型规格实例',
+                                               'compatible_group_types':['dedicated']})
 
     async def test_discover_db_instance_for_create_has_no_network_or_group_sections(self):
         self._push_sources()
@@ -505,9 +587,9 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         ops.read = read
         return BasicOptionsDiscovery(ops), ops
 
-    def flavor_page(self, specs):
+    def flavor_page(self, specs, group_type='general'):
         return {'data': {'flavors': [{'mode': 'single', 'version': '1.0.0', 'vcpus': 2, 'ram': 4,
-                                      'spec_code': spec,
+                                      'group_type': group_type, 'spec_code': spec,
                                       'availability_zones': [{'code': 'cn-east-3a', 'status': 'normal'},
                                                              {'code': 'cn-east-3b', 'status': 'sellout'}]}
                                      for spec in specs]}}
@@ -522,6 +604,16 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['basic_options']['mode']['values'], ['Single', 'Ha'])
         self.assertEqual(result['basic_options']['version']['recommended'], '1.0.0')
         self.assertEqual(result['basic_options']['flavor_ref']['recommended'], 'rds.supabase.n1.large.2')
+        self.assertEqual(result['basic_options']['flavor_ref']['values'],
+                         ['rds.supabase.n1.large.2', 'rds.supabase.n1.large.4'])
+        self.assertEqual(result['basic_options']['flavor_ref']['groups'],
+                         [{'group_type': 'general', 'label': '通用型', 'specs': [
+                             {'spec_code': 'rds.supabase.n1.large.2', 'vcpus': 2, 'ram': 4,
+                              'instance_mode': None, 'availability_zones': ['cn-east-3a']},
+                             {'spec_code': 'rds.supabase.n1.large.4', 'vcpus': 2, 'ram': 4,
+                              'instance_mode': None, 'availability_zones': ['cn-east-3a']}]}])
+        self.assertIn('分开单独询问', result['basic_options']['flavor_ref']['note'])
+        self.assertIn('全部可售规格', result['basic_options']['flavor_ref']['note'])
         self.assertEqual(fake.calls, [('flavors', 'cn-east-3a', 'Single'), ('flavors', 'cn-east-3a', 'Ha'), ('applications', 100)])
         self.assertIn('discover_network_for_create', str(result['excluded_scopes']))
         name_field = result['basic_options']['name']
@@ -560,6 +652,29 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         result = await ops.discover('cn-east-3a')
         # nothing saleable in cn-east-3a -> falls back to unfiltered spec list with the note
         self.assertEqual(result['basic_options']['flavor_ref']['values'], ['rds.supabase.a'])
+        spec = result['basic_options']['flavor_ref']['groups'][0]['specs'][0]
+        self.assertEqual(spec['availability_zones'], ['cn-east-3b'])
+
+    async def test_flavor_groups_fall_back_to_main_az_field_and_tolerate_missing(self):
+        page = {'data': {'flavors': [
+            {'mode': 'single', 'version': '1.0.0', 'vcpus': 2, 'ram': 4, 'group_type': 'general',
+             'spec_code': 'rds.supabase.n1.large.2', 'availability_zone': 'cn-east-3a'},
+            {'mode': 'single', 'version': '1.0.0', 'vcpus': 2, 'ram': 4, 'spec_code': 'rds.supabase.z.large.2'}]}}
+        ops, _ = self.make([page, self.flavor_page([])])
+        result = await ops.discover('cn-east-3a')
+        flavor = result['basic_options']['flavor_ref']
+        self.assertEqual([group['group_type'] for group in flavor['groups']], ['general', '未知'])
+        self.assertEqual(flavor['groups'][0]['specs'][0]['availability_zones'], ['cn-east-3a'])
+        self.assertEqual(flavor['groups'][1]['specs'][0]['availability_zones'], [])
+
+    async def test_flavor_values_not_truncated_across_many_specs(self):
+        specs = ['rds.supabase.n1.small.%d' % index for index in range(1, 26)]
+        ops, _ = self.make([self.flavor_page(specs), self.flavor_page([])])
+        result = await ops.discover('cn-east-3a')
+        flavor = result['basic_options']['flavor_ref']
+        self.assertEqual(len(flavor['values']), 25)
+        expanded = [spec['spec_code'] for group in flavor['groups'] for spec in group['specs']]
+        self.assertEqual(sorted(expanded), sorted(flavor['values']))
 
     async def test_suggested_name_avoids_collisions(self):
         import datetime

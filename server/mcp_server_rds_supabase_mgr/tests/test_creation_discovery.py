@@ -19,3 +19,12 @@ class DiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.request.call_args.kwargs['query'],{'application_type':'supabase'})
         self.assertFalse(result['creation_ready'])
         with self.assertRaises(McpToolError):await Operations(client).creation_candidates('arbitrary')
+
+    async def test_flavor_rows_keep_catalog_fields_for_grouping(self):
+        rows=[{'spec_code':'rds.supabase.n1.large.2','vcpus':2,'ram':4,'group_type':'general','instance_mode':'single',
+               'availability_zones':[{'code':'region-1a','status':'normal'}]},
+              {'spec_code':'rds.supabase.z.large.2','vcpus':2,'ram':4,'group_type':'exotic','instance_mode':'single',
+               'availability_zones':[{'code':'region-1a','status':'normal'}]}]
+        client=AsyncMock();client.request.return_value=(200,{'flavors':rows})
+        result=await Operations(client).creation_candidates('flavors','region-1a','Single')
+        self.assertEqual(result['data']['flavors'],rows)

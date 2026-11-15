@@ -130,14 +130,19 @@ then consolidates the key parameter modules live - three mandatory modules and
 one key optional module:
 
 - **Supabase basics**: name suggestion and naming rules, version, deployment
-  mode, and flavor, from `discover_supabase_create_basic_options`.
+  mode, and flavor (all saleable flavors selectable or custom, general 2U4G
+  recommended), from `discover_supabase_create_basic_options`.
 - **Managed instance**: the new-instance source returns per-field
   recommendations for engine version, flavor, and storage via
-  `discover_db_instance_for_create`; the attach source lists attachable
-  instances paginated (20 per page) with version, deployment type, port,
-  availability zone, creation time, and current action (action lock) —
-  instances being restarted, upgraded, or changed must be excluded to avoid
-  task conflicts.
+  `discover_db_instance_for_create` — the application flavor and the instance
+  flavor are asked in two separate interactions: instance flavors are grouped
+  by group_type into ten categories with all saleable flavors shown and the
+  application's flavor recommended by default, and storage types display
+  their Chinese name, official note, and live compatible flavor types for
+  selection; the attach source lists attachable instances paginated (20 per
+  page) with version, deployment type, port, availability zone, creation
+  time, and current action (action lock) — instances being restarted,
+  upgraded, or changed must be excluded to avoid task conflicts.
 - **Network control**: VPC/subnet placement and the two-group security-group
   specification — application group 8443 ingress three-way choice plus 5432
   egress, database group 5432 ingress, all CIDRs from the chosen subnet, from
@@ -327,14 +332,14 @@ pre-provisioned into a local request file and referenced by alias.
 | `update_supabase_auth_config` | Configure GitHub/SMTP login, callback URLs, and mail templates | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
 | `update_supabase_storage` | Integrate or change the OBS storage bucket | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_storage` | OBS acquisition two options (reuse/new-recommended) and credential detection | READ | `KooCLI OBS ls` |
-| `discover_supabase_create_basic_options` | Application creation-basics discovery with recommendations | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | End-to-end creation arrangement baseline: three-module parameter consolidation and flow design | READ | live composite (read-only queries of the three discovery tools) |
+| `discover_supabase_create_basic_options` | Application creation-basics discovery with recommendations; application flavors grouped by flavor type with all saleable flavors shown | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
+| `plan_supabase_creation_arrangement` | End-to-end creation arrangement baseline: three-module parameter consolidation and flow design; application and instance flavors asked separately, instance defaulting to the application's flavor | READ | live composite (read-only queries of the three discovery tools) |
 | `list_supabase_flavors_with_azs` | Query application flavors and the AZs each supports | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | Query existing PostgreSQL instances available for attachment | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | Query PostgreSQL engine versions for managed instances | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
 | `list_db_instance_flavors_with_azs` | Query managed-instance flavors with per-AZ sale status | READ | [ListFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListFlavors) |
 | `list_db_instance_storage_types` | Query managed-instance storage types (by version and mode) | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
-| `discover_db_instance_for_create` | Managed-instance source discovery per scenario (with action-lock candidate list) | READ | composite query (ListDatastores/ListFlavors/ListStorageTypes) + ListManageableInstances |
+| `discover_db_instance_for_create` | Managed-instance source discovery per scenario (with action-lock candidate list); instance flavors grouped by group_type with all saleable flavors, storage types with Chinese names and live compatible flavor types | READ | composite query (ListDatastores/ListFlavors/ListStorageTypes) + ListManageableInstances |
 | `discover_network_for_create` | Network placement and security-group specification | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
 | `create_supabase_with_new_instance` | (Recommended) end-to-end creation for the new-instance scenario: security groups/OBS auto-prepared and backfilled, one submission | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `create_supabase_link_exist_instance` | Creation for the attach-existing scenario: application group auto-created, database group untouched | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |

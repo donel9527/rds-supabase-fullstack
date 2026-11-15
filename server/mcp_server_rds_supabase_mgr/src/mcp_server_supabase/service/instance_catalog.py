@@ -10,6 +10,10 @@ NOTE=('Catalog for the create-with-new-instance scenario: pick the PostgreSQL en
       'before creating the managed instance. Only AZs whose az_status is normal are purchasable; each flavor and '
       'storage row carries its own AZ sale status.')
 
+GROUP_TYPE_LABELS={'normal':'通用增强型','normal2':'通用增强II型','armFlavors':'鲲鹏通用增强型','dedicatenormal':'x86独享型','armlocalssd':'鲲鹏通用型','normallocalssd':'x86通用型','general':'通用型','dedicated':'独享型（仅云盘SSD支持）','rapid':'独享型（仅极速型SSD支持）','bigmem':'超大内存型','bigmen':'超大内存型'}
+GROUP_TYPE_ORDER=['general','dedicated','rapid','dedicatenormal','bigmem','normal','normal2','armFlavors','armlocalssd','normallocalssd']
+STORAGE_TYPE_LABELS={'ULTRAHIGH':('SSD',''),'LOCALSSD':('本地SSD',''),'CLOUDSSD':('SSD云盘','仅支持通用型和独享型规格实例'),'ESSD':('极速型SSD','仅支持独享型规格实例'),'GPSSD2':('通用型SSD V2','')}
+
 STORAGE_SKIPPED='skipped - engine version unavailable'
 
 
@@ -20,6 +24,44 @@ def _error_text(error):
 
 def _failure(error):
     return '（查询失败：'+error+'）'
+
+
+def _int_or_zero(value):
+    try:return int(value)
+    except (TypeError,ValueError):return 0
+
+
+def _normal_azs(row):
+    az_status=row.get('az_status')
+    if isinstance(az_status,dict):
+        return sorted(str(az) for az,status in az_status.items() if status=='normal')
+    zones=row.get('availability_zones')
+    if isinstance(zones,list):
+        codes=[az.get('code') for az in zones
+               if isinstance(az,dict) and az.get('code') and az.get('status')=='normal']
+        if codes:return sorted(str(code) for code in codes)
+    main=row.get('availability_zone')
+    if isinstance(main,str) and main:return [main]
+    return []
+
+
+def _flavor_groups(rows):
+    buckets={}
+    for row in rows:
+        if not isinstance(row,dict):continue
+        group_type=row.get('group_type')
+        if not isinstance(group_type,str) or not group_type:group_type='未知'
+        buckets.setdefault(group_type,[]).append(row)
+    def order(group_type):
+        return GROUP_TYPE_ORDER.index(group_type) if group_type in GROUP_TYPE_ORDER else len(GROUP_TYPE_ORDER)
+    groups=[]
+    for group_type in sorted(buckets,key=order):
+        specs=[{'spec_code':row.get('spec_code'),'vcpus':row.get('vcpus'),'ram':row.get('ram'),
+                'instance_mode':row.get('instance_mode'),'availability_zones':_normal_azs(row)}
+               for row in buckets[group_type]]
+        specs.sort(key=lambda spec:(_int_or_zero(spec['vcpus']),_int_or_zero(spec['ram']),str(spec['spec_code'])))
+        groups.append({'group_type':group_type,'label':GROUP_TYPE_LABELS.get(group_type,group_type),'specs':specs})
+    return groups
 
 
 async def _manageable_rows(ops):
@@ -129,14 +171,25 @@ class InstanceCatalog:
         else:
             storage_rows,storage_error=self._rows_of(storage_result,'data')
         saleable=[]
+        saleable_rows=[]
         normal_azs=set()
         for row in flavor_rows:
             az_status=row.get('az_status') if isinstance(row,dict) else None
             if not isinstance(az_status,dict):continue
             normal=[az for az,status in az_status.items() if status=='normal']
             normal_azs.update(normal)
-            if normal and row.get('spec_code'):saleable.append(row['spec_code'])
-        volume_names=[row['name'] for row in storage_rows if isinstance(row,dict) and row.get('name')]
+            if normal and row.get('spec_code'):
+                saleable.append(row['spec_code'])
+                saleable_rows.append(row)
+        volume_names=[]
+        volume_options=[]
+        for row in storage_rows:
+            if not isinstance(row,dict) or not row.get('name'):continue
+            name=row['name']
+            label,note=STORAGE_TYPE_LABELS.get(name,(name,''))
+            volume_names.append(name)
+            volume_options.append({'value':name,'label':label,'note':note,
+                                   'compatible_group_types':row.get('support_compute_group_type') or []})
         volume_recommended=next((name for name in volume_names if 'ESSD' in name),
                                 volume_names[0] if volume_names else None)
         def option_note(base,error):
@@ -145,10 +198,11 @@ class InstanceCatalog:
             'datastore.type':{'fixed':'PostgreSQL'},
             'datastore.version':{'values':ordered,'recommended':highest,
                                  'note':option_note('PostgreSQL 引擎大版本',version_error)},
-            'flavor_ref':{'values':saleable[:20],'recommended':saleable[0] if saleable else None,
-                          'note':option_note('实例规格，形如 rds.pg.n1.medium.2；与应用规格（rds.supabase.*）是两回事',flavor_error)},
-            'volume.type':{'values':volume_names,'recommended':volume_recommended,
-                           'note':option_note('按 mode 过滤后的可售盘型',storage_error)},
+            'flavor_ref':{'values':saleable,'recommended':saleable[0] if saleable else None,
+                          'groups':_flavor_groups(saleable_rows),
+                          'note':option_note('实例规格按 group_type 分大类展示（全部可售规格，不截断）；编排时与 Supabase 应用规格分开单独询问用户；推荐默认与应用规格同档；与应用规格（rds.supabase.*）是两回事',flavor_error)},
+            'volume.type':{'values':volume_names,'recommended':volume_recommended,'options':volume_options,
+                           'note':option_note('磁盘类型明确展示中文名与官方说明供用户选择；compatible_group_types 为本局点实时兼容的规格类型（support_compute_group_type），最终以服务端校验为准',storage_error)},
             'volume.size':{'minimum':40,'maximum':40000,'recommended':40,'note':'GB'},
             'charge_info':{'values':[{'charge_mode':'postPaid'},
                                      {'charge_mode':'prePaid','period_type':'month','period_num':1},
@@ -544,9 +598,10 @@ class BasicOptionsDiscovery:
             'mode':{'values':['Single','Ha'] if ha_supported else ['Single'],
                     'recommended':'Single',
                     'note':'Single 单机 / Ha 主备；Ha 是否可用按局点实时探测（本次探测：%s）'%('支持' if ha_supported else '不支持')},
-            'flavor_ref':{'values':[row['spec_code'] for row in preferred[:20]],
+            'flavor_ref':{'values':[row['spec_code'] for row in preferred],
                           'recommended':preferred[0]['spec_code'] if preferred else None,
-                          'note':'应用规格（rds.supabase.*，与托管实例规格 rds.pg.* 是两回事）；仅列在所选 AZ 可售的规格，默认勾选 2U4G 档'},
+                          'groups':_flavor_groups(preferred),
+                          'note':'应用规格（rds.supabase.*）——编排时与托管实例规格分开单独询问：展示全部可售规格（含规格类型/vCPU/内存）供用户选择或自定义输入；推荐通用型 2U4G；与托管实例规格（rds.pg.*）是两回事'},
             'availability_zone':{'values':[az_code],
                                  'note':'本次查询的 AZ；Ha 模式需两个不同 AZ（主+备），用 list_supabase_flavors_with_azs 查全部可售 AZ'},
             'password':{'login_user':'supabase',

@@ -1,17 +1,39 @@
+import copy
 import unittest
 from mcp_server_supabase.service.planning import PlanningService
 
 BASICS = {'basic_options': {'name': {'suggested': 'supabase-app-1115'},
                             'version': {'recommended': '1.0.0'},
                             'mode': {'recommended': 'Single'},
-                            'flavor_ref': {'recommended': 'rds.supabase.n1.large.2'}},
+                            'flavor_ref': {'recommended': 'rds.supabase.n1.large.2',
+                                           'values': ['rds.supabase.n1.large.2'],
+                                           'groups': [{'group_type': 'general', 'label': '通用型',
+                                                       'specs': [{'spec_code': 'rds.supabase.n1.large.2', 'vcpus': 2, 'ram': 4}]}]}},
           'probe_status': {'application_flavors_single': 'ok'}}
 
 NEWLY_INSTANCE = {'scenario': 'newly_instance', 'mode': 'Single',
                   'managed_instance_field_options': {
                       'datastore.version': {'recommended': '18'},
-                      'flavor_ref': {'recommended': 'rds.pg.n1.medium.2'},
-                      'volume.type': {'recommended': 'ESSD'},
+                      'flavor_ref': {'recommended': 'rds.pg.n1.medium.2',
+                                     'values': ['rds.pg.n1.medium.2.ha', 'rds.pg.n1.large.2.ha', 'rds.pg.x1.4xlarge.8.ha'],
+                                     'groups': [{'group_type': 'general', 'label': '通用型',
+                                                 'specs': [{'spec_code': 'rds.pg.n1.medium.2.ha', 'vcpus': 2, 'ram': 4,
+                                                            'instance_mode': 'ha', 'availability_zones': ['cn-east-3a', 'cn-east-3b']},
+                                                           {'spec_code': 'rds.pg.n1.large.2.ha', 'vcpus': 4, 'ram': 8,
+                                                            'instance_mode': 'ha', 'availability_zones': ['cn-east-3a']}]},
+                                                {'group_type': 'dedicated', 'label': '专属型',
+                                                 'specs': [{'spec_code': 'rds.pg.x1.4xlarge.8.ha', 'vcpus': 16, 'ram': 128,
+                                                            'instance_mode': 'ha', 'availability_zones': ['cn-east-3a']}]}],
+                                     'note': '实例规格，形如 rds.pg.n1.medium.2；与应用规格（rds.supabase.*）是两回事'},
+                      'volume.type': {'recommended': 'ESSD',
+                                      'values': ['ESSD', 'CLOUDSSD', 'GPSSD2'],
+                                      'options': [{'value': 'ESSD', 'label': '极速型SSD', 'note': 'ESSD',
+                                                   'compatible_group_types': ['dedicated']},
+                                                  {'value': 'CLOUDSSD', 'label': 'SSD云盘', 'note': 'CLOUDSSD',
+                                                   'compatible_group_types': ['general', 'dedicated']},
+                                                  {'value': 'GPSSD2', 'label': '通用型SSD V2', 'note': 'GPSSD2',
+                                                   'compatible_group_types': ['general', 'dedicated']}],
+                                      'note': '按 mode 过滤后的可售盘型'},
                       'volume.size': {'recommended': 40},
                       'charge_info': {'recommended': {'charge_mode': 'postPaid'}},
                       'availability_zone': {'values': ['cn-east-3a', 'cn-east-3b']},
@@ -47,15 +69,15 @@ def instance_row(i, actions=None):
 
 
 class FakeBasics:
-    def __init__(self): self.calls = []
-    async def discover(self, az_code): self.calls.append(az_code); return BASICS
+    def __init__(self, basics=None): self.calls = []; self.basics = basics or BASICS
+    async def discover(self, az_code): self.calls.append(az_code); return self.basics
 
 
 class FakeCatalog:
-    def __init__(self, rows=None): self.calls = []; self.rows = rows or []
+    def __init__(self, rows=None, newly=None): self.calls = []; self.rows = rows or []; self.newly = newly or NEWLY_INSTANCE
     async def discover_db_instance_for_create(self, scenario, mode=None, instance_id=None):
         self.calls.append((scenario, mode, instance_id))
-        if scenario == 'newly_instance': return NEWLY_INSTANCE
+        if scenario == 'newly_instance': return self.newly
         if instance_id is None: return {'scenario': 'existed_instance', 'candidates': self.rows}
         match = next((row for row in self.rows if row['id'] == instance_id), None)
         return {'scenario': 'existed_instance', 'instance_id': instance_id,
@@ -71,9 +93,9 @@ class FakeNetwork:
 
 
 class ArrangementTests(unittest.IsolatedAsyncioTestCase):
-    def make(self, rows=None, network_newly=None):
-        basics = FakeBasics(); catalog = FakeCatalog(rows); network = FakeNetwork(newly=network_newly)
-        return PlanningService(basics=basics, catalog=catalog, network=network)
+    def make(self, rows=None, network_newly=None, basics=None, newly=None):
+        basics_service = FakeBasics(basics); catalog = FakeCatalog(rows, newly); network = FakeNetwork(newly=network_newly)
+        return PlanningService(basics=basics_service, catalog=catalog, network=network)
 
     async def test_invalid_manage_type_and_page(self):
         result = await PlanningService().arrangement('unknown')
@@ -138,6 +160,82 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         first = result['creation_flow'][0]
         self.assertEqual(first['tool'], 'console/KooCLI')
         self.assertIn('default_create', first['action'])
+
+    async def test_same_flavor_match_and_volume_adaptation(self):
+        result = await self.make().arrangement('newly_instance', az_code='cn-east-3a', mode='Single',
+                                               needs_storage=False, needs_public_access=False, needs_ssl=False)
+        baseline = result['step_modules']['managed_instance']['baseline']
+        self.assertEqual(baseline['flavor_ref'], 'rds.pg.n1.medium.2.ha')
+        self.assertEqual(baseline['flavor_match'], {'app_flavor_ref': 'rds.supabase.n1.large.2',
+                                                    'app_group_type': 'general',
+                                                    'app_group_label': '通用型',
+                                                    'matched_spec': 'rds.pg.n1.medium.2.ha',
+                                                    'match_basis': 'group_type+vcpus+ram'})
+        self.assertEqual(baseline['volume']['type'], 'CLOUDSSD')
+        self.assertEqual(baseline['volume']['type_basis'], '与匹配规格（group_type=general）实时兼容')
+
+    async def test_old_structure_falls_back_to_recommended(self):
+        basics = copy.deepcopy(BASICS)
+        del basics['basic_options']['flavor_ref']['groups']
+        newly = copy.deepcopy(NEWLY_INSTANCE)
+        del newly['managed_instance_field_options']['flavor_ref']['groups']
+        del newly['managed_instance_field_options']['volume.type']['options']
+        result = await self.make(basics=basics, newly=newly).arrangement('newly_instance', az_code='cn-east-3a',
+                                                                         needs_public_access=False, needs_ssl=False)
+        baseline = result['step_modules']['managed_instance']['baseline']
+        self.assertEqual(baseline['flavor_ref'], 'rds.pg.n1.medium.2')
+        self.assertNotIn('flavor_match', baseline)
+        self.assertEqual(baseline['volume']['type'], 'ESSD')
+        self.assertNotIn('type_basis', baseline['volume'])
+        mixed = await self.make(basics=basics).arrangement('newly_instance', az_code='cn-east-3a',
+                                                           needs_public_access=False, needs_ssl=False)
+        mixed_baseline = mixed['step_modules']['managed_instance']['baseline']
+        self.assertEqual(mixed_baseline['flavor_ref'], 'rds.pg.n1.medium.2')
+        self.assertNotIn('flavor_match', mixed_baseline)
+        self.assertEqual(mixed_baseline['volume']['type'], 'ESSD')
+        self.assertNotIn('type_basis', mixed_baseline['volume'])
+
+    async def test_flavor_and_volume_interaction_texts(self):
+        result = await self.make().arrangement('newly_instance', az_code='cn-east-3a',
+                                               needs_public_access=False, needs_ssl=False)
+        m1 = result['step_modules']['supabase_basics']
+        self.assertIn('应用规格单独询问', m1['flavor_interaction'])
+        self.assertIn('推荐通用型 2U4G', m1['flavor_interaction'])
+        m2 = result['step_modules']['managed_instance']
+        self.assertIn('实例规格与应用规格分开单独询问', m2['flavor_interaction'])
+        self.assertIn('group_type', m2['flavor_interaction'])
+        self.assertIn('磁盘类型明确展示', m2['volume_interaction'])
+        pending = await self.make().arrangement('newly_instance')
+        self.assertNotIn('flavor_interaction', pending['step_modules']['supabase_basics'])
+        self.assertIn('实例规格与应用规格分开单独询问', pending['step_modules']['managed_instance']['flavor_interaction'])
+        existed = await self.make().arrangement('existed_instance', needs_public_access=False, needs_ssl=False)
+        existed_m2 = existed['step_modules']['managed_instance']
+        self.assertNotIn('flavor_interaction', existed_m2)
+        self.assertNotIn('volume_interaction', existed_m2)
+
+    async def test_flavor_match_falls_back_to_group_type(self):
+        basics = copy.deepcopy(BASICS)
+        block = basics['basic_options']['flavor_ref']
+        block['recommended'] = 'rds.supabase.n1.small.2'
+        block['values'] = ['rds.supabase.n1.small.2']
+        block['groups'][0]['specs'] = [{'spec_code': 'rds.supabase.n1.small.2', 'vcpus': 1, 'ram': 2}]
+        result = await self.make(basics=basics).arrangement('newly_instance', az_code='cn-east-3a',
+                                                            needs_public_access=False, needs_ssl=False)
+        baseline = result['step_modules']['managed_instance']['baseline']
+        self.assertEqual(baseline['flavor_match']['match_basis'], 'group_type')
+        self.assertEqual(baseline['flavor_match']['matched_spec'], 'rds.pg.n1.medium.2.ha')
+        self.assertEqual(baseline['flavor_ref'], 'rds.pg.n1.medium.2.ha')
+
+    async def test_volume_prefers_essd_when_compatible(self):
+        newly = copy.deepcopy(NEWLY_INSTANCE)
+        for option in newly['managed_instance_field_options']['volume.type']['options']:
+            if option['value'] == 'ESSD':
+                option['compatible_group_types'] = ['general', 'dedicated']
+        result = await self.make(newly=newly).arrangement('newly_instance', az_code='cn-east-3a',
+                                                          needs_public_access=False, needs_ssl=False)
+        volume = result['step_modules']['managed_instance']['baseline']['volume']
+        self.assertEqual(volume['type'], 'ESSD')
+        self.assertEqual(volume['type_basis'], '与匹配规格（group_type=general）实时兼容')
 
     async def test_missing_az_leaves_basics_pending(self):
         result = await self.make().arrangement('newly_instance', needs_storage=False,

@@ -7,6 +7,40 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a47 - full flavor catalog with
+  group_type classification, split flavor interaction and labeled
+  storage types (skill v2.1.0):
+  - `discover_db_instance_for_create` no longer truncates the managed
+    PG flavor list to the first 20 entries; all saleable specs are
+    returned and grouped by `group_type` into the ten official classes
+    (general/dedicated/rapid/dedicatenormal/bigmem/normal/normal2/
+    armFlavors/armlocalssd/normallocalssd, each with its Chinese label),
+    every spec carrying vcpus, ram, instance_mode and its normal AZs.
+    `volume.type` gains an `options` list mapping each storage name to
+    its official Chinese name and constraint (ESSD = 极速型SSD for
+    dedicated specs only, CLOUDSSD = SSD云盘 for general and dedicated,
+    ULTRAHIGH = SSD, LOCALSSD = 本地SSD, GPSSD2 = 通用型SSD V2) plus
+    the live `support_compute_group_type` compatibility list. The
+    application-side discovery (`discover_supabase_create_basic_options`)
+    mirrors the same full, grouped flavor structure.
+  - `plan_supabase_creation_arrangement` now treats the Supabase
+    application flavor and the managed PG instance flavor as two
+    separate questions, each with an explicit interaction note. The
+    instance baseline recommends by default the spec matching the
+    application's (same group_type with same vcpus/ram, falling back to
+    the smallest spec of the same group_type) and records the match in
+    `flavor_match`; the storage type adapts to the matched group's live
+    compatibility and records `type_basis`. All matching is defensive -
+    old structures keep working unchanged.
+  - Visual rendering adds grouped-flavor and storage-type tables to the
+    discovery outputs and a flavor-match row plus interaction lines to
+    the arrangement output; README/README_en tool rows and scenario
+    sections, and skill SKILL.md/scenarios.md (v2.1.0, server >=
+    0.4.0a47) are updated in step, including a new parameter-contract
+    row for the split flavor interaction.
+
+### Added
+
 - `rds-supabase-mgr-mcp` skill v2.0.0 (server `mcp_server_rds_supabase_mgr` v0.4.0a46):
   the skill is deeply rewritten - not patched - to match the systematically
   rewritten MCP (43 tools), studying the GaussDB MCP skill's structure,
