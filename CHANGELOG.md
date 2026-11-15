@@ -7,6 +7,36 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a50 - managed-instance lifecycle
+  tools (48 -> 52 tools, skill v2.4.0): four new tools for the managed
+  PostgreSQL instance, all keyed by application_id - the target
+  instance is always resolved from the application's managed_instance
+  field, never a bare instance_id, so independent database instances
+  cannot be touched by mistake; single instance per operation.
+  `show_supabase_managed_instance` (READ) queries the live simplified
+  detail (engine, instance_status with Chinese semantics, spec, disk,
+  AZs, current actions) with billing and 15-day auto-start notes.
+  `stop_supabase_managed_instance` (DANGEROUS, preview/confirm;
+  StopInstance): on-demand instances with SSD-class disks only; VM
+  stops billing while EIP/storage/backup continue; a stopped instance
+  auto-starts in the next maintenance window after fifteen days;
+  deleted-while-stopped skips the recycle bin; read replicas stop with
+  the primary; server guardrail requires instance_status normal with
+  no current actions. `start_supabase_managed_instance`
+  (StartupInstance): shutdown instances only; replicas start with the
+  primary; resource exhaustion may fail the start. `restart_supabase_
+  managed_instance` (StartInstanceRestartAction): normal, unfrozen,
+  action-free instances only; the instance is unavailable during
+  restart. All three return job_id with the established
+  show_operation_job_status follow-up discipline; docs state the
+  ordering rule - start the instance before the application, and
+  stopping the instance leaves the application failing requests.
+  README/README_en (52-tool table) and the skill (v2.4.0, server >=
+  0.4.0a50; scenario-eight rows, managed-instance contract row, K29-
+  K30) updated in step; capabilities now list both lifecycle scopes.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a49 - application lifecycle tools
   and a universal job-tracking discipline (45 -> 48 tools, skill v2.3.0):
   - Three new DANGEROUS tools with preview/confirm: `start_supabase_`

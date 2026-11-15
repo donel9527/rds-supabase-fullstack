@@ -1,6 +1,8 @@
 from huaweicloud_mcp_core.security import ToolRisk, guard
 from mcp_server_supabase import visual
 from mcp_server_supabase.service.instance_catalog import InstanceCatalog, NetworkDiscovery, BasicOptionsDiscovery
+from mcp_server_supabase.service.instance_lifecycle import lifecycle as managed_instance_lifecycle
+from mcp_server_supabase.service.instance_lifecycle import show as show_managed_instance
 from mcp_server_supabase.service.operations import Operations
 
 
@@ -157,6 +159,40 @@ def register(server):
     async def restart_supabase_application(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
         """重启一个运行中的 RDS Supabase 应用（异步任务）。仅运行中（normal）的应用可重启，已停止的应用须先启动，异常状态可能重启失败；重启内部组件服务、期间短暂服务中断（状态显示为“重启中”）并自动释放内存缓存，建议低峰操作。两段式：preview（confirm=false）回读应用当前状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.lifecycle(application_id, "restart", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.READ)
+    async def show_supabase_managed_instance(application_id: str) -> dict:
+        """查询一个 RDS Supabase 应用绑定的托管数据库实例详情（简化实例视图）。实例目标始终解析自该应用的 managed_instance 字段，不接受裸 instance_id，独立数据库实例不适用，仅支持单实例查询。返回白名单字段（id/name/engine_name/engine_version/instance_status/frozen/type/pay_model/spec_code/availability_zone_ids/read_only_instances/current_actions/volume_type/volume_size/enterprise_project_id）与状态中文语义；停止后虚拟机（VM）停止收费但 EIP、存储、备份继续计费；实例默认停止十五天，十五天内未手动开启将于十五天后的下一个可维护时间段自动启动。"""
+        result = await show_managed_instance(service, application_id)
+        row = result["instance"]
+        result["visual"] = visual.block("托管实例详情", visual.table(
+            ["实例 ID", "名称", "引擎", "状态", "规格", "磁盘", "可用区", "进行中动作"],
+            [[row.get("id"), row.get("name"),
+              (row.get("engine_name") or "-") + " " + (row.get("engine_version") or ""),
+              result["status_note"], row.get("spec_code"),
+              (row.get("volume_type") or "-") + (" " + str(row["volume_size"]) + "GB" if row.get("volume_size") is not None else ""),
+              ",".join(row.get("availability_zone_ids") or []) or "-",
+              ",".join(str(item) for item in (row.get("current_actions") or [])) or "-"]]))
+        return result
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
+    async def stop_supabase_managed_instance(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """停止一个 RDS Supabase 应用托管的数据库实例（异步任务）。实例目标始终解析自该应用的 managed_instance 字段，不接受裸 instance_id，杜绝误操作其他独立数据库实例，仅支持单实例操作。官方约束：仅支持停止存储类型为超高IO/SSD云盘/极速型SSD 的按需实例（专属云不支持）；仅运行中（normal）且无进行中操作的实例可停止，创建、重启、扩容、变更规格、恢复、修改端口等状态不能停止；停止主实例会同时停止只读实例；停止后虚拟机（VM）停止收费，但 EIP、存储、备份继续计费；已停止实例删除后不进回收站；实例默认停止十五天，十五天内未手动开启将于十五天后的下一个可维护时间段自动启动；停止后可能因资源不足导致开启失败，建议业务低峰期操作。两段式：preview（confirm=false）回读实例状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态直至终态。"""
+        return await managed_instance_lifecycle(service, application_id, "stop", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
+    async def start_supabase_managed_instance(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """启动一个 RDS Supabase 应用托管的、已停止的数据库实例（异步任务）。实例目标始终解析自该应用的 managed_instance 字段，不接受裸 instance_id，仅支持单实例操作。官方约束：仅支持开启状态为已停止（shutdown）且未冻结的实例；开启主实例会同时开启其只读实例；按需实例可能因资源不足导致开启失败，失败时联系客服处理。两段式：preview（confirm=false）回读实例状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态直至终态。"""
+        return await managed_instance_lifecycle(service, application_id, "start", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
+    async def restart_supabase_managed_instance(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """重启一个 RDS Supabase 应用托管的数据库实例（异步任务）。实例目标始终解析自该应用的 managed_instance 字段，不接受裸 instance_id，仅支持单实例操作。官方约束：仅运行中（normal）、无进行中操作且未冻结的实例可重启，已停止的实例须先启动；创建、扩容、变更规格、备份、恢复、修改端口或冻结状态下不能重启；重启过程中实例不可用，请谨慎操作，建议业务低峰期执行。两段式：preview（confirm=false）回读实例状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态直至终态。"""
+        return await managed_instance_lifecycle(service, application_id, "restart", confirm, plan_id)
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)

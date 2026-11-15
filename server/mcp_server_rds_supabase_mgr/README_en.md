@@ -4,8 +4,8 @@
 
 ## Version
 
-Current version: `0.4.0a49` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 48 tools.
+Current version: `0.4.0a50` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 52 tools.
 
 ## Overview
 
@@ -15,7 +15,7 @@ creation (two managed-instance sources), network and security-group
 specification, EIP provisioning and binding, SSL certificate query and
 purchase, OBS storage integration,
 authentication and login configuration, API key delivery, prepaid orders,
-application start/stop/restart, and
+application and managed-instance start/stop/restart, and
 change and deletion. It serves AgentArts and other MCP clients; the REST-token
 and SDK credential modes, over stdio and Streamable HTTP, share one tool set,
 one set of safety guardrails, and one output protocol. It is read-only by
@@ -123,6 +123,19 @@ database hosting.
   restart (brief interruption, off-peak recommended); status-guardrail
   checks, asynchronous tasks tracked to a terminal state via
   `show_operation_job_status`.
+- **Managed-instance lifecycle**: `show_supabase_managed_instance` inspects
+  the managed instance (engine/version/status/flavor/disk/AZ/in-progress
+  actions, with billing and the fifteen-day auto-start note); start, stop,
+  and restart all take `application_id` only — the target instance is
+  strictly resolved from the application's `managed_instance` field and a
+  bare `instance_id` is never accepted, preventing operations on standalone
+  database instances; only pay-per-use instances on ultra-high-IO/SSD
+  cloud disk/ESSD storage can be stopped (dedicated clouds unsupported) —
+  the VM stops billing while EIP/storage/backup keep billing, and a
+  default fifteen-day stop auto-starts in the maintenance window if not
+  started within fifteen days; the instance is unavailable during restart;
+  start the instance before the application; asynchronous tasks are
+  tracked to a terminal state via `show_operation_job_status`.
 - **Change and deletion**: SSL, EIP, and storage-integration changes;
   application deletion (optional managed-instance cascade) and standalone
   managed-instance teardown; task query and bounded waiting.
@@ -375,6 +388,10 @@ pre-provisioned into a local request file and referenced by alias.
 | `start_supabase_application` | Start a stopped Supabase application, asynchronous task tracked via `show_operation_job_status`; the managed instance is not started automatically and may fail if unhealthy | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | Stop a Supabase application, unavailable while stopped, asynchronous task tracked; the managed instance is not stopped (still billing), off-peak recommended | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | Restart a running (normal) Supabase application, asynchronous task tracked; internal components restart with a brief service interruption and memory cache cleared; stopped applications must start first | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |
+| `show_supabase_managed_instance` | Inspect the application's managed instance (engine/version/instance_status semantics/flavor/disk/AZ/in-progress actions); target strictly resolved from `managed_instance`, with billing and fifteen-day auto-start notes | READ | [ListSimplifiedInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSimplifiedInstances) |
+| `stop_supabase_managed_instance` | Stop the managed instance (target strictly resolved from the application's `managed_instance`, bare `instance_id` not accepted); pay-per-use only, the VM stops billing while EIP/storage/backup keep billing, auto-start in the maintenance window within fifteen days, application features unavailable while stopped; asynchronous task tracked | DANGEROUS | [StopInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopInstance) |
+| `start_supabase_managed_instance` | Start a stopped (shutdown) managed instance (target strictly resolved from the application's `managed_instance`); may fail on insufficient resources; start the instance before the application; asynchronous task tracked | DANGEROUS | [StartupInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartupInstance) |
+| `restart_supabase_managed_instance` | Restart a running (normal), unfrozen managed instance (target strictly resolved from the application's `managed_instance`); the instance is unavailable and application features affected during restart, off-peak recommended; asynchronous task tracked | DANGEROUS | [StartInstanceRestartAction](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartInstanceRestartAction) |
 | `get_supabase_order` | Query prepaid order status, amounts, currency, and line items | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
 | `pay_supabase_order` | Balance-pay a pending order after amount/currency verification | DANGEROUS | [PayOrders](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=PayOrders) |
 | `cancel_supabase_order` | Cancel an unneeded pending-payment order | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
@@ -410,6 +427,22 @@ operations: once accepted with a `job_id`, track it to a terminal state with
 stop the managed database instance (it keeps billing) and starting does not
 start the instance; restarting briefly interrupts the service — prefer
 off-peak windows.
+
+Stopping and restarting the managed instance are asynchronous operations as
+well, tracked to a terminal state via `show_operation_job_status` and re-read
+via `show_supabase_managed_instance`: the target instance is strictly
+resolved from the application's `managed_instance` field (a bare
+`instance_id` is never accepted, preventing operations on standalone database
+instances); only pay-per-use instances on ultra-high-IO/SSD cloud disk/ESSD
+storage can be stopped (dedicated clouds unsupported) — the VM stops billing
+while EIP/storage/backup keep billing, and a default fifteen-day stop
+auto-starts in the maintenance window if not started within fifteen days;
+stopping the primary instance also stops its read replicas, and restarting
+acts on them likewise; the instance is unavailable while stopped or
+restarting, application features are affected (the application keeps failing
+requests), and a start may fail on insufficient resources. **Start the
+instance first, then the application** — starting the application does not
+pull the managed instance up automatically.
 
 ### Prerequisites
 

@@ -1,15 +1,15 @@
 ---
 name: rds-supabase-mgr-mcp
 description: |
-  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，48 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用启停与重启、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
+  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，52 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用与托管实例启停与重启（托管实例详情查询，启停/重启目标强制解析自应用 managed_instance，不接受裸 instance_id）、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；查询托管实例状态、启停或重启托管实例（先启实例再启应用）；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
 metadata:
   tags: [huawei-cloud, rds, supabase, mcp, lifecycle]
-  version: "2.3.0"
+  version: "2.4.0"
 ---
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.3.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a49`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，48 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.4.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a50`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，52 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -26,6 +26,7 @@ metadata:
 - 接入信息与密钥：访问地址拼装、四类 Key 元数据查询、受保护本地文件交付。
 - 包周期订单：金额币种核对、余额支付、未支付订单取消。
 - 应用启停与重启：启动（不自动拉起托管实例）、停止（不停托管实例、继续计费）与重启（短暂中断、低峰执行），状态护栏校验与异步任务跟踪。
+- 托管实例生命周期：详情查询（引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中动作，附计费与十五天自动启动说明）与启停/重启——目标强制解析自应用 `managed_instance`，不接受裸 `instance_id`，杜绝误操作独立数据库实例；停止仅按需实例（VM 停止计费，EIP/存储/备份继续计费，十五天内未开启将于可维护时段自动启动）；先启实例再启应用。
 - 日常变更与删除：密码、Key、SSL、EIP、安全组规则；应用删除与托管实例干净收尾。
 
 典型用例：
@@ -41,6 +42,8 @@ metadata:
 - “这个包周期订单多少钱？核对无误后帮我支付。”
 - “改一下应用密码，再把 anon Key 重置掉。”
 - “把这个应用停掉省点风险——托管实例继续计费先说清。”
+- “托管实例先停了省点 VM 费——EIP、存储、备份照样计费先说清楚，十五天不开启还会自动拉起。”
+- “查一下托管实例现在的状态：引擎版本、规格、磁盘、有没有进行中操作。”
 - “应用下线：应用和托管数据库一起删干净，安全组也收掉。”
 
 ## 能力边界与路由
@@ -59,7 +62,7 @@ metadata:
 
 ## 前置条件
 
-1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a49`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
+1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a50`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
 2. MCP 客户端已注册本服务。安装、宿主注册模板、凭据模式与会话内使能见[安装手册](references/install.md)。来源锁定：服务端未发布 PyPI，uvx 一律从本仓 GitHub 拉取；PyPI 同名第三方包不是本服务，禁止安装。
 3. 凭据模式二选一：AK/SK（含临时密钥）必须设 `SUPABASE_TRANSPORT=sdk_core`，否则服务端按 REST 模式启动并忽略 AK/SK；服务 Token 走 REST 模式（`HUAWEICLOUD_AUTH_TOKEN`）。`HUAWEICLOUD_REGION` 驱动 RDS 端点推导、项目 IAM 自动发现与安全组工具；子项目账号显式配置 `HUAWEICLOUD_PROJECT_ID`。
 4. 安全组六个工具依赖本机 KooCLI（`hcloud`）并已接受首次运行隐私协议；探测与安装方法见技能根目录 `INSTALL.md` 第四节。
@@ -180,6 +183,10 @@ metadata:
 | 启动应用 | `start_supabase_application` | 状态护栏：仅停止态且无进行中操作可受理；启动不自动拉起托管实例，实例状态异常可能启动失败；异步返回 job_id，跟踪至终态后回查 |
 | 停止应用 | `stop_supabase_application` | 状态护栏：仅运行态（normal）且无进行中操作可受理；不停托管实例、实例继续计费，停止期间应用功能不可用；建议低峰执行；异步 job 跟踪 |
 | 重启应用 | `restart_supabase_application` | 状态护栏：仅运行态（normal）且无进行中操作可受理，已停止应用须先启动；重启内部组件、短暂服务中断并释放内存缓存；建议低峰执行；异步 job 跟踪 |
+| 查托管实例 | `show_supabase_managed_instance` | 目标强制解析自应用 `managed_instance`（不接受裸 `instance_id`）；返回引擎/版本/instance_status（normal=正常、shutdown=已停止等）/规格/磁盘/可用区/进行中动作，附计费与十五天自动启动说明 |
+| 停止托管实例 | `stop_supabase_managed_instance` | 状态护栏：仅 normal 且无进行中操作；仅超高IO/SSD云盘/极速型SSD 的按需实例可停（专属云不支持）；VM 停止计费、EIP/存储/备份继续计费；默认停止十五天，十五天内未开启将于可维护时段自动启动；已停止实例删除不进回收站；停止主实例同时停止只读实例；停止期间应用功能不可用；异步 job 跟踪 |
+| 启动托管实例 | `start_supabase_managed_instance` | 状态护栏：仅已停止（shutdown）实例可开启；启动主实例同时启动只读实例；可能因资源不足开启失败；正确顺序先启实例再启应用；异步 job 跟踪 |
+| 重启托管实例 | `restart_supabase_managed_instance` | 状态护栏：仅 normal、未冻结且无进行中操作；创建/扩容/变更规格/备份/恢复/修改端口期间不能重启；重启期间实例不可用、应用功能受影响；建议低峰执行；异步 job 跟踪 |
 | 改应用密码 | `change_supabase_application_password` | 新密码写本地请求文件；只改应用密码，不动数据库密码 |
 | 重置 API Key | `reset_supabase_api_key` | 异步：旧 Key 逐渐失效、新 Key 是一条新记录；新值须走场景七重新交付；提前告知下游会断 |
 | 开/关 SSL | `change_supabase_ssl` | 开需证书 ID——三路径获取：复用（`list_ssl_certificates`）/购买（`purchase_supabase_ssl_cert` 推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 证书仅文件验证；关必须不带证书；切换会闪断，建议低峰执行，生效后提醒改回调地址协议 |
@@ -210,7 +217,7 @@ metadata:
 **触发**：用户要删除应用（下线、测试资源清理）。
 
 1. **删除前预检**：`show_supabase_application` 核验状态正常、无进行中操作；记录 `public_ip`、安全组 ID、托管实例 ID、对接桶名（残留核对用）；问用户数据要不要导出（要则先导出再删）。
-2. **必问实例去留**：`delete_managed_instance` 为必选项、不能默认——`false` 仅删应用，托管实例保留并**继续计费**；`true` 应用与实例两笔删除同时提交（返回 `job_id` + `instance_job_id` 双任务编号），实例删除不可逆、仅按需计费可级联，预付费须先在控制台退订。删除前服务端执行四层校验：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。
+2. **必问实例去留**：`delete_managed_instance` 为必选项、不能默认——`false` 仅删应用，托管实例保留并**继续计费**（停止托管实例只省 VM 费用：EIP/存储/备份照常计费，且已停止实例删除后不进回收站）；`true` 应用与实例两笔删除同时提交（返回 `job_id` + `instance_job_id` 双任务编号），实例删除不可逆、仅按需计费可级联，预付费须先在控制台退订。删除前服务端执行四层校验：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。
 3. **执行**：`delete_supabase_application(application_id, delete_managed_instance, ...)` 预览（把不可逆影响与费用后果说清楚）→ 确认 → 提交 → 双任务分别跟踪 → `list_supabase_applications` 确认应用已消失。
 4. **残留清单（这些都不会随应用消失）**：EIP 保留继续计费（控制台/KooCLI 释放是停计费唯一路径）；托管实例保留时走 `delete_supabase_managed_instance`（应用 ID + `managed_instance.id` 双标识，同样四层校验，数据不可恢复先确认导出）；安全组规则可经规则工具清理，整组下线走 `delete_supabase_security_group` 标签门（仅放行双标签且无引用的组）；OBS 桶与数据保留；本地 Key 文件与请求文件由用户/操作员自行清理；项目 MCP 配置在整项目下线时移除。
 5. **删除后确认**：两个任务分别到终态 → 应用列表确认消失 → （级联删除时）实例确认消失 → 输出残留清单与处置建议。
@@ -219,7 +226,7 @@ metadata:
 
 ## 排障与任务跟踪
 
-**任务跟踪（全局纪律）**：所有返回 `job_id` 的操作类工具——启停与重启、SSL、EIP、密码、存储、Auth、Key 重置、删除等修改与更新类操作——受理后必须用 `show_operation_job_status(job_id)` 查询至终态（`wait_operation_job_complete` 可有界等待），终态后回查资源确认业务结果；**应用创建除外**——创建进度用专用的 `show_supabase_creation_progress` 跟踪（覆盖创建全阶段，实例先就绪、应用后建）。`show_operation_job_status` 返回单任务细节（entity/时间戳）。等待节奏：提交后先查一次抓秒级失败 → 告知用户预计时长 → 每次用户回来问再查，不连续刷。
+**任务跟踪（全局纪律）**：所有返回 `job_id` 的操作类工具——应用与托管实例启停与重启、SSL、EIP、密码、存储、Auth、Key 重置、删除等修改与更新类操作——受理后必须用 `show_operation_job_status(job_id)` 查询至终态（`wait_operation_job_complete` 可有界等待），终态后回查资源确认业务结果；**应用创建除外**——创建进度用专用的 `show_supabase_creation_progress` 跟踪（覆盖创建全阶段，实例先就绪、应用后建）。`show_operation_job_status` 返回单任务细节（entity/时间戳）。等待节奏：提交后先查一次抓秒级失败 → 告知用户预计时长 → 每次用户回来问再查，不连续刷。
 
 | 错误码 | 含义 | 处置 |
 |---|---|---|
@@ -235,7 +242,7 @@ metadata:
 
 ## 核心命令（MCP 工具）
 
-48 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
+52 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
 
 **编排与发现（READ）**
 
@@ -280,6 +287,9 @@ metadata:
 | `start_supabase_application` | 启动已停止应用（状态护栏：start 仅停止态；不自动拉起托管实例） | DANGEROUS |
 | `stop_supabase_application` | 停止应用（状态护栏：仅运行态 normal；不停托管实例、继续计费，停止期间功能不可用） | DANGEROUS |
 | `restart_supabase_application` | 重启应用（状态护栏：仅运行态 normal，已停止须先启动；短暂中断，低峰执行） | DANGEROUS |
+| `stop_supabase_managed_instance` | 停止托管实例（目标强制解析自应用 managed_instance，不接受裸 instance_id；仅按需可停，VM 停计费 EIP/存储/备份继续，十五天可维护时段自动启动） | DANGEROUS |
+| `start_supabase_managed_instance` | 开启已停止托管实例（仅 shutdown；先启实例再启应用） | DANGEROUS |
+| `restart_supabase_managed_instance` | 重启托管实例（仅 normal 未冻结无进行中操作；重启期间不可用，低峰执行） | DANGEROUS |
 | `list_supabase_security_groups` | 浏览安全组列表 | READ |
 | `show_supabase_security_group` | 查看安全组详情与全部规则 | READ |
 | `create_supabase_security_group` | 建专用组（自动打 AUTO_CREATE/USE_FOR 双标签） | WRITE |
@@ -293,6 +303,7 @@ metadata:
 |---|---|---|
 | `list_supabase_applications` | 分页浏览应用（名称过滤/排序） | READ |
 | `show_supabase_application` | 应用详情：规格/网络/SSL/存储/托管实例；访问地址拼装素材 | READ |
+| `show_supabase_managed_instance` | 托管实例详情：引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中动作（附计费与十五天自动启动说明） | READ |
 | `show_supabase_creation_progress` | 创建全阶段进展分析（实例先就绪、应用后建） | READ |
 | `show_supabase_auth_config` | Auth 配置基线（update 的对照基准） | READ |
 | `list_supabase_api_keys` | 四类 Key 元数据（永不返回值） | READ |
@@ -333,6 +344,7 @@ metadata:
 | `request_ref`/`plan_id` | 秘密只经别名引用；预览计划 10 分钟有效、单次使用、参数变更即失效 |
 | `api_external_url` | EIP 绑定成功后必须同步为拼装的公网访问地址 |
 | `应用启停/重启` | start 仅停止态、stop/restart 仅运行态（normal）且无进行中操作；停止不停托管实例（继续计费）；启动不自动拉起实例；均异步返回 job_id，用 `show_operation_job_status` 跟踪 |
+| `托管实例启停/重启` | 目标实例强制解析自应用 managed_instance（不接受裸 instance_id，杜绝误操作独立实例）；stop 仅 normal 且无进行中操作（按需实例、VM 停计费 EIP/存储/备份继续、十五天可维护时段自动启动、已停止删除不进回收站）；start 仅 shutdown；restart 仅 normal 未冻结无进行中操作（重启中不可用）；先启实例再启应用 |
 
 ## 输出格式
 
@@ -391,7 +403,7 @@ Key 值：已按别名交付到本地受保护文件，向操作员索取，不�
 - [场景手册](references/scenarios.md)：各场景详细操作参考（步骤/工具/参数/校验点）、创建请求体与预览前核对清单、失败处置。
 - [本地请求与字段契约](references/local-requests.md)：请求文件机制与各工具敏感字段级契约。
 - [验收手册](references/acceptance.md)：验收清单与单轮/多轮异常对话用例。
-- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（48 工具表与五大业务场景）。
+- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（52 工具表与五大业务场景）。
 
 ## 注意事项
 

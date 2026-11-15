@@ -198,6 +198,17 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 停止应用 | `stop_supabase_application` | 操作前同上核对（状态护栏：stop 仅运行态 normal 且无进行中操作）；不停托管实例、实例继续计费，停止期间应用功能不可用；建议低峰执行；异步 job 跟踪至终态 |
 | 重启应用 | `restart_supabase_application` | 操作前同上核对（状态护栏：restart 仅运行态 normal 且无进行中操作，已停止应用须先启动）；重启内部组件、短暂服务中断并释放内存缓存；建议低峰执行；异步 job 跟踪至终态 |
 
+### 托管实例详情与启停重启
+
+四个工具均以 `application_id` 入参，目标实例强制解析自该应用的 `managed_instance` 字段——**不接受裸 `instance_id`，杜绝误操作独立数据库实例**；无 `managed_instance` 的应用直接被拦截。异步任务用 `show_operation_job_status` 跟踪至终态，回查工具为 `show_supabase_managed_instance`。
+
+| 操作 | 工具 | 校验点 |
+|---|---|---|
+| 查托管实例 | `show_supabase_managed_instance` | application_id；返回引擎/版本/instance_status（normal=正常、shutdown=已停止等）/规格/磁盘/可用区/进行中动作，附关键计费与十五天自动启动说明 |
+| 停止托管实例 | `stop_supabase_managed_instance` | 操作前 `show_supabase_managed_instance` 核对 instance_status 与进行中动作（状态护栏：stop 仅 normal 且无进行中操作）；仅超高IO/SSD云盘/极速型SSD 的按需实例可停（专属云不支持）；VM 停止计费、EIP/存储/备份继续计费；默认停止十五天，十五天内未开启将于可维护时段自动启动；已停止实例删除不进回收站；停止主实例同时停止只读实例；停止期间应用功能不可用；异步 job 跟踪 |
+| 启动托管实例 | `start_supabase_managed_instance` | 操作前核对 instance_status（状态护栏：start 仅 shutdown 可开启）；启动主实例同时启动只读实例；可能因资源不足开启失败；**顺序建议：先启实例再启应用**（启动应用不会自动拉起实例）；异步 job 跟踪 |
+| 重启托管实例 | `restart_supabase_managed_instance` | 操作前核对 instance_status、冻结状态与进行中动作（状态护栏：restart 仅 normal、未冻结且无进行中操作；创建/扩容/变更规格/备份/恢复/修改端口期间不能重启）；重启期间实例不可用、应用功能受影响；建议低峰执行；异步 job 跟踪 |
+
 ## 场景九：包周期订单
 
 计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实例；购买方式在创建请求 `managed_instance.charge_info` 中确定。创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；出现创建任务（job_id）才开始建资源。

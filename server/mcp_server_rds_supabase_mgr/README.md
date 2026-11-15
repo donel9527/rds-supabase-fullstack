@@ -4,11 +4,11 @@
 
 ## 版本
 
-当前版本：`0.4.0a49`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；48 个工具。
+当前版本：`0.4.0a50`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；52 个工具。
 
 ## 概述
 
-该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单、应用启停与重启以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
+该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单、应用启停与重启（应用与托管实例两层）、SSL/密码/安全组日常变更以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
 
 ## 快速开始
 
@@ -76,6 +76,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 - **密钥交付**：Key 元数据查询、重置、受保护本地文件交付，密钥值不进入对话。
 - **订单**：包周期订单查询、余额支付与取消，金额币种逐项核对。
 - **应用启停与重启**：启动（不自动拉起托管实例）、停止（不停托管实例、继续计费）与重启（短暂中断、建议低峰）；状态护栏校验，异步任务经 `show_operation_job_status` 跟踪至终态。
+- **托管实例生命周期**：`show_supabase_managed_instance` 查询托管实例详情（引擎/版本/状态/规格/磁盘/可用区/进行中动作，附计费与十五天自动启动说明）；启停/重启均以 `application_id` 入参，目标实例强制解析自该应用的 `managed_instance` 字段，不接受裸 `instance_id`，杜绝误操作独立数据库实例；停止仅超高IO/SSD云盘/极速型SSD 的**按需**实例可受理（专属云不支持），VM 停止计费但 EIP/存储/备份继续计费，默认停止十五天、十五天内未开启将于可维护时段自动启动；重启期间实例不可用；先启实例再启应用是正确顺序；异步任务经 `show_operation_job_status` 跟踪至终态。
 - **变更与删除**：SSL、EIP 与存储对接变更；应用删除（可选级联托管实例）与托管
   实例单独拆除；任务查询与有界等待。
 - **安全与体验**：只读模式与风险分级、敏感字段脱敏、JSONL 审计、图表化输出、
@@ -263,6 +264,10 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 | `start_supabase_application` | 启动已停止的 Supabase 应用，异步任务经 `show_operation_job_status` 跟踪；不自动拉起托管实例，实例状态异常可能启动失败 | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | 停止 Supabase 应用，停止期间功能不可用，异步任务跟踪；不停托管实例（实例继续计费），建议低峰执行 | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | 重启运行中（normal）的 Supabase 应用，异步任务跟踪；重启内部组件、短暂服务中断并释放内存缓存，已停止应用须先启动 | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |
+| `show_supabase_managed_instance` | 查询应用的托管实例详情（引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中动作），目标强制解析自 `managed_instance`，附计费与十五天自动启动说明 | READ | [ListSimplifiedInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSimplifiedInstances) |
+| `stop_supabase_managed_instance` | 停止托管实例（目标强制解析自应用 `managed_instance`，不接受裸 `instance_id`）；仅按需实例可停（专属云不支持），VM 停止计费、EIP/存储/备份继续计费，十五天内未开启将于可维护时段自动启动，停止期间应用功能不可用；异步任务跟踪 | DANGEROUS | [StopInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopInstance) |
+| `start_supabase_managed_instance` | 开启已停止（shutdown）的托管实例（目标强制解析自应用 `managed_instance`）；可能因资源不足开启失败，先启实例再启应用；异步任务跟踪 | DANGEROUS | [StartupInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartupInstance) |
+| `restart_supabase_managed_instance` | 重启运行中（normal）且未冻结的托管实例（目标强制解析自应用 `managed_instance`）；重启期间实例不可用、应用功能受影响，建议低峰执行；异步任务跟踪 | DANGEROUS | [StartInstanceRestartAction](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartInstanceRestartAction) |
 | `get_supabase_order` | 查询包周期订单状态、金额、币种与明细 | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
 | `pay_supabase_order` | 核对金额币种后余额支付待付订单 | DANGEROUS | [PayOrders](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=PayOrders) |
 | `cancel_supabase_order` | 取消不再需要的待支付订单 | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
@@ -291,6 +296,8 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 ## 使用指南
 
 应用的启动、停止与重启均为异步操作：受理返回 `job_id` 后用 `show_operation_job_status` 跟踪至终态再回查应用；停止不会停止托管数据库实例（实例继续计费），启动不自动拉起实例；重启短暂中断，建议低峰期执行。
+
+托管实例的停止与重启同为异步操作，同样以 `show_operation_job_status` 跟踪至终态、以 `show_supabase_managed_instance` 回查实例状态：目标实例强制解析自该应用的 `managed_instance` 字段（不接受裸 `instance_id`，杜绝误操作独立数据库实例）；仅超高IO/SSD云盘/极速型SSD 的按需实例可停止（专属云不支持），VM 停止计费但 EIP/存储/备份继续计费，默认停止十五天、十五天内未开启将于可维护时段自动启动；停止主实例同时停止只读实例，重启亦同步作用于只读实例；停止/重启期间实例不可用，应用功能将受影响（应用仍会产生请求失败）；可能因资源不足开启失败。**先启实例再启应用**是正确顺序——启动应用不会自动拉起托管实例。
 
 ### 前置条件
 
