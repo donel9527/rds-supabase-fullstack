@@ -4,11 +4,11 @@
 
 ## 版本
 
-当前版本：`0.4.0a44`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；43 个工具。
+当前版本：`0.4.0a48`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；45 个工具。
 
 ## 概述
 
-该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
+该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
 
 ## 快速开始
 
@@ -58,8 +58,8 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 ## 功能
 
 - **编排与发现**：场景化创建编排基线——托管实例两种来源、三大必选参数模块与 OBS 桶存储
-  对接（关键可选，创建前必须确认）、EIP 购买基线与步骤化创建流程；应用、实例、网络与安全组
-  四类发现工具，参数实时固化并给出推荐。
+  对接（关键可选，创建前必须确认）、SSL 配置与公网访问（EIP）两个独立模块与步骤化创建
+  流程；应用、实例、网络与安全组四类发现工具，参数实时固化并给出推荐。
 - **场景化创建**：`create_supabase_with_new_instance`（推荐）与
   `create_supabase_link_exist_instance` 严格按编排执行资源准备——专用安全组与
   OBS 桶自动创建、参数回填注入、一次提交；回显应用/实例标识与工作流 ID。
@@ -67,6 +67,9 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
   标签防护（AUTO_CREATE/USE_FOR）、入方向来源三选一（自动探测/全开放/自定义）。
 - **EIP**：空闲优先采购（按需推荐、全动态 BGP 独享带宽 5-1000M、推荐 300M、
   自动打标）；绑定三重校验（in32 应用 ID、归属、格式），经 RDS AttachEip 执行。
+- **SSL 证书**：账号已有证书盘点（`list_ssl_certificates`，SCM 全局服务）、两段式
+  证书购买与申请（`purchase_supabase_ssl_cert`：免费档 DV_SSL_CERT_BASIC 推荐、
+  付费档生成待支付订单、纯 EIP 公网 IP 证书仅文件验证）、SSL 开关变更。
 - **OBS 存储**：获取两选择（复用/新建，新建为推荐）与新桶完整规格（私有/标准/
   多AZ/阻止公共访问）；临时凭证检测与读测试。
 - **认证与登录**：注册开关、Auth URL、邮箱/GitHub 登录、确认模板；应用密码变更。
@@ -100,8 +103,12 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
   明确答复——创建后不可再启用；确认启用时输出复用/新建两选择、新桶完整规格与
   临时凭证提示，随创建请求一次提交。
 
-同时给出 EIP 购买基线：按需购买、全动态 BGP 独享带宽 5-1000M、推荐 300M。输出为
-步骤编号的创建流程与创建后动作清单，供创建阶段 1:1 严格执行。
+编排同时输出两个意图独立模块：**公网访问（EIP）** 给出购买基线（按需购买、全动态 BGP
+独享带宽 5-1000M、推荐 300M）与绑定、`api_external_url` 同步步骤；**SSL 配置** 给出
+证书获取三路径——复用已有证书（`list_ssl_certificates` 盘点）、购买新证书
+（`purchase_supabase_ssl_cert`，推荐，免费档 DV_SSL_CERT_BASIC、付费档生成待支付订单）、
+导入自有证书。纯 EIP 公网 IP 证书仅支持文件验证。输出为步骤编号的创建流程与创建后动作
+清单，供创建阶段 1:1 严格执行。
 
 ### 场景二：应用创建全流程
 
@@ -125,8 +132,8 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 6. 回显 `application_id`/`instance_id` 与双工作流 ID，经
    `show_supabase_creation_progress` 持续查询：整体约 20-30 分钟，实例先就绪、
    应用任务才开始；预付费按场景五支付订单后才开始建资源。
-7. `show_supabase_application` 验证就绪，随后按需执行公网开通（场景三）、SSL、
-   登录配置与接入信息交付。
+7. `show_supabase_application` 验证就绪，随后按需执行公网开通（场景三）、SSL
+   （证书三路径：复用/购买/导入自有）、登录配置与接入信息交付。
 
 #### 已有实例挂载场景（`create_supabase_link_exist_instance`）
 
@@ -157,6 +164,11 @@ Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUI
 
 绑定成功后必须经 `update_supabase_auth_config` 同步 `api_external_url`（邮箱链接与
 OAuth 回调依赖该地址），并探活验证。
+
+需要 HTTPS 时，SSL 证书可经本服务获取，无需到控制台购买：`list_ssl_certificates`
+盘点账号已有证书（SCM 全局服务）供复用；`purchase_supabase_ssl_cert` 两段式购买并
+申请——免费档 DV_SSL_CERT_BASIC 推荐，付费档生成待支付订单，纯 EIP 公网 IP 证书
+仅支持文件验证；取得 `cert_id` 后经 `change_supabase_ssl` 开启。
 
 ### 场景四：应用删除（关联 PG 实例）
 
@@ -235,7 +247,7 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 | `update_supabase_storage` | 对接或变更 OBS 存储桶 | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与凭证检测 | READ | `KooCLI OBS ls` |
 | `discover_supabase_create_basic_options` | 应用基本要素发现与推荐，应用规格按规格类型分组展示全部可售规格 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：必选参数模块固化、OBS 对接（关键可选）与流程设计，应用规格与实例规格分开单独询问、实例默认推荐与应用同规格 | READ | 实时组合（发现工具的只读查询） |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：必选参数模块固化、OBS 对接（关键可选）与流程设计，应用规格与实例规格分开单独询问、实例默认推荐与应用同规格，SSL 与公网 EIP 为独立配置模块 | READ | 实时组合（发现工具的只读查询） |
 | `list_supabase_flavors_with_azs` | 查询应用规格及各规格支持的可用区 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | 查询可挂载的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | 查询托管实例可用 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
@@ -252,6 +264,8 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实�
 | `cancel_supabase_order` | 取消不再需要的待支付订单 | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
 | `change_supabase_ssl` | 启用或关闭应用的 SSL 加密传输 | WRITE | [SwitchSupabaseApplicationSsl](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationSsl) |
 | `plan_supabase_ssl` | SSL 切换前规划：证书要求与影响评估 | READ | - |
+| `list_ssl_certificates` | 盘点账号已有 SSL 证书（SCM 全局服务），cert_id 即 SSL 变更入参 | READ | - |
+| `purchase_supabase_ssl_cert` | 两段式购买 SCM SSL 证书，可选同步申请签发 | DANGEROUS | - |
 | `create_supabase_eip` | EIP 采购（空闲优先），按需+全动态 BGP+300M 基线 | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
 | `bind_supabase_eip` | EIP 绑定：in32/归属/格式三重校验 | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
 | `create_supabase_new_obs` | 新建私有 OBS 桶（标准/多AZ/阻止公共访问） | WRITE | `KooCLI OBS mb` |
@@ -453,7 +467,8 @@ mcp-huaweicloud-rds-supabase-mgr -t streamable-http
 
 1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管
    来源决策与意图（含 `needs_storage` 存储答复）取得端到端编排基线：必选模块参数
-   固化、EIP 购买基线、OBS 桶对接方案与步骤编号的创建流程。
+   固化、公网访问（EIP）与 SSL 配置两个独立模块、OBS 桶对接方案与步骤编号的创建
+   流程。
 2. 按编排逐步执行：网络就绪（默认推荐场景按 `default_create` 建网）→ 存储就绪
    （`discover_supabase_storage` 定复用或新建，新建桶走 `create_supabase_new_obs`）
    → 本地请求文件（含 root 密码、存储凭据等秘密）。

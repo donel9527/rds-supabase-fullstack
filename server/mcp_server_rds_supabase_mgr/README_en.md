@@ -4,15 +4,16 @@
 
 ## Version
 
-Current version: `0.4.0a44` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 43 tools.
+Current version: `0.4.0a48` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 45 tools.
 
 ## Overview
 
 This server wraps the full lifecycle management of Huawei Cloud RDS Supabase
 applications as MCP tools, covering creation arrangement and scenario-based
 creation (two managed-instance sources), network and security-group
-specification, EIP provisioning and binding, OBS storage integration,
+specification, EIP provisioning and binding, SSL certificate query and
+purchase, OBS storage integration,
 authentication and login configuration, API key delivery, prepaid orders, and
 change and deletion. It serves AgentArts and other MCP clients; the REST-token
 and SDK credential modes, over stdio and Streamable HTTP, share one tool set,
@@ -84,8 +85,8 @@ database hosting.
 - **Arrangement and discovery**: scenario-based creation arrangement
   baseline — two managed-instance sources, three mandatory parameter modules plus
   the OBS bucket integration (a key optional module that must be confirmed before
-  creation), the EIP purchase
-  dependencies, and a step-numbered creation flow; four discovery tool
+  creation), two independent intent modules (SSL configuration and public access
+  via EIP), and a step-numbered creation flow; four discovery tool
   families (application, instance, network, security group) that consolidate
   parameters live with recommendations.
 - **Scenario-based creation**: `create_supabase_with_new_instance`
@@ -101,6 +102,11 @@ database hosting.
   full-dynamic BGP 5-1000M with 300M recommended, auto-tagged); binding with
   triple validation (in32 application ID, ownership, format) via the RDS
   AttachEip API.
+- **SSL certificates**: account certificate inventory (`list_ssl_certificates`,
+  the SCM global service), two-phase certificate purchase and application
+  (`purchase_supabase_ssl_cert`: free-tier DV_SSL_CERT_BASIC recommended,
+  paid tiers produce pending-payment orders, pure-EIP public-IP certificates
+  support file validation only), and the SSL switch.
 - **OBS storage**: two acquisition options (reuse / create-new, new
   recommended) with the full new-bucket specification (private / standard /
   multi-AZ / block-public-access); temporary-credential detection and a read
@@ -153,8 +159,14 @@ one key optional module:
   reuse/new choice, the complete new-bucket specification, and the temporary-
   credential notice, submitted once with the creation request.
 
-Alongside, the EIP purchase baseline is given: pay-per-use,
-dedicated full-dynamic BGP bandwidth 5-1000M, 300M recommended. The output
+The arrangement also emits two independent intent modules: **public access (EIP)**
+carries the purchase baseline (pay-per-use, dedicated full-dynamic BGP bandwidth
+5-1000M, 300M recommended), the binding, and the `api_external_url` sync steps;
+**SSL configuration** carries the three certificate acquisition paths — reuse an
+existing certificate (`list_ssl_certificates` inventory), purchase a new one
+(`purchase_supabase_ssl_cert`, recommended; free-tier DV_SSL_CERT_BASIC, paid
+tiers produce pending-payment orders), or import your own. Pure-EIP public-IP
+certificates support file validation only. The output
 is a step-numbered creation flow plus a post-creation action list, to be
 followed 1:1 during creation.
 
@@ -191,7 +203,8 @@ identifier into the request before one successful submission.
    application task start; prepaid resources begin only after the order is
    paid per Scenario 5.
 7. Verify readiness with `show_supabase_application`; then proceed as needed
-   with public access (Scenario 3), SSL, login configuration, and access
+   with public access (Scenario 3), SSL (three certificate paths: reuse /
+   purchase / import your own), login configuration, and access
    information delivery.
 
 #### Existing-instance attach scenario (`create_supabase_link_exist_instance`)
@@ -231,6 +244,14 @@ IPv4 — and only then binds via the RDS AttachEip API.
 After a successful binding, `update_supabase_auth_config` must sync
 `api_external_url` (email links and OAuth callbacks depend on it), followed
 by a liveness check.
+
+When HTTPS is needed, SSL certificates are obtained through this server — no
+console purchase required: `list_ssl_certificates` inventories existing
+account certificates (the SCM global service) for reuse; and
+`purchase_supabase_ssl_cert` purchases and applies in two phases — free-tier
+DV_SSL_CERT_BASIC recommended, paid tiers producing pending-payment orders,
+pure-EIP public-IP certificates supporting file validation only. Once the
+`cert_id` is at hand, enable it via `change_supabase_ssl`.
 
 ### Scenario 4: Application deletion (with the managed PG instance)
 
@@ -333,7 +354,7 @@ pre-provisioned into a local request file and referenced by alias.
 | `update_supabase_storage` | Integrate or change the OBS storage bucket | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_storage` | OBS acquisition two options (reuse/new-recommended) and credential detection | READ | `KooCLI OBS ls` |
 | `discover_supabase_create_basic_options` | Application creation-basics discovery with recommendations; application flavors grouped by flavor type with all saleable flavors shown | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | End-to-end creation arrangement baseline: three-module parameter consolidation and flow design; application and instance flavors asked separately, instance defaulting to the application's flavor | READ | live composite (read-only queries of the three discovery tools) |
+| `plan_supabase_creation_arrangement` | End-to-end creation arrangement baseline: three-module parameter consolidation and flow design; application and instance flavors asked separately, instance defaulting to the application's flavor; SSL and public-access EIP as independent configuration modules | READ | live composite (read-only queries of the three discovery tools) |
 | `list_supabase_flavors_with_azs` | Query application flavors and the AZs each supports | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | Query existing PostgreSQL instances available for attachment | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | Query PostgreSQL engine versions for managed instances | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
@@ -350,6 +371,8 @@ pre-provisioned into a local request file and referenced by alias.
 | `cancel_supabase_order` | Cancel an unneeded pending-payment order | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
 | `change_supabase_ssl` | Enable or disable SSL-encrypted transport for the application | WRITE | [SwitchSupabaseApplicationSsl](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationSsl) |
 | `plan_supabase_ssl` | Pre-switch planning: certificate requirements and impact assessment | READ | - |
+| `list_ssl_certificates` | Inventory the account's existing SSL certificates (SCM global service); cert_id feeds the SSL change | READ | - |
+| `purchase_supabase_ssl_cert` | Two-phase SCM SSL certificate purchase, with optional simultaneous application | DANGEROUS | - |
 | `create_supabase_eip` | EIP provisioning (idle-first): pay-per-use + full-dynamic BGP + 300M baseline | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
 | `bind_supabase_eip` | EIP binding: triple validation (in32/ownership/format) | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
 | `create_supabase_new_obs` | Create a private OBS bucket (standard/multi-AZ/block-public-access) | WRITE | `KooCLI OBS mb` |
@@ -582,7 +605,8 @@ published to PyPI, so UVX always pulls from the git repository
 1. Call `plan_supabase_creation_arrangement(manage_type, az_code, ...)` with
    the managed-source decision and intents (including the `needs_storage`
    answer) to get the end-to-end arrangement baseline: consolidated
-   three-module parameters, the EIP purchase baseline, the OBS bucket plan,
+   three-module parameters, the two independent modules (public access via EIP
+   and SSL configuration), the OBS bucket plan,
    and the step-numbered creation flow.
 2. Execute step by step per the arrangement: network ready (create the
    defaults per `default_create` when recommended) -> storage ready

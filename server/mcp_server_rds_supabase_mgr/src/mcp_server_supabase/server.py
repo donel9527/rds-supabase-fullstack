@@ -22,6 +22,9 @@ register_obs(mcp)
 from mcp_server_supabase.tools.creation_flow import register as register_creation_flow
 register_creation_flow(mcp)
 
+from mcp_server_supabase.tools.ssl_cert import register as register_ssl_cert
+register_ssl_cert(mcp)
+
 # Product input validation precedes shared argument logging and SDK coercion.
 import os
 from huaweicloud_mcp_core.guardrails.middleware import GuardrailsMiddleware

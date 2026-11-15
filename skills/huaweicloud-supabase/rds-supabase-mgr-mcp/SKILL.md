@@ -1,15 +1,15 @@
 ---
 name: rds-supabase-mgr-mcp
 description: |
-  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，43 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
+  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，45 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
 metadata:
   tags: [huawei-cloud, rds, supabase, mcp, lifecycle]
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.1.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a47`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，43 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.2.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a48`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，45 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -17,9 +17,10 @@ metadata:
 
 适用场景：
 
-- 创建前置编排：托管来源两种决策、三大必选参数模块与 OBS 桶存储对接（关键可选）实时固化、EIP 购买基线、步骤化创建流程。
+- 创建前置编排：托管来源两种决策、三大必选参数模块与 OBS 桶存储对接（关键可选）实时固化、SSL 与公网 EIP 两个独立配置模块、步骤化创建流程。
 - 场景化创建：新建实例（推荐）或挂载已有 PostgreSQL 实例；专用安全组与 OBS 桶自动准备、参数回填注入、一次提交。
 - 公网开通：EIP 空闲优先采购、三重校验绑定、`api_external_url` 同步与探活验证。
+- SSL 与 HTTPS：账号已有证书盘点（`list_ssl_certificates`）、两段式证书购买与申请（`purchase_supabase_ssl_cert`，免费档 DV_SSL_CERT_BASIC 推荐、付费档生成待支付订单、纯 EIP 公网 IP 证书仅文件验证）、SSL 开关变更。
 - OBS 存储对接：复用/新建两选择、临时凭证检测、桶与凭据变更轮换。
 - 认证与登录：注册开关、邮箱（SMTP）登录、GitHub OAuth 登录、确认邮件模板。
 - 接入信息与密钥：访问地址拼装、四类 Key 元数据查询、受保护本地文件交付。
@@ -32,6 +33,7 @@ metadata:
 - “我有一个现成的 PostgreSQL 实例，把它挂到一个新的 Supabase 应用上。”
 - “先别创建，给我出一份参数、网络和安全组都实时可用的创建方案。”
 - “给这个应用开公网：买条 EIP 绑上去，登录回调地址也同步好。”
+- “给应用开 HTTPS：帮我买张证书并开 SSL。”
 - “应用要传图片和视频，帮我对接一个 OBS 桶。”
 - “配置邮箱登录，用我们公司的 SMTP 服务器。”
 - “把四类 API Key 交付给我，明文别贴在对话里。”
@@ -55,7 +57,7 @@ metadata:
 
 ## 前置条件
 
-1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a47`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
+1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a48`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
 2. MCP 客户端已注册本服务。安装、宿主注册模板、凭据模式与会话内使能见[安装手册](references/install.md)。来源锁定：服务端未发布 PyPI，uvx 一律从本仓 GitHub 拉取；PyPI 同名第三方包不是本服务，禁止安装。
 3. 凭据模式二选一：AK/SK（含临时密钥）必须设 `SUPABASE_TRANSPORT=sdk_core`，否则服务端按 REST 模式启动并忽略 AK/SK；服务 Token 走 REST 模式（`HUAWEICLOUD_AUTH_TOKEN`）。`HUAWEICLOUD_REGION` 驱动 RDS 端点推导、项目 IAM 自动发现与安全组工具；子项目账号显式配置 `HUAWEICLOUD_PROJECT_ID`。
 4. 安全组六个工具依赖本机 KooCLI（`hcloud`）并已接受首次运行隐私协议；探测与安装方法见技能根目录 `INSTALL.md` 第四节。
@@ -85,14 +87,14 @@ metadata:
 
 **触发**：用户要从零创建 RDS Supabase 应用，数据库也一起新建。完成标准不是“创建成功”，而是“用户能用浏览器打开、能用密钥连上”——创建、公网开通与接入信息交付缺一不可。
 
-1. **四问意图（必须逐个问，不许默认、不许替用户决定）**：① 数据库来源——新建实例（本场景，推荐）还是挂载已有实例（场景二）；② 大文件存储——要传图片/视频/附件则按场景五先定 OBS 方案（**存储创建后不可再启用**，此问必须在创建前问清），不要则 `storage_component` 写 `{"enabled":false}` 且不能整个省略；③ 公网访问——要则创建后走场景四，不要则明确告知仅内网可达；④ HTTPS——要则用户先备 CCM 证书（本服务无证书采购能力），创建后开 SSL。
-2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、EIP 购买基线（按需+全动态 BGP 独享带宽 5-1000M、推荐 300M）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
+1. **四问意图（必须逐个问，不许默认、不许替用户决定）**：① 数据库来源——新建实例（本场景，推荐）还是挂载已有实例（场景二）；② 大文件存储——要传图片/视频/附件则按场景五先定 OBS 方案（**存储创建后不可再启用**，此问必须在创建前问清），不要则 `storage_component` 写 `{"enabled":false}` 且不能整个省略；③ 公网访问——要则创建后走场景四，不要则明确告知仅内网可达；④ HTTPS——要则先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点）/ 购买新证书（`purchase_supabase_ssl_cert`，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有证书，纯 EIP 公网 IP 无域名时证书仅支持文件验证；创建后开 SSL。
+2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、SSL 配置与公网访问（EIP）两个独立模块（公网：按需+全动态 BGP 独享带宽 5-1000M、推荐 300M；SSL：证书获取三路径）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
 3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、兜底 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
 4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
 6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交——请求文件无需手填 `security_group_id`。
 7. **跟踪**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；包周期返回 `order_id` 时先走场景九支付，支付后才开始建资源。
-8. **验证与后续**：`show_supabase_application` 回查状态就绪；随后按需执行公网开通（场景四）、SSL、登录配置（场景六）与接入信息交付（场景七）。
+8. **验证与后续**：`show_supabase_application` 回查状态就绪；随后按需执行公网开通（场景四）、SSL（证书获取三路径，见第 1 步④）、登录配置（场景六）与接入信息交付（场景七）。
 
 **验证方式**：`show_supabase_application` 状态正常且无进行中操作；（开通公网后）访问地址探活可达；接入信息卡交付完整。
 
@@ -114,7 +116,7 @@ metadata:
 **触发**：用户说“先别创建，先出方案/参数清单/预算基线”，或任何创建动作前的参数固化。`plan_supabase_creation_arrangement` 仅做规划，不创建任何资源。
 
 1. 输入：`manage_type`（newly_instance/existed_instance，不确定则作为决策点呈现两种来源）、`az_code`、`mode`、`instance_id`（已有实例定位）、`detect_access_ip`，以及三态意图参数 `needs_storage`/`needs_public_access`/`needs_ssl`/`needs_email_login`/`needs_github_login`（省略=保持开放决策点，true=规划该分支，false=规划排除）。
-2. 输出内容：托管来源两决策（推荐且默认新建实例；已有实例输出分页 20/页候选并标注 action 锁）→ 三大必选模块实时固化——Supabase 基本信息（来自 `discover_supabase_create_basic_options`，应用规格按规格类型分组展示全部可售）、托管实例（来自 `discover_db_instance_for_create`；应用规格与实例规格分开单独询问，实例规格按 group_type 十大类分组展示、默认推荐与应用同规格，磁盘类型展示中文名与实时兼容规格类型）、网络控制（来自 `discover_network_for_create`）——OBS 关键可选模块（`needs_storage` 明确答复后输出复用/新建两方案）→ EIP 购买基线 → 步骤编号 `creation_flow` → 创建后动作（公网开通与 `api_external_url` 同步、SSL、登录配置、接入信息交付）→ `decision_points` 与秘密边界。
+2. 输出内容：托管来源两决策（推荐且默认新建实例；已有实例输出分页 20/页候选并标注 action 锁）→ 三大必选模块实时固化——Supabase 基本信息（来自 `discover_supabase_create_basic_options`，应用规格按规格类型分组展示全部可售）、托管实例（来自 `discover_db_instance_for_create`；应用规格与实例规格分开单独询问，实例规格按 group_type 十大类分组展示、默认推荐与应用同规格，磁盘类型展示中文名与实时兼容规格类型）、网络控制（来自 `discover_network_for_create`）——OBS 关键可选模块（`needs_storage` 明确答复后输出复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（`needs_ssl`/`needs_public_access` 明确答复后输出：SSL 给证书获取三路径——复用/购买推荐/导入自有，公网给 EIP 购买基线）→ 步骤编号 `creation_flow` → 创建后动作（公网开通与 `api_external_url` 同步、SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`、登录配置、接入信息交付）→ `decision_points` 与秘密边界。
 3. 决策点未答全时照 `decision_points` 继续追问，不替用户做业务决定。
 4. 发现与编排响应附 visual 图表化输出（表格/流程图），直接展示给用户查阅。
 
@@ -128,6 +130,7 @@ metadata:
 2. **绑定**：`bind_supabase_eip(instance_id, public_ip_id, public_ip)` 三重校验——`instance_id` 必须为 in32 结尾的 Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip` 为合法 IPv4——全部通过后经 RDS AttachEip 执行。
 3. **同步 `api_external_url`**：公网地址变了，邮箱确认链接与 OAuth 回调都指向该 URL，不同步则登录链路是断的。把拼装的公网访问地址写入请求文件别名 → `update_supabase_auth_config` 预览 → 确认 → 查任务 → `show_supabase_auth_config` 回查不再是 localhost。
 4. **探活**：以 curl 探测访问地址（任何状态码都算网络可达）；不通回头查安全组规则与 EIP 绑定状态。
+5. **HTTPS（可选）**：用户要 HTTPS 时先定证书——复用 `list_ssl_certificates` 盘点账号已有证书（SCM 全局服务，`cert_id` 即 `change_supabase_ssl` 入参）、购买 `purchase_supabase_ssl_cert`（推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）或导入自有证书；纯 EIP 公网 IP 无域名时证书仅支持文件验证；取得 `cert_id` 后 `change_supabase_ssl` 开启。
 
 **验证方式**：`show_supabase_application` 的 `public_ip` 非空；`api_external_url` 已指向公网地址；访问地址网络可达。
 
@@ -150,7 +153,7 @@ metadata:
 1. **基线**：`show_supabase_auth_config(application_id)` 取当前配置（空串=未配置），作为更新预览与复核的对照基准。
 2. **注册/匿名开关**：`update_supabase_auth_flags`——只改传入的开关，省略=不变；先评估匿名访问的暴露面再动手。
 3. **邮箱登录**：对话里只收非秘密项（SMTP 服务器/端口/用户名、发件人邮箱与名称、注册即确认还是发确认邮件、确认邮件主题与链接——唯一支持自定义的模板）；**SMTP 密码（授权码）是秘密**，写本地请求文件 → `update_supabase_auth_config` 预览 → 确认 → 查任务 → 回查。
-4. **GitHub 登录**：指导用户先在 GitHub 开发者设置建 OAuth App 取 Client ID（非秘密，对话可收）；**Client Secret 是秘密**，写本地请求文件；回调地址按应用访问地址拼装（如 `https://<EIP>:8443/callback`）且须与 GitHub App 内配置一致 → 同两段式提交。
+4. **GitHub 登录**：指导用户先在 GitHub 开发者设置建 OAuth App 取 Client ID（非秘密，对话可收）；**Client Secret 是秘密**，写本地请求文件；回调地址按应用访问地址拼装（如 `https://<EIP>:8443/callback`）且须与 GitHub App 内配置一致——`https` 回调的前提是应用已开 SSL，证书获取三路径见场景一第 1 步④（复用/购买推荐/导入自有）→ 同两段式提交。
 5. **关闭某个登录方式只传关闭开关**（如 `{"enable_github": false}`），不带其他字段——禁用可能连带清空该方式配置；字段省略=不变，没有“传空值清空”。
 
 **验证方式**：任务完成且回查配置生效；真实发一封测试邮件、真实走一次 GitHub 登录流程才算业务验证——保存成功不等于业务可用。
@@ -174,7 +177,7 @@ metadata:
 |---|---|---|
 | 改应用密码 | `change_supabase_application_password` | 新密码写本地请求文件；只改应用密码，不动数据库密码 |
 | 重置 API Key | `reset_supabase_api_key` | 异步：旧 Key 逐渐失效、新 Key 是一条新记录；新值须走场景七重新交付；提前告知下游会断 |
-| 开/关 SSL | `change_supabase_ssl` | 开需证书 ID（本服务无采购能力，用户自备）；关必须不带证书；切换会闪断，建议低峰执行，生效后提醒改回调地址协议 |
+| 开/关 SSL | `change_supabase_ssl` | 开需证书 ID——三路径获取：复用（`list_ssl_certificates`）/购买（`purchase_supabase_ssl_cert` 推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 证书仅文件验证；关必须不带证书；切换会闪断，建议低峰执行，生效后提醒改回调地址协议 |
 | 绑/解绑 EIP | `change_supabase_eip` | 绑定须 ID+IPv4 两样；解绑两样都不带；解绑不释放 EIP、不停计费；绑定后必须同步 `api_external_url`（场景四第 3 步），解绑后旧公网地址失效 |
 | 注册/匿名开关 | `update_supabase_auth_flags` | 只改传入的开关 |
 | 改 Auth 配置 | `update_supabase_auth_config` | 同场景六；字段省略=不变 |
@@ -227,17 +230,18 @@ metadata:
 
 ## 核心命令（MCP 工具）
 
-43 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
+45 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
 
 **编排与发现（READ）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：托管来源两决策、三必选模块实时固化+OBS 关键可选模块、EIP 基线、步骤化 creation_flow；应用与实例规格分开单独询问，实例默认推荐与应用同规格 | READ |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：托管来源两决策、三必选模块实时固化+OBS 关键可选模块、SSL 与公网 EIP 独立配置模块、步骤化 creation_flow；应用与实例规格分开单独询问，实例默认推荐与应用同规格 | READ |
 | `discover_supabase_create_basic_options` | 应用基本要素发现（按 az_code）：版本、Single/Ha 实时探测、可售规格与默认值（规格按类型分组展示全部可售） | READ |
 | `discover_db_instance_for_create` | 托管实例来源分场景探索（newly/existed）；existed 候选分页 20/页含 action 锁；newly 规格按 group_type 十类分组展示全部可售，磁盘类型含中文名与实时兼容规格类型 | READ |
 | `discover_network_for_create` | VPC/子网选址（空闲 IP 优选、无网络给默认推荐）与双组安全组规格 | READ |
 | `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与临时凭证检测，附读测试 | READ |
+| `list_ssl_certificates` | 盘点账号已有 SSL 证书（SCM 全局服务）；cert_id 即 `change_supabase_ssl` 入参，PAID=已购待申请 | READ |
 | `list_supabase_flavors_with_azs` | 应用规格及各规格支持的可用区 | READ |
 | `list_db_instance_engine_versions` | 托管实例可用 PostgreSQL 引擎版本 | READ |
 | `list_db_instance_flavors_with_azs` | 托管实例规格及各可用区售卖状态 | READ |
@@ -262,6 +266,7 @@ metadata:
 | `bind_supabase_eip` | EIP 绑定：in32/归属/UUID-IPv4 三重校验，经 RDS AttachEip | DANGEROUS |
 | `change_supabase_eip` | 绑定/解绑 EIP，开关公网访问 | WRITE |
 | `change_supabase_ssl` | 开关 SSL（开需证书 ID；关不带证书） | WRITE |
+| `purchase_supabase_ssl_cert` | 两段式购买 SCM SSL 证书，可选同步申请签发（免费档 DV_SSL_CERT_BASIC 推荐；付费档生成待支付订单；纯 EIP 公网 IP 证书仅文件验证） | DANGEROUS |
 | `change_supabase_application_password` | 改应用密码，新密码经本地请求文件 | DANGEROUS |
 | `update_supabase_storage` | OBS 对接变更与凭据轮换 | WRITE |
 | `update_supabase_auth_flags` | 注册/匿名访问开关（只改传入的） | WRITE |
@@ -310,6 +315,7 @@ metadata:
 | `basic_config.time_zone` | 整段 `UTC-12:00`~`UTC+12:00`（25 个值，不支持半点与时区名），推荐 `UTC+08:00`（中国北京） |
 | `规格选择` | 应用与实例规格分开单独询问；实例按 group_type 十类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型（ESSD=极速型SSD、CLOUDSSD=SSD云盘、ULTRAHIGH=SSD、LOCALSSD=本地SSD） |
 | 存储启用 | `needs_storage` 创建时决定，创建后不可再启用；不用存储也须写 `{"enabled":false}`，不能整个省略 |
+| SSL 证书 | 开 SSL 须证书 ID，三路径获取：复用（`list_ssl_certificates`）/购买（`purchase_supabase_ssl_cert` 推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 证书仅文件验证 |
 | 应用名称 | 4-64 字符（中文按 3 字节计），字母或中文开头 |
 | 数据库端口 | 固定默认 5432，不传其他值 |
 | 应用 ID | in32 结尾（`bind_supabase_eip` 校验依据之一） |
@@ -376,7 +382,7 @@ Key 值：已按别名交付到本地受保护文件，向操作员索取，不�
 - [场景手册](references/scenarios.md)：各场景详细操作参考（步骤/工具/参数/校验点）、创建请求体与预览前核对清单、失败处置。
 - [本地请求与字段契约](references/local-requests.md)：请求文件机制与各工具敏感字段级契约。
 - [验收手册](references/acceptance.md)：验收清单与单轮/多轮异常对话用例。
-- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（43 工具表与五大业务场景）。
+- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（45 工具表与五大业务场景）。
 
 ## 注意事项
 

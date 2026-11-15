@@ -331,6 +331,100 @@ def _module_network(module):
     return block('模块三：网络控制',body)
 
 
+def _excluded_lines(module,default):
+    module=_dict(module)
+    note=None
+    for key in ('note','hint','delivery'):
+        if module.get(key) is not None:
+            note=module.get(key)
+            break
+    if note is None:note=default
+    return ['状态：excluded（已排除）',_wrap(_scalar(note),88)]
+
+
+def _module_ssl(module):
+    """The ssl_configuration arrangement module: the certificate acquisition paths
+    (reuse/purchase/import), the domain/IP precondition, the enable flow and the
+    impact - or the exclusion note when needs_ssl is false."""
+    module=_dict(module)
+    if module.get('status')=='excluded':
+        return block('SSL 配置',_excluded_lines(module,'本次不开 SSL：应用保持 http 访问（enable_ssl=false）'))
+    lines=['状态：%s' % _scalar(module.get('status'))]
+    acquisition=_dict(module.get('acquisition'))
+    recommended=acquisition.get('recommended')
+    for option in _list(acquisition.get('options')):
+        option=_dict(option)
+        badge='（推荐）' if option.get('key')==recommended or option.get('recommended') else ''
+        lines.append('- %s：%s%s' % (_scalar(option.get('name')),_scalar(option.get('note')),badge))
+    if module.get('domain_note') is not None:
+        note=_wrap(_scalar(module.get('domain_note')),88)
+        prefix='域名与 IP 前提：'
+        lines.append(note if note.startswith(prefix) else '%s%s' % (prefix,note))
+    enable_flow=_list(module.get('enable_flow'))
+    if enable_flow:
+        lines.append('启用流程：')
+        for index,step in enumerate(enable_flow,1):
+            if isinstance(step,dict):
+                step=_dict(step)
+                detail=step.get('action')
+                if detail is None:detail=json.dumps(step,ensure_ascii=False)
+                lines.append('%s. %s：%s' % (index,_scalar(step.get('tool') or step.get('name') or '-'),
+                                             _clip(detail,70)))
+            else:
+                lines.append('%s. %s' % (index,_wrap(str(step),88)))
+    impact=_list(module.get('impact'))
+    if impact:
+        lines.append('影响：')
+        lines.extend('- %s' % _wrap(str(item),86) for item in impact)
+    return block('SSL 配置',lines)
+
+
+def _module_public_access(module):
+    """The public_access arrangement module - the former top-level eip_baseline
+    (purchase method, bandwidth, idle-first purchase, bind, post-bind sync), or
+    the intranet-only exclusion note when needs_public_access is false."""
+    module=_dict(module)
+    if module.get('status')=='excluded':
+        return block('公网访问（EIP）',_excluded_lines(module,'内网交付：不购买 EIP、不开公网入方向，接入用 private_ip'))
+    purchase=_dict(module.get('purchase_method'))
+    recommended=_dict(purchase.get('recommended'))
+    bandwidth=_dict(module.get('bandwidth'))
+    options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
+                          for o in _list(purchase.get('options')))
+    size=bandwidth.get('recommended_size_mbps')
+    bandwidth_note='；'.join(str(bandwidth.get(key)) for key in
+                             ('share_type','type','size_range_mbps') if bandwidth.get(key) is not None)
+    rows=[]
+    if module.get('applies_when') is not None:
+        rows.append(['适用','',_clip(module.get('applies_when'),60)])
+    rows.append(['购买方式',recommended.get('name'),options_note])
+    rows.append(['带宽','%sM' % size if size is not None else '-',bandwidth_note])
+    if module.get('purchase') is not None:
+        rows.append(['采购','',_clip(module.get('purchase'),60)])
+    rows.append(['绑定',_clip(module.get('bind'),60),_clip(module.get('post_bind'),60)])
+    return block('公网访问（EIP）',table(['项','推荐','说明'],rows))
+
+
+def _eip_baseline_block(eip):
+    """The legacy top-level eip_baseline rendering, kept for payloads predating
+    the public_access step module."""
+    eip=_dict(eip)
+    purchase=_dict(eip.get('purchase_method'))
+    recommended=_dict(purchase.get('recommended'))
+    bandwidth=_dict(eip.get('bandwidth'))
+    options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
+                          for o in _list(purchase.get('options')))
+    size=bandwidth.get('recommended_size_mbps')
+    bandwidth_note='；'.join(str(bandwidth.get(key)) for key in
+                             ('share_type','type','size_range_mbps') if bandwidth.get(key) is not None)
+    eip_rows=[
+        ['购买方式',recommended.get('name'),options_note],
+        ['带宽','%sM' % size if size is not None else '-',bandwidth_note],
+        ['绑定',_clip(eip.get('bind'),60),_clip(eip.get('post_bind'),60)],
+    ]
+    return block('EIP 购买基线',table(['项','推荐','说明'],eip_rows))
+
+
 def render_basic_options(result):
     """discover_supabase_create_basic_options -> basics table plus the security-group
     strategy table."""
@@ -433,8 +527,9 @@ def render_network(result):
 
 def render_arrangement(result):
     """plan_supabase_creation_arrangement -> source decision, the three step modules,
-    the optional OBS integration module, the EIP purchase baseline, the step-numbered
-    creation flow and post-creation flow."""
+    the optional OBS integration module, the SSL-configuration and public-access
+    modules (or the legacy EIP baseline), the step-numbered creation flow and
+    post-creation flow."""
     result=_dict(result)
     source=_dict(result.get('managed_instance_source'))
     lines=[]
@@ -453,21 +548,16 @@ def render_arrangement(result):
     obs=modules.get('obs_integration')
     if isinstance(obs,dict) and obs:
         blocks.append(_module_obs(obs))
-    eip=_dict(result.get('eip_baseline'))
-    purchase=_dict(eip.get('purchase_method'))
-    recommended=_dict(purchase.get('recommended'))
-    bandwidth=_dict(eip.get('bandwidth'))
-    options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
-                          for o in _list(purchase.get('options')))
-    size=bandwidth.get('recommended_size_mbps')
-    bandwidth_note='；'.join(str(bandwidth.get(key)) for key in
-                             ('share_type','type','size_range_mbps') if bandwidth.get(key) is not None)
-    eip_rows=[
-        ['购买方式',recommended.get('name'),options_note],
-        ['带宽','%sM' % size if size is not None else '-',bandwidth_note],
-        ['绑定',_clip(eip.get('bind'),60),_clip(eip.get('post_bind'),60)],
-    ]
-    blocks.append(block('EIP 购买基线',table(['项','推荐','说明'],eip_rows)))
+    ssl=modules.get('ssl_configuration')
+    if isinstance(ssl,dict) and ssl:
+        blocks.append(_module_ssl(ssl))
+    public=modules.get('public_access')
+    if isinstance(public,dict) and public:
+        blocks.append(_module_public_access(public))
+    else:
+        eip=result.get('eip_baseline')
+        if isinstance(eip,dict) and eip:
+            blocks.append(_eip_baseline_block(eip))
     flow_steps=[]
     for entry in _list(result.get('creation_flow')):
         entry=_dict(entry)
@@ -509,6 +599,153 @@ def render_eip(result):
     if result.get('order_id') is not None:
         rows.append(['订单 ID（控制台支付后生效）',result.get('order_id')])
     return block('弹性 EIP',table(['属性','值'],rows))
+
+
+_SSL_PARAM_LABELS={'brand':'品牌','cert_brand':'品牌','type':'类型','cert_type':'类型',
+                   'domain_type':'域名类型','effective_time':'年限','order_number':'张数',
+                   'is_auto_pay':'自动支付','is_auto_renew':'自动续费','domain':'域名',
+                   'apply_domain':'申请域名','domain_method':'域名验证方式',
+                   'auto_dns_auth':'自动 DNS 验证','domain_count':'域名数量',
+                   'domain_numbers':'域名数量','sans':'附加域名','expire_time':'到期时间',
+                   'enterprise_project_id':'企业项目','status':'状态','note':'说明',
+                   'tier':'档位','certificate_id':'证书 ID','cert_id':'证书 ID',
+                   'order_id':'订单 ID','track':'轨迹','applicant':'申请人',
+                   'applicant_name':'申请人姓名','applicant_email':'申请人邮箱',
+                   'applicant_phone':'申请人电话','subscribe_response':'订阅结果',
+                   'attempted':'已尝试申请'}
+_SSL_PARAM_ORDER=('brand','cert_brand','type','cert_type','domain_type','effective_time',
+                  'order_number','domain_numbers','is_auto_pay','is_auto_renew','domain',
+                  'apply_domain','domain_method','auto_dns_auth','domain_count','sans',
+                  'expire_time','enterprise_project_id','status','certificate_id','cert_id',
+                  'order_id','note')
+_SSL_METHOD_LABELS={'DNS':'DNS 验证','File':'文件验证','Email':'邮箱验证'}
+
+
+def _ssl_param_rows(params):
+    """A purchase/apply/subscription dict as label/value rows - known keys mapped to
+    Chinese labels in canonical order first, unknown keys appended in their own order;
+    string-list values unfold to one row per item (label kept on the first only)."""
+    params=_dict(params)
+    rows=[]
+
+    def append_value(key,label,value):
+        if key=='domain_method':
+            text=_scalar(value)
+            rows.append([label,_SSL_METHOD_LABELS.get(text,text)])
+            return
+        if isinstance(value,(list,tuple)):
+            items=[_scalar(item) for item in value]
+            if not items:
+                rows.append([label,'-'])
+            else:
+                for index,item in enumerate(items):
+                    rows.append([label if index==0 else '',_clip(item,56)])
+            return
+        if isinstance(value,dict):
+            rows.append([label,_clip(value,40)])
+            return
+        if key=='effective_time' and isinstance(value,(int,float)) and not isinstance(value,bool):
+            rows.append([label,'%s 年' % value])
+            return
+        if key=='order_number' and isinstance(value,(int,float)) and not isinstance(value,bool):
+            rows.append([label,'%s 张' % value])
+            return
+        rows.append([label,_scalar(value)])
+
+    for key in _SSL_PARAM_ORDER:
+        if key in params:
+            append_value(key,_SSL_PARAM_LABELS.get(key,key),params.get(key))
+    for key,value in params.items():
+        if key in _SSL_PARAM_ORDER:continue
+        append_value(key,key,value)
+    return rows
+
+
+def _ssl_kv_block(title,data):
+    data=_dict(data)
+    if not data:return None
+    return block(title,table(['项','值'],_ssl_param_rows(data)))
+
+
+def render_ssl_certificates(data):
+    """list_ssl_certificates -> the account-level SCM certificate inventory table
+    plus the status-semantics line and the cert_id-to-change_supabase_ssl hint."""
+    result=_dict(data)
+    inner=_dict(result.get('data'))
+    certificates=_list(inner.get('certificates'))
+    if not certificates:certificates=_list(result.get('certificates'))
+    total=result.get('total')
+    if total is None:total=inner.get('total')
+    if total is None:total=len(certificates)
+    rows=[]
+    for cert in certificates:
+        cert=_dict(cert)
+        sans=_list(cert.get('sans'))
+        domain=_scalar(cert.get('domain'))
+        if sans:
+            extra='另含 SAN %s 个' % len(sans)
+            domain='%s（%s）' % (domain,extra) if domain!='-' else extra
+        rows.append([cert.get('id'),cert.get('name'),domain,cert.get('type'),cert.get('brand'),
+                     cert.get('status'),cert.get('expire_time')])
+    lines=[table(['ID','名称','绑定域名','类型','品牌','状态','到期时间'],rows),
+           '状态说明：PAID=已购待申请；其余状态以 SCM 返回为准',
+           '提示：证书 ID 即 change_supabase_ssl 的 cert_id 入参']
+    note=result.get('note')
+    if note is None:note=inner.get('note')
+    if note is not None:lines.append(_wrap(_scalar(note),88))
+    return block('账号已有 SSL 证书（共 %s 张）' % _scalar(total),'\n'.join(lines))
+
+
+def render_ssl_purchase(result):
+    """purchase_supabase_ssl_cert -> the preview's parameter table, billing block,
+    application block (domain validation method) and impact; or the confirmation's
+    subscription result and application track."""
+    result=_dict(result)
+    if result.get('status')=='preview':
+        summary=table(['项','值'],[[key,result.get(key)] for key in ('status','plan_id')])
+        blocks=[block('证书购买预览',summary),
+                block('购买参数',table(['参数','值'],_ssl_param_rows(result.get('params'))))]
+        billing=result.get('billing')
+        billing_block=(_ssl_kv_block('计费',billing) if isinstance(billing,dict)
+                       else block('计费',_wrap(_scalar(billing),88)) if billing is not None else None)
+        if billing_block is not None:blocks.append(billing_block)
+        apply=result.get('apply')
+        apply_block=(_ssl_kv_block('证书申请',apply) if isinstance(apply,dict)
+                     else block('证书申请',_wrap(_scalar(apply),88)) if apply is not None else None)
+        if apply_block is not None:blocks.append(apply_block)
+        impact=_list(result.get('impact'))
+        if impact:
+            blocks.append(block('影响',[_wrap(str(item),88) for item in impact]))
+        return '\n\n'.join(blocks)
+    rows=[[key,result.get(key)] for key in ('status','plan_id','certificate_id','cert_id',
+                                            'order_id','job_id') if result.get(key) is not None]
+    blocks=[block('证书购买结果',table(['项','值'],rows))]
+    subscription=_ssl_kv_block('订阅结果',result.get('subscription'))
+    if subscription is not None:blocks.append(subscription)
+    track=None
+    for key in ('application','apply','apply_track','apply_trace'):
+        if isinstance(result.get(key),dict):
+            track=_ssl_kv_block('申请轨迹',result.get(key))
+            break
+    if track is not None:blocks.append(track)
+    for key,value in result.items():
+        if key in ('params','billing','apply','impact','warnings','subscription','application',
+                   'apply_track','apply_trace','status','plan_id','certificate_id','cert_id',
+                   'order_id','job_id','note'):continue
+        if isinstance(value,dict) and value:
+            extra=_ssl_kv_block(_SSL_PARAM_LABELS.get(key,key),value)
+            if extra is not None:blocks.append(extra)
+        elif isinstance(value,(list,tuple)) and value:
+            blocks.append(block(_SSL_PARAM_LABELS.get(key,key),[str(item) for item in value]))
+    if result.get('note') is not None:
+        blocks.append(block('说明',_wrap(_scalar(result.get('note')),88)))
+    impact=_list(result.get('impact'))
+    if impact:
+        blocks.append(block('影响',[_wrap(str(item),88) for item in impact]))
+    warnings=_list(result.get('warnings'))
+    if warnings:
+        blocks.append(block('注意',[str(item) for item in warnings]))
+    return '\n\n'.join(blocks)
 
 
 def _wrap(text,columns):

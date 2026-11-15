@@ -133,7 +133,8 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(obs['new_bucket_spec']['bucket_name'].startswith('supabase-'))
         self.assertEqual([s['tool'] for s in result['creation_flow'] if s['phase'] == 'obs_integration'],
                          ['discover_supabase_storage'])
-        eip = result['eip_baseline']
+        eip = result['step_modules']['public_access']
+        self.assertEqual(eip['status'], 'planned')
         self.assertEqual(eip['purchase_method']['recommended']['charge_mode'], 'postPaid')
         self.assertEqual(eip['bandwidth']['recommended_size_mbps'], 300)
         self.assertIn('5_bgp', eip['bandwidth']['type'])
@@ -151,7 +152,7 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         post_tools = [p.get('tool') for p in result['post_creation_flow']]
         self.assertIn('create_supabase_eip', post_tools)
         self.assertIn('bind_supabase_eip', post_tools)
-        self.assertIn('bind_supabase_eip', result['eip_baseline']['bind'])
+        self.assertIn('bind_supabase_eip', result['step_modules']['public_access']['bind'])
 
     async def test_default_recommendation_adds_network_creation_step(self):
         service = self.make(network_newly=NETWORK_NEWLY_DEFAULT)
@@ -298,10 +299,66 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(p.get('tool') == 'change_supabase_eip' for p in post))
         self.assertTrue(any('http 访问' in str(p.get('action')) for p in post))
         self.assertTrue(any('接入信息交付' in str(p.get('action')) for p in post))
-        self.assertEqual(result['eip_baseline']['applies_when'],
-                         '本编排未启用公网访问——不购买 EIP，接入用 private_ip')
+        self.assertEqual(result['step_modules']['public_access']['delivery'],
+                         '内网交付 private_ip；不购买 EIP、不开公网入方向')
+        self.assertNotIn('eip_baseline', result)
         self.assertNotIn('obs_integration', result['step_modules'])
         self.assertFalse(any(s['phase'] == 'obs_integration' for s in result['creation_flow']))
+
+    async def test_ssl_module_planned_when_enabled(self):
+        result = await self.make().arrangement('newly_instance', az_code='cn-east-3a',
+                                               needs_storage=False, needs_public_access=True, needs_ssl=True)
+        module = result['step_modules']['ssl_configuration']
+        self.assertEqual(module['status'], 'planned')
+        self.assertEqual(module['source_tools'],
+                         ['list_ssl_certificates', 'purchase_supabase_ssl_cert', 'change_supabase_ssl'])
+        self.assertEqual([option['key'] for option in module['acquisition']['options']],
+                         ['reuse', 'purchase', 'import_own'])
+        self.assertEqual(module['acquisition']['recommended'], 'purchase')
+        self.assertIn('DV_SSL_CERT_BASIC', module['acquisition']['options'][1]['note'])
+        self.assertIn('File', module['domain_note'])
+        self.assertIn('auto_dns_auth', module['domain_note'])
+        self.assertIn('change_supabase_ssl', module['enable_flow'][0])
+        self.assertTrue(any('中断' in item for item in module['impact']))
+        self.assertTrue(any('api_external_url' in item for item in module['impact']))
+        self.assertNotIn('eip_baseline', result)
+        post_tools = [p.get('tool') for p in result['post_creation_flow']]
+        self.assertIn('list_ssl_certificates', post_tools)
+        self.assertIn('purchase_supabase_ssl_cert', post_tools)
+        self.assertIn('change_supabase_ssl', post_tools)
+        self.assertNotIn('console', post_tools)
+        self.assertTrue(any('purchase_supabase_ssl_cert' in item for item in result['missing']))
+
+    async def test_ssl_module_excluded_when_disabled(self):
+        result = await self.make().arrangement('newly_instance', az_code='cn-east-3a',
+                                               needs_storage=False, needs_public_access=False, needs_ssl=False)
+        module = result['step_modules']['ssl_configuration']
+        self.assertEqual(module['status'], 'excluded')
+        self.assertIn('change_supabase_ssl', module['note'])
+        self.assertNotIn('acquisition', module)
+        post_tools = [p.get('tool') for p in result['post_creation_flow']]
+        self.assertNotIn('list_ssl_certificates', post_tools)
+        self.assertNotIn('purchase_supabase_ssl_cert', post_tools)
+        self.assertTrue(any('http 访问' in str(p.get('action')) for p in result['post_creation_flow']))
+
+    async def test_public_access_module_excluded_when_disabled(self):
+        result = await self.make().arrangement('newly_instance', az_code='cn-east-3a',
+                                               needs_storage=False, needs_public_access=False, needs_ssl=False)
+        module = result['step_modules']['public_access']
+        self.assertEqual(module['status'], 'excluded')
+        self.assertEqual(module['delivery'], '内网交付 private_ip；不购买 EIP、不开公网入方向')
+        self.assertNotIn('purchase_method', module)
+        self.assertNotIn('eip_baseline', result)
+
+    async def test_intent_modules_absent_and_decision_points_when_omitted(self):
+        result = await self.make().arrangement('newly_instance')
+        self.assertNotIn('ssl_configuration', result['step_modules'])
+        self.assertNotIn('public_access', result['step_modules'])
+        self.assertNotIn('eip_baseline', result)
+        decisions = ' '.join(result['decision_points'])
+        self.assertIn('needs_ssl', decisions)
+        self.assertIn('证书可经 MCP 购买或复用已有', decisions)
+        self.assertIn('needs_public_access', decisions)
 
     async def test_omitted_intents_become_decisions(self):
         result = await self.make().arrangement('newly_instance')
@@ -317,7 +374,11 @@ class PlanningAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_ssl(self):
         service = PlanningService()
         self.assertEqual((await service.ssl(False))['status'], 'planning_only')
-        self.assertEqual((await service.ssl(True))['execution'], 'not_executed')
+        enabled = await service.ssl(True)
+        self.assertEqual(enabled['execution'], 'not_executed')
+        self.assertIn('list_ssl_certificates', enabled['steps'][0])
+        self.assertIn('purchase_supabase_ssl_cert', enabled['acquisition'])
+        self.assertFalse(any('certificate' in item for item in enabled['missing']))
         self.assertEqual(len(service.capabilities()['scenarios']), 6)
 
     async def test_adapter(self):

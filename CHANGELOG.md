@@ -7,6 +7,42 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a48 - SSL certificates in MCP and
+  independent SSL/EIP modules in the arrangement (43 -> 45 tools, skill
+  v2.2.0):
+  - Two new SCM SSL-certificate tools. KooCLI's SCM service (SSL
+    certificate management, distinct from CCM private certificates)
+    supports the full public-certificate lifecycle, and both tools run
+    through it with the region pinned to cn-north-4 (SCM is a global
+    service; only ap-southeast-1/cn-north-4/my-kualalumpur-1 are
+    accepted). `list_ssl_certificates` (READ) inventories the account's
+    certificates with an 11-field whitelist and explains that
+    change_supabase_ssl's cert_id is this id. `purchase_supabase_ssl_cert`
+    (DANGEROUS, preview/confirm with plan_id) subscribes a certificate
+    (brand x type x domain-type x years x quantity; free tier
+    DV_SSL_CERT_BASIC; paid tiers generate a pending order unless
+    is_auto_pay) and can file the issuance application in the same
+    request (domain + verification method DNS/File/Email + applicant
+    contact; public-IP certificates support file verification only),
+    locating the new certificate id from the subscribe response or a
+    single list retry, degrading gracefully when it cannot.
+  - `plan_supabase_creation_arrangement` now carries SSL and public
+    access as two independent configuration modules alongside
+    obs_integration: `ssl_configuration` (needs_ssl=true: three
+    acquisition paths - reuse via list_ssl_certificates, purchase via
+    the new tool (recommended), or import your own; domain/IP
+    prerequisites; enable flow; interruption impact) and `public_access`
+    (the former top-level eip_baseline migrated wholesale). The stale
+    "CCM certificate purchase in the console / MCP has no certificate
+    purchasing capability" statements are corrected everywhere.
+  - Visual rendering adds certificate-list and purchase preview/confirm
+    blocks plus SSL-configuration and public-access blocks in the
+    arrangement; README/README_en (45-tool table, scenario updates) and
+    the skill (v2.2.0, server >= 0.4.0a48) are updated in step, with
+    acceptance items K24-K26.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a47 - full flavor catalog with
   group_type classification, split flavor interaction and labeled
   storage types (skill v2.1.0):

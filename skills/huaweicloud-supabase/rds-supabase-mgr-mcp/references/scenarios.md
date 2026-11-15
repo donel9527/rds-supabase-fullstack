@@ -36,7 +36,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 数据库来源？新建还是用已有 PG？ | 新建实例（newly_instance，本场景，推荐）/ 挂载已有实例（existed_instance，见场景二） |
 | 要传文件吗？（图片、视频、附件都算） | 要 → **创建前**按场景五定 OBS 方案（复用或新建也问用户）；桶名+AK/SK 进 `storage_component`——**存储创建后不可再启用**。不要 → `storage_component` 写 `{"enabled":false}`（三字段全空），不能整个省略 |
 | 要从公网访问吗？ | 要 → 创建后走场景四（EIP+安全组+`api_external_url` 同步）；不要 → 明确告知用户只能内网访问 |
-| 要 HTTPS 吗？ | 要 → 用户先备 CCM 证书（本服务无采购能力），创建后切 SSL；不要 → 走 http |
+| 要 HTTPS 吗？ | 要 → 先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点，`cert_id` 直接用于 `change_supabase_ssl`）/ 购买新证书（`purchase_supabase_ssl_cert` 两段式，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有 SCM 证书；纯 EIP 公网 IP 无域名时证书仅支持文件验证。创建后切 SSL；不要 → 走 http |
 
 答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`。部署模式是否支持 Ha 不猜：`list_supabase_flavors_with_azs(az_code, mode="Ha")` 成功 → Single/Ha 都可选；被拒 → 该环境仅 Single，如实告知。
 
@@ -138,7 +138,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 3. 追问决策点 | — | — | 按 decision_points 逐项追问到明确答复 |
 | 4. 展示 | visual 输出 | — | 表格/流程图直接给用户；三大必选模块参数注明实时来源 |
 
-基线输出结构：托管来源两决策 → 三必选模块（Supabase 基本信息/托管实例/网络控制，各注明所依赖的发现工具）→ OBS 关键可选模块（needs_storage 答复后给复用/新建两方案）→ EIP 购买基线（按需+全动态 BGP 独享带宽 5-1000M 推荐 300M）→ 步骤化 creation_flow → 创建后动作 → decision_points → 秘密边界。实际创建 1:1 严格按 creation_flow 执行，不偏离目标与计划。
+基线输出结构：托管来源两决策 → 三必选模块（Supabase 基本信息/托管实例/网络控制，各注明所依赖的发现工具）→ OBS 关键可选模块（needs_storage 答复后给复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（needs_ssl/needs_public_access 答复后输出：SSL 给证书获取三路径——复用 `list_ssl_certificates`/购买 `purchase_supabase_ssl_cert` 推荐/导入自有，免费档 DV_SSL_CERT_BASIC；公网给 EIP 购买基线：按需+全动态 BGP 独享带宽 5-1000M 推荐 300M）→ 步骤化 creation_flow → 创建后动作（SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`）→ decision_points → 秘密边界。实际创建 1:1 严格按 creation_flow 执行，不偏离目标与计划。
 
 ## 场景四：公网开通（EIP 采购与绑定）
 
@@ -148,6 +148,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
 | 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
 | 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |
+| 5. HTTPS（可选） | `list_ssl_certificates` / `purchase_supabase_ssl_cert` → `change_supabase_ssl` | cert_id 即 `change_supabase_ssl` 入参 | 证书获取三路径：复用（盘点账号已有证书）/购买（推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 无域名时仅文件验证；切换闪断低峰执行，生效后回调协议改 https |
 
 绑定成功后必须同步 `api_external_url`：邮箱确认链接与 OAuth 回调都指向该地址，不同步则登录链路是断的。解绑（`change_supabase_eip` is_bind=false，不带绑定参数）不释放 EIP、不停计费；解绑后旧公网地址失效，与用户确认改回内网地址还是等重新绑定。新建 EIP 的标签（USAGE_FOR）由 `create_supabase_eip` 自动打，用于在控制台区分流程自动创建的 EIP。
 
@@ -169,7 +170,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 1. 基线 | `show_supabase_auth_config` | application_id | 空串=未配置；作为更新对照基准 |
 | 2. 开关 | `update_supabase_auth_flags` | enable_account_sign_up / enable_anonymous_users | 只改传入的开关；先评估匿名暴露面 |
 | 3. 邮箱登录 | `update_supabase_auth_config` | 请求文件别名（smtp_config 等） | SMTP 密码只入文件；端口常见 465/587；确认邮件模板是唯一可自定义模板 |
-| 4. GitHub 登录 | `update_supabase_auth_config` | 请求文件别名（github_oauth_provider） | Client ID 非秘密可对话收；Client Secret 只入文件；回调地址与 GitHub App 一致 |
+| 4. GitHub 登录 | `update_supabase_auth_config` | 请求文件别名（github_oauth_provider） | Client ID 非秘密可对话收；Client Secret 只入文件；回调地址与 GitHub App 一致；`https` 回调前提是应用已开 SSL（证书获取三路径见场景一四问④） |
 | 5. 回查 | `show_supabase_auth_config` | application_id | 配置生效；空串仍未配置 |
 
 字段级契约（顶层八选一、值不得为空、省略=不变、关闭只传开关）见 [本地请求与字段契约](local-requests.md)。验证分级：保存成功（任务+回查）不等于业务可用——真实发信、真实登录才算。

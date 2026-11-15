@@ -485,7 +485,9 @@ class RenderArrangementTests(unittest.TestCase):
         self.assertIn('【模块一：Supabase 基本信息】',out)
         self.assertIn('【模块二：托管实例】',out)
         self.assertIn('【模块三：网络控制】',out)
-        self.assertIn('【EIP 购买基线】',out)
+        self.assertNotIn('【EIP 购买基线】',out)
+        self.assertNotIn('【SSL 配置】',out)
+        self.assertNotIn('【公网访问（EIP）】',out)
         self.assertIn('【创建流程（1:1 严格执行）】',out)
         self.assertIn('【创建后动作】',out)
         self.assertNotIn('【待决策】',out)
@@ -551,12 +553,15 @@ class RenderEipTests(unittest.TestCase):
 class ToleranceTests(unittest.TestCase):
     def test_every_renderer_tolerates_empty_and_partial(self):
         renderers=(visual.render_basic_options,visual.render_db_instance,visual.render_network,
-                   visual.render_arrangement,visual.render_eip)
+                   visual.render_arrangement,visual.render_eip,visual.render_ssl_certificates,
+                   visual.render_ssl_purchase)
         partials=(visual.render_basic_options({'az_code':'cn-east-3a'}),
                   visual.render_db_instance({'scenario':'existed_instance'}),
                   visual.render_network({'scenario':'newly_instance'}),
                   visual.render_arrangement({'manage_type':'newly_instance'}),
-                  visual.render_eip({'mode':'idle_selection'}))
+                  visual.render_eip({'mode':'idle_selection'}),
+                  visual.render_ssl_certificates({'total':1}),
+                  visual.render_ssl_purchase({'status':'preview','params':{'brand':'TRUSTASIA'}}))
         for renderer in renderers:
             for payload in ({},None):
                 with self.subTest(renderer=renderer.__name__,payload=payload):
@@ -619,6 +624,78 @@ def arrangement_obs_fixture():
                            'region':'cn-east-3','enterprise_project':'0'},
         'credential':{'temporary':True,'notice':'临时凭证含 SecurityToken，过期需重新获取'}}
     return result
+
+
+def arrangement_ssl_public_fixture():
+    result=arrangement_fixture()
+    del result['eip_baseline']
+    result['step_modules']['ssl_configuration']={
+        'status':'planned',
+        'acquisition':{'recommended':'purchase',
+                       'options':[{'key':'reuse','name':'复用已有证书',
+                                   'note':'list_ssl_certificates 盘点账号已有证书，选定 cert_id 直接用于 change_supabase_ssl'},
+                                  {'key':'purchase','name':'购买新证书',
+                                   'note':'purchase_supabase_ssl_cert 两段式购买+申请；免费档 DV_SSL_CERT_BASIC 推荐'},
+                                  {'key':'import_own','name':'导入自有证书',
+                                   'note':'用户已在 SCM 持有证书，提供 cert_id 挂载'}]},
+        'domain_note':'证书绑定域名须可用；纯 EIP 公网 IP 无域名时仅支持文件验证',
+        'enable_flow':['list_ssl_certificates：盘点可复用证书，无合适再购买',
+                       'purchase_supabase_ssl_cert：两段式购买并申请（免费档推荐）',
+                       'change_supabase_ssl：以选定 cert_id 开启 SSL，低峰执行'],
+        'impact':['SSL 切换短暂中断，低峰执行','生效后访问协议变 https，api_external_url 与回调地址须同步']}
+    result['step_modules']['public_access']={
+        'status':'planned',
+        'applies_when':'公网访问（needs_public_access；建议默认启用）',
+        'purchase_method':{'options':[{'charge_mode':'postPaid','name':'按需购买','note':'随用随停，成本可控'},
+                                      {'charge_mode':'prePaid','name':'包周期','note':'长期稳定运行再选'}],
+                           'recommended':{'charge_mode':'postPaid','name':'按需购买'}},
+        'bandwidth':{'share_type':'PER（独享带宽）','type':'全动态 BGP（publicip.type=5_bgp）',
+                     'size_range_mbps':'5-1000','recommended_size_mbps':300},
+        'purchase':'优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定',
+        'bind':'bind_supabase_eip(instance_id, public_ip_id, public_ip)（三重校验，RDS AttachEip）',
+        'post_bind':'绑定成功后必须 update_supabase_auth_config 同步 api_external_url'}
+    return result
+
+
+def arrangement_modules_excluded_fixture():
+    result=arrangement_fixture()
+    del result['eip_baseline']
+    result['step_modules']['ssl_configuration']={'status':'excluded',
+                                                 'note':'本次不开 SSL：应用走 http 访问（enable_ssl=false）'}
+    result['step_modules']['public_access']={'status':'excluded',
+                                             'note':'内网交付 private_ip；不购买 EIP、不开公网入方向'}
+    return result
+
+
+def ssl_certificates_fixture():
+    return {'data':{'certificates':[
+                {'id':'scm-1001','name':'wildcard-example','domain':'*.example.com',
+                 'sans':['a.example.com','b.example.com'],'type':'DV_SSL_CERT','brand':'GEOTRUST',
+                 'status':'ISSUED','expire_time':'2027-03-01T00:00:00Z','domain_type':'WILDCARD',
+                 'domain_count':1,'enterprise_project_id':'0'},
+                {'id':'scm-1002','name':'ip-cert','domain':'123.60.101.251','sans':[],
+                 'type':'DV_SSL_CERT_BASIC','brand':'TRUSTASIA','status':'PAID','expire_time':None,
+                 'domain_type':'SINGLE_DOMAIN','domain_count':1,'enterprise_project_id':'0'}]},
+            'total':2,
+            'note':'SCM 为账号级全局资源（全局服务，region 固定 cn-north-4）'}
+
+
+def ssl_purchase_preview_fixture():
+    return {'status':'preview','plan_id':'plan-ssl-9',
+            'params':{'brand':'TRUSTASIA','type':'DV_SSL_CERT_BASIC','domain_type':'SINGLE_DOMAIN',
+                      'effective_time':1,'order_number':1,'is_auto_pay':False},
+            'billing':{'tier':'免费档','note':'DV_SSL_CERT_BASIC 免费，订阅即生效，无需支付订单'},
+            'apply':{'domain':'123.60.101.251','domain_method':'File','auto_dns_auth':False,
+                     'applicant':{'name':'张三','email':'zhang@example.com','phone':'13800000000'}},
+            'impact':['免费档无需支付；付费档生成待支付订单，支付后才可申请签发',
+                      '纯 EIP 公网 IP 证书仅支持文件验证']}
+
+
+def ssl_purchase_confirm_fixture():
+    return {'status':'submitted','plan_id':'plan-ssl-9','certificate_id':'scm-2001',
+            'subscription':{'certificate_id':'scm-2001','status':'PAID','expire_time':'2027-11-15'},
+            'apply':{'status':'apply_submitted','domain_method':'File',
+                     'track':['订阅完成','证书申请已提交，等待域名验证']}}
 
 
 class RenderStorageTests(unittest.TestCase):
@@ -718,6 +795,171 @@ class RenderArrangementObsTests(unittest.TestCase):
         out=visual.render_arrangement(result)
         self.assertIn('【OBS 桶对接（大文件存储场景）】',out)
         self.assertNotIn('凭证提示',out)
+
+
+class RenderArrangementSslPublicTests(unittest.TestCase):
+    def test_ssl_and_public_access_modules(self):
+        out=visual.render_arrangement(arrangement_ssl_public_fixture())
+        self.assertIn('【SSL 配置】',out)
+        self.assertIn('状态：planned',out)
+        self.assertIn('- 复用已有证书：list_ssl_certificates 盘点账号已有证书，选定 cert_id 直接用于 change_supabase_ssl',out)
+        self.assertIn('- 购买新证书：purchase_supabase_ssl_cert 两段式购买+申请；免费档 DV_SSL_CERT_BASIC 推荐（推荐）',out)
+        self.assertIn('- 导入自有证书：用户已在 SCM 持有证书，提供 cert_id 挂载',out)
+        self.assertIn('域名与 IP 前提：证书绑定域名须可用；纯 EIP 公网 IP 无域名时仅支持文件验证',out)
+        self.assertIn('启用流程：',out)
+        self.assertIn('1. list_ssl_certificates：盘点可复用证书，无合适再购买',out)
+        self.assertIn('3. change_supabase_ssl：以选定 cert_id 开启 SSL，低峰执行',out)
+        self.assertIn('- SSL 切换短暂中断，低峰执行',out)
+        self.assertIn('【公网访问（EIP）】',out)
+        self.assertIn('按需购买',out)
+        self.assertIn('300M',out)
+        self.assertIn('bind_supabase_eip',out)
+        self.assertIn('update_supabase_auth_config 同步 api_externa',out)
+        self.assertNotIn('【EIP 购买基线】',out)
+        self.assertIn('【模块三：网络控制】',out)
+
+    def test_excluded_modules_render_notices(self):
+        out=visual.render_arrangement(arrangement_modules_excluded_fixture())
+        self.assertIn('【SSL 配置】',out)
+        self.assertIn('状态：excluded（已排除）',out)
+        self.assertIn('本次不开 SSL：应用走 http 访问（enable_ssl=false）',out)
+        self.assertIn('【公网访问（EIP）】',out)
+        self.assertIn('内网交付 private_ip；不购买 EIP、不开公网入方向',out)
+        self.assertNotIn('【EIP 购买基线】',out)
+
+    def test_excluded_modules_fall_back_to_default_notes(self):
+        result=arrangement_fixture()
+        del result['eip_baseline']
+        result['step_modules']['ssl_configuration']={'status':'excluded'}
+        result['step_modules']['public_access']={'status':'excluded'}
+        out=visual.render_arrangement(result)
+        self.assertIn('本次不开 SSL：应用保持 http 访问',out)
+        self.assertIn('内网交付：不购买 EIP、不开公网入方向，接入用 private_ip',out)
+
+    def test_excluded_public_access_uses_delivery_key(self):
+        result=arrangement_fixture()
+        del result['eip_baseline']
+        result['step_modules']['public_access']={'status':'excluded',
+                                                 'delivery':'内网交付 private_ip；不购买 EIP、不开公网入方向'}
+        out=visual.render_arrangement(result)
+        self.assertIn('【公网访问（EIP）】',out)
+        self.assertIn('状态：excluded（已排除）',out)
+        self.assertIn('内网交付 private_ip；不购买 EIP、不开公网入方向',out)
+
+    def test_modules_absent_renders_legacy_eip_baseline(self):
+        out=visual.render_arrangement(arrangement_fixture())
+        self.assertNotIn('【SSL 配置】',out)
+        self.assertNotIn('【公网访问（EIP）】',out)
+        self.assertIn('【EIP 购买基线】',out)
+
+    def test_public_access_module_wins_over_stale_eip_baseline(self):
+        result=arrangement_ssl_public_fixture()
+        result['eip_baseline']={'purchase_method':{'recommended':{'name':'按需购买'}},
+                                'bandwidth':{'recommended_size_mbps':300}}
+        out=visual.render_arrangement(result)
+        self.assertIn('【公网访问（EIP）】',out)
+        self.assertNotIn('【EIP 购买基线】',out)
+
+
+class RenderSslCertificatesTests(unittest.TestCase):
+    def test_full_fixture(self):
+        out=visual.render_ssl_certificates(ssl_certificates_fixture())
+        self.assertIn('【账号已有 SSL 证书（共 2 张）】',out)
+        self.assertIn('scm-1001',out)
+        self.assertIn('wildcard-example',out)
+        self.assertIn('*.example.com（另含 SAN 2 个）',out)
+        self.assertIn('123.60.101.251',out)
+        self.assertIn('DV_SSL_CERT_BASIC',out)
+        self.assertIn('GEOTRUST',out)
+        self.assertIn('TRUSTASIA',out)
+        self.assertIn('PAID',out)
+        self.assertIn('2027-03-01T00:00:00Z',out)
+        self.assertIn('状态说明：PAID=已购待申请；其余状态以 SCM 返回为准',out)
+        self.assertIn('提示：证书 ID 即 change_supabase_ssl 的 cert_id 入参',out)
+        self.assertIn('SCM 为账号级全局资源',out)
+
+    def test_bare_certificates_envelope(self):
+        out=visual.render_ssl_certificates({'certificates':[
+            {'id':'scm-1','name':'c1','domain':'a.example.com','sans':[],'type':'OV_SSL_CERT',
+             'brand':'GLOBALSIGN','status':'PAID','expire_time':'2027-01-01'}],
+            'total':1,'note':'note from top level'})
+        self.assertIn('【账号已有 SSL 证书（共 1 张）】',out)
+        self.assertIn('scm-1',out)
+        self.assertIn('note from top level',out)
+
+    def test_missing_keys_do_not_raise(self):
+        for payload in ({},None,{'data':{}},{'data':{'certificates':[]}},{'total':3}):
+            with self.subTest(payload=payload):
+                self.assertTrue(isinstance(visual.render_ssl_certificates(payload),str))
+        out=visual.render_ssl_certificates({})
+        self.assertIn('【账号已有 SSL 证书（共 0 张）】',out)
+        self.assertIn('(无数据)',out)
+        self.assertIn('状态说明：PAID=已购待申请',out)
+
+
+class RenderSslPurchaseTests(unittest.TestCase):
+    def test_preview_full(self):
+        out=visual.render_ssl_purchase(ssl_purchase_preview_fixture())
+        self.assertIn('【证书购买预览】',out)
+        self.assertIn('plan-ssl-9',out)
+        self.assertIn('【购买参数】',out)
+        self.assertIn('品牌',out)
+        self.assertIn('TRUSTASIA',out)
+        self.assertIn('类型',out)
+        self.assertIn('DV_SSL_CERT_BASIC',out)
+        self.assertIn('域名类型',out)
+        self.assertIn('年限',out)
+        self.assertIn('1 年',out)
+        self.assertIn('张数',out)
+        self.assertIn('1 张',out)
+        self.assertIn('自动支付',out)
+        self.assertIn('false',out)
+        self.assertIn('【计费】',out)
+        self.assertIn('免费档',out)
+        self.assertIn('【证书申请】',out)
+        self.assertIn('域名验证方式',out)
+        self.assertIn('文件验证',out)
+        self.assertIn('【影响】',out)
+        self.assertIn('付费档生成待支付订单',out)
+        self.assertIn('纯 EIP 公网 IP 证书仅支持文件验证',out)
+
+    def test_confirm_full(self):
+        out=visual.render_ssl_purchase(ssl_purchase_confirm_fixture())
+        self.assertIn('【证书购买结果】',out)
+        self.assertIn('submitted',out)
+        self.assertIn('scm-2001',out)
+        self.assertIn('【订阅结果】',out)
+        self.assertIn('PAID',out)
+        self.assertIn('【申请轨迹】',out)
+        self.assertIn('文件验证',out)
+        self.assertIn('证书申请已提交，等待域名验证',out)
+
+    def test_confirm_with_pending_order_and_extra_blocks(self):
+        result=ssl_purchase_confirm_fixture()
+        result['status']='order_created'
+        result['order_id']='CS123456'
+        result['application']={'apply_status':'not_started','domain_method':'DNS',
+                               'auto_dns_auth':True}
+        del result['apply']
+        result['warnings']=['付费档订单支付后才能申请签发']
+        out=visual.render_ssl_purchase(result)
+        self.assertIn('order_created',out)
+        self.assertIn('CS123456',out)
+        self.assertIn('【申请轨迹】',out)
+        self.assertIn('DNS 验证',out)
+        self.assertIn('自动 DNS 验证',out)
+        self.assertIn('【注意】',out)
+        self.assertIn('付费档订单支付后才能申请签发',out)
+
+    def test_missing_keys_do_not_raise(self):
+        for payload in ({},None,{'status':'preview'},{'status':'submitted'},
+                        {'status':'order_created','subscription':{}}):
+            with self.subTest(payload=payload):
+                self.assertTrue(isinstance(visual.render_ssl_purchase(payload),str))
+        out=visual.render_ssl_purchase({'status':'preview'})
+        self.assertIn('【证书购买预览】',out)
+        self.assertIn('【购买参数】',out)
+        self.assertIn('(无数据)',out)
 
 
 def creation_preview_fixture():

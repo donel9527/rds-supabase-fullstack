@@ -11,7 +11,7 @@ except Exception:
 SCENARIOS = {
     "create": "Creation via local reference available: existing PG (database_name fixed to root) or new PG (Single or Ha mode; postPaid or prepaid 1-9 months / 1-3 years - prepaid returns a console order); intent-driven phase planning via plan_supabase_creation; backend policy/live acceptance pending",
     "delete": "Application-only execution available; PG cascade remains unavailable",
-    "access": "SSL/EIP/application-password adapters available; certificate discovery and live validation pending",
+    "access": "SSL/EIP/application-password adapters available; SCM certificate inventory (list_ssl_certificates) and two-phase purchase (purchase_supabase_ssl_cert) available; live validation pending",
     "security_group": "Native VPC group query/create and rule add/delete adapters available; shared-resource inventory and live validation pending",
     "apikey": "Metadata/reset and protected local-file key delivery available; automatic new-key correlation unavailable",
     "business_config": "Auth/SMTP/GitHub/confirmation-template/OBS adapters available; omitted SK requires enabled Storage and unchanged AK",
@@ -269,20 +269,44 @@ class PlanningService:
                           "credential": obs.credential_mode(),
                           "note": "先调 discover_supabase_storage 确定获取方式；新建走 create_supabase_new_obs；storage_component（bucket + 持久 AK/SK 经本地请求文件）随创建请求一次提交"}
 
-        # EIP purchase baseline
-        eip = {"applies_when": ("本编排未启用公网访问——不购买 EIP，接入用 private_ip" if needs_public_access is False
-                                else "公网访问（needs_public_access；建议默认启用）"),
-               "purchase_method": {"options": [{"charge_mode": "postPaid", "name": "按需购买",
-                                               "note": "随用随停，试运行与变更期成本可控"},
-                                              {"charge_mode": "prePaid", "name": "包周期",
-                                               "note": "订单支付与退订受合约约束，长期稳定运行再选"}],
-                                   "recommended": {"charge_mode": "postPaid", "name": "按需购买"}},
-               "bandwidth": {"share_type": "PER（独享带宽）",
-                             "type": "全动态 BGP（publicip.type=5_bgp）",
-                             "size_range_mbps": "5-1000", "recommended_size_mbps": 300},
-               "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
-               "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
-               "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}
+        # Public access (EIP) module
+        module_public = None
+        if needs_public_access is True:
+            module_public = {"status": "planned",
+                             "applies_when": "公网访问（needs_public_access；建议默认启用）",
+                             "purchase_method": {"options": [{"charge_mode": "postPaid", "name": "按需购买",
+                                                             "note": "随用随停，试运行与变更期成本可控"},
+                                                            {"charge_mode": "prePaid", "name": "包周期",
+                                                             "note": "订单支付与退订受合约约束，长期稳定运行再选"}],
+                                                 "recommended": {"charge_mode": "postPaid", "name": "按需购买"}},
+                             "bandwidth": {"share_type": "PER（独享带宽）",
+                                           "type": "全动态 BGP（publicip.type=5_bgp）",
+                                           "size_range_mbps": "5-1000", "recommended_size_mbps": 300},
+                             "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
+                             "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
+                             "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}
+        elif needs_public_access is False:
+            module_public = {"status": "excluded", "delivery": "内网交付 private_ip；不购买 EIP、不开公网入方向"}
+
+        # SSL configuration module
+        module_ssl = None
+        if needs_ssl is True:
+            module_ssl = {"source_tools": ["list_ssl_certificates", "purchase_supabase_ssl_cert", "change_supabase_ssl"],
+                          "status": "planned",
+                          "acquisition": {"options": [
+                              {"key": "reuse", "name": "复用已有证书",
+                               "note": "list_ssl_certificates 盘点账号已有证书（账号级 SCM 资源），取其 id 作 change_supabase_ssl 的 cert_id"},
+                              {"key": "purchase", "name": "MCP 工具购买+申请（推荐）",
+                               "note": "purchase_supabase_ssl_cert 两段式：SCM 订阅+申请一次完成；推荐免费档 DV_SSL_CERT_BASIC（有域名时）；付费 DV/OV/EV 按需"},
+                              {"key": "import_own", "name": "导入自有证书",
+                               "note": "控制台/ImportCertificate 导入第三方证书后取 id"}],
+                              "recommended": "purchase"},
+                          "domain_note": "域名与 IP 前提：证书绑定域名；当前访问地址为 https://<EIP>:8443 形式时——纯 EIP 无域名可申请公网 IP 证书（仅文件 File 验证）；有域名则 DNS 验证最顺且华为云 DNS 可自动推送（auto_dns_auth）",
+                          "enable_flow": ["change_supabase_ssl(application_id, enable_ssl=true, cert_id=证书 id) 两段式"],
+                          "impact": ["SSL 切换短暂中断，低峰执行", "生效后 api_external_url 协议变 https，需复核邮箱链接与 OAuth 回调"]}
+        elif needs_ssl is False:
+            module_ssl = {"status": "excluded",
+                          "note": "http 访问（enable_ssl=false），内网/试运行可接受；后续可经 change_supabase_ssl 开启（需证书）"}
 
         # Step-numbered creation flow - executed strictly, one by one
         sg_steps = (module_network.get("security_group_plan") or {}).get("apply_steps") or []
@@ -344,7 +368,7 @@ class PlanningService:
             post.append({"tool": "show_supabase_application", "action": "内网交付 private_ip；不购买 EIP、不开公网入方向"})
         else:
             post.append({"tool": "create_supabase_eip",
-                         "action": "按 eip_baseline 采购：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、300M 独享、自动打标）",
+                         "action": "按 public_access 模块执行：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、300M 独享、自动打标）",
                          "args": {"prefer_idle": True, "charge_mode": "postPaid", "bandwidth_size_mbps": 300}})
             post.append({"tool": "bind_supabase_eip",
                          "args": {"instance_id": "<应用 ID（in32 结尾）>", "public_ip_id": "<EIP ID>", "public_ip": "<EIP 地址>"},
@@ -355,9 +379,11 @@ class PlanningService:
         if needs_ssl is False:
             post.append({"tool": "-", "action": "http 访问（enable_ssl=false），内网/试运行可接受"})
         else:
-            post.append({"tool": "console", "action": "用户在 CCM 购买证书（MCP 无购买能力）"})
+            post.append({"tool": "list_ssl_certificates", "action": "盘点已有证书：有可用证书取其 id（复用路径）"})
+            post.append({"tool": "purchase_supabase_ssl_cert",
+                         "action": "无可用证书则购买+申请（推荐免费档 DV_SSL_CERT_BASIC；有域名 DNS 验证，纯 EIP 公网 IP 证书仅 File 验证；is_auto_pay=false 生成待支付订单须支付后生效）"})
             post.append({"tool": "change_supabase_ssl",
-                         "args": {"application_id": "<id>", "enable_ssl": True, "cert_id": "<证书 ID>"},
+                         "args": {"application_id": "<id>", "enable_ssl": True, "cert_id": "<证书 id>"},
                          "note": "切换短暂中断，低峰执行；完成后复核 api_external_url 协议"})
         if needs_storage is True:
             post.append({"tool": "update_supabase_storage", "action": "存储凭据轮换/更新：桶名与持久 AK/SK 经本地请求文件（创建后 storage_component 已定型，仅凭据可轮换）"})
@@ -376,7 +402,7 @@ class PlanningService:
         if az_code is None: decision_points.append("az_code：可售 AZ 待选（list_supabase_flavors_with_azs）")
         if needs_storage is None: decision_points.append("needs_storage：是否存在大文件存储场景（图片/视频/大文件）——创建后不可再启用，创建前必须确认")
         if needs_public_access is None: decision_points.append("needs_public_access：公网访问（建议启用）")
-        if needs_ssl is None: decision_points.append("needs_ssl：https（CCM 证书外购）")
+        if needs_ssl is None: decision_points.append("needs_ssl：https（证书可经 MCP 购买或复用已有）")
 
         return {"status": "arrangement_baseline", "execution": "not_executed", "manage_type": manage_type,
                 "declaration": "本工具为编排规划与参数基线，不创建任何资源；实际创建严格按 creation_flow 逐步执行，不偏离目标与计划",
@@ -389,20 +415,22 @@ class PlanningService:
                 "step_modules": {**({"supabase_basics": module_basics,
                                     "managed_instance": module_instance,
                                     "network_control": module_network}),
-                                **({"obs_integration": module_obs} if module_obs else {})},
-                "eip_baseline": eip,
+                                **({"obs_integration": module_obs} if module_obs else {}),
+                                **({"public_access": module_public} if module_public else {}),
+                                **({"ssl_configuration": module_ssl} if module_ssl else {})},
                 "creation_flow": flow,
                 "post_creation_flow": post,
                 "decision_points": decision_points,
                 "security_notes": ["应用密码、数据库密码、存储 AK/SK、SMTP 密码、GitHub client secret 只进受保护本地请求文件，预览与对话均不回显",
                                    "API key 值只经 deliver_supabase_api_key 落受保护本地文件，不进对话",
                                    "全 0（0.0.0.0/0）入方向规则经 KooCLI 配置，需用户明确确认"],
-                "missing": ["后端密码/版本/容量/售卖策略以服务端为准", "CCM 证书购买在控制台", "EIP 购买在控制台/KooCLI（MCP 仅负责绑定）"]}
+                "missing": ["后端密码/版本/容量/售卖策略以服务端为准", "SSL 证书购买/申请经 purchase_supabase_ssl_cert（SCM，全局服务）", "EIP 采购经 create_supabase_eip（空闲优先）"]}
 
     async def ssl(self, enable_ssl: bool) -> dict[str, object]:
         if not enable_ssl:
             return {"status": "planning_only", "execution": "not_executed", "request_body": ssl_body(False), "missing": ["verified transport", "job terminal schema", "live state verification"]}
         return {"status": "planning_only", "execution": "not_executed",
-                "steps": ["list certificates", "select compatible certificate", "review SSL enable plan", "submit once after execution support exists", "verify application state"],
+                "steps": ["list_ssl_certificates 盘点已有证书", "select compatible certificate", "review SSL enable plan", "submit once after execution support exists", "verify application state"],
+                "acquisition": "无可用证书已可经 purchase_supabase_ssl_cert 购买+申请（推荐免费档 DV_SSL_CERT_BASIC；有域名 DNS 验证，纯 EIP 公网 IP 证书仅 File 验证）；也可复用已有或导入自有证书",
                 "certificates": await self.client.list_certificates(),
-                "missing": ["certificate schema/compatibility", "response and SSL effective-state contract"]}
+                "missing": ["response and SSL effective-state contract"]}
