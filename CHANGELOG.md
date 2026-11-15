@@ -7,6 +7,58 @@ semantic versioning.
 
 ### Added
 
+- `rds-supabase-mgr-mcp` skill v2.0.0 (server `mcp_server_rds_supabase_mgr` v0.4.0a46):
+  the skill is deeply rewritten - not patched - to match the systematically
+  rewritten MCP (43 tools), studying the GaussDB MCP skill's structure,
+  register and layout. The frontmatter description now carries the capability
+  summary, the full trigger-scenario list (from-zero creation, existing-PG
+  attach, arrangement baseline, public access, OBS storage, auth/login,
+  access info and key delivery, order payment, daily changes, deletion,
+  troubleshooting) and NOT-for routing to the data-plane MCP, direct
+  KooCLI and SQL. The body follows the GaussDB register: overview with
+  invocation chain, no-session-state rule, scenario bullets and ten
+  user-voice example quotes; a capability-boundary routing table;
+  preconditions; a key-constraints chapter (read-only default,
+  preview/confirm with plan_id, local request files only for secrets,
+  KooCLI-only /0, storage-not-enrollable-after-creation, in32 binding
+  validation, action-lock exclusion, tag-gated group cleanup); a common
+  discipline; eleven scenario chapters (from-zero creation with the new
+  auto-provisioning tools, existing-PG attach, arrangement baseline, EIP
+  purchase and bind, OBS storage, auth/login/enhancement, access info and
+  key delivery, daily changes, prepaid orders, deletion, troubleshooting);
+  a grouped 43-tool command table; parameter-contract quick reference
+  (charge_info string periods, whole-hour time_zone, naming rules,
+  public_access_cidr three-way choice); output format (chart-rendered
+  visual, structured error envelopes); verification; best practices; and
+  version constraints. references/scenarios.md is rewritten as the per-
+  scenario operational reference (step/tool/parameter/checkpoint tables,
+  the creation request body, an 18-point pre-preview checklist, failure
+  handling); acceptance.md gains scenario-level acceptance items
+  including storage-not-enrollable-after-creation and the order
+  double-equality amount check; install.md and local-requests.md are
+  fact-corrected. skill-lint now guards the eleven new scenario headings.
+- `rds-supabase-web-build` skill: the application-creation and resource-
+  preparation exposition is removed and replaced with direct delegation to
+  the rds-supabase-mgr-mcp skill - single source of truth, no duplication,
+  no drift. Step three of the workflow now keeps only the interactive
+  choice gates and web-specific constraints (project-scoped MCP
+  registration, credentials into protected project files, the two-bucket
+  boundary between the public-read frontend hosting bucket and the
+  private backend storage bucket, and the ban on reusing the hosting
+  bucket), while creation orchestration (plan_supabase_creation_
+  arrangement), scenario tools (create_supabase_with_new_instance /
+  create_supabase_link_exist_instance with automatic security-group and
+  OBS provisioning), public access (EIP flow), key delivery and OBS
+  storage all reference the mgr skill's chapters and tools. The stale
+  post-hoc storage-enablement path is corrected: storage is enabled at
+  creation time only and cannot be backfilled onto an existing
+  application - the flow now tells the user so and routes to a new-
+  application decision. references/workflow-stages.md mirrors the
+  delegation; old tool names (create_supabase_application,
+  plan_supabase_creation) are fully gone.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a45: the creation timezone becomes a
   first-class field option with its official value range, and the README
   business scenarios gain purchase modes plus elevate the OBS integration.

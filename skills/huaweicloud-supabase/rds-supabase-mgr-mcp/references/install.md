@@ -1,6 +1,6 @@
 # 安装手册：管理面 MCP 的来源、安装与使能
 
-SKILL.md 第二步的展开。安装方式的权威定义是本仓 `server/mcp_server_rds_supabase_mgr/README.md`；本手册把结论固化下来，并给出宿主注册模板。
+SKILL.md「前置条件」与「验证方法」的展开。安装方式的权威定义是本仓 `server/mcp_server_rds_supabase_mgr/README.md`；本手册把结论固化下来，并给出宿主注册模板。
 
 ## 一、来源锁定（先立规矩，再动手）
 
@@ -142,7 +142,8 @@ opencode 项目 `opencode.json` 等价写法（V2 结构：服务器条目位于
 
 | 变量 | 何时必填 | 说明 |
 |---|---|---|
-| `SUPABASE_RDS_ENDPOINT` | 恒必填 | 原生 RDS HTTPS 端点（非 Console、非 /rest 代理）；可由 `diagnostics discover` 推导 |
+| `HUAWEICLOUD_REGION` | 推荐恒配置 | 区域：RDS 服务入口推导、IAM 项目自动发现与安全组工具共用；缺省时入口无法推导、项目须显式配置 |
+| `SUPABASE_RDS_ENDPOINT` | 否 | 原生 RDS HTTPS 端点（非 Console、非 /rest 代理）；缺省按 `HUAWEICLOUD_REGION` 推导，也可由 `diagnostics discover` 推导 |
 | `HUAWEICLOUD_PROJECT_ID` | 否 | 目标项目 ID；缺省经 IAM 按区域自动发现（AK/SK 需项目列表权限；子项目账号显式配置） |
 | `SUPABASE_TRANSPORT` | AK/SK 模式必填（=sdk_core） | 默认 rest；rest 只认 Token |
 | `HUAWEICLOUD_ACCESS_KEY` / `HUAWEICLOUD_SECRET_KEY` | sdk_core 模式必填 | 访问密钥 |

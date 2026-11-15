@@ -27,7 +27,7 @@
 | email_oauth_provider | 见下 | 部分 |
 | email_template_config | 见下 | 否 |
 
-**api_external_url 跟着公网地址走**：EIP 绑定成功后必须同步更新为拼装的公网访问地址（场景一 4.1 的强制步骤）；解绑后旧值失效，与用户确认改回内网地址还是等重新绑定。
+**api_external_url 跟着公网地址走**：EIP 绑定成功后必须同步更新为拼装的公网访问地址（场景四的强制步骤）；解绑后旧值失效，与用户确认改回内网地址还是等重新绑定。
 
 **github_oauth_provider**：enable_github（布尔）、oauth_client_id、oauth_client_secret（**秘密**）、redirect_uri（URL，与 GitHub App 内配置一致）。**关闭时只传 `{"enable_github": false}`**，带其他字段会被拒绝。
 
@@ -49,7 +49,7 @@
 
 ### 创建（create_supabase_with_new_instance / create_supabase_link_exist_instance）
 
-公共必填与两分支字段见 [场景手册](scenarios.md)（含真实请求示例与**预览前逐项核对清单**）。秘密字段：顶层 password（应用密码，默认用户 supabase）、managed_instance.password（路线 A 数据库密码）、existing_instance.database_pwd（路线 B）、storage_component 的 ak/sk。**密码规则**（应用密码与数据库密码同规则）：8-32 位，至少含大写/小写/数字/特殊字符（`~!@#$%^*-_+=?,`）三类。**创建路径没有"省略 SK"——启用存储必须全凭据**。要点：version 取当前最高的应用版本（x.y.z，不是 PG 引擎版本）；mode 单机 Single 或主备 Ha（ha 对象跟着选）；charge_info 按需或包周期（包周期：period_type 为字符串 "month"（月）/"year"（年），period_num 1-9 个月或 1-3 年——**period_type 是字符串不是数字**，传 2/3 会被本地拒绝；包周期返回订单号走订单工具支付）；managed_instance.volume.type 按环境查询结果选择（KooCLI ListStorageTypes）；port 传 5432 或省略；enterprise_project_id 默认 default 项目（"0"）；路线 B 的 database_name 固定 root。
+公共必填与两分支字段见 [场景手册](scenarios.md)（含真实请求示例与**预览前逐项核对清单**）。秘密字段：顶层 password（应用密码，默认用户 supabase）、managed_instance.password（新建实例的数据库密码）、existing_instance.database_pwd（挂载已有实例）、storage_component 的 ak/sk。**密码规则**（应用密码与数据库密码同规则）：8-32 位，至少含大写/小写/数字/特殊字符（`~!@#$%^*-_+=?,`）三类。**创建路径没有"省略 SK"——启用存储必须全凭据**。要点：version 取当前最高的应用版本（x.y.z，不是 PG 引擎版本）；mode 单机 Single 或主备 Ha（ha 对象跟着选）；charge_info 按需或包周期（包周期：period_type 为字符串 "month"（月）/"year"（年），period_num 1-9 个月或 1-3 年——**period_type 是字符串不是数字**，传 2/3 会被本地拒绝；包周期返回订单号走订单工具支付）；basic_config.time_zone 可选：整段 UTC-12:00~UTC+12:00（不支持半点与时区名），推荐 UTC+08:00（中国北京）；managed_instance.volume.type 按 `list_db_instance_storage_types` 实时结果选择；port 传 5432 或省略；enterprise_project_id 默认 default 项目（"0"）；挂载已有实例的 database_name 固定 root。
 
 ### Key 交付（deliver_supabase_api_key）
 

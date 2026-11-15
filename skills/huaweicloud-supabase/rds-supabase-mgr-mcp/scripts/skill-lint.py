@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Structural lint for the rds-supabase-mgr-mcp skill.
 
-Guards the v0.5.x scenario-based restructure against regressions:
+Guards the v2.0.0 scenario-based restructure against regressions:
 
   1. SKILL.md carries the six scenario sections as exact `## <title>`
      heading lines (line-anchored, not substring-matched)
@@ -28,12 +28,17 @@ REPO_ROOT = SKILL_DIR.parent.parent.parent
 PYPROJECT = REPO_ROOT / "server" / "mcp_server_rds_supabase_mgr" / "pyproject.toml"
 
 SCENARIOS = [
-    "场景一：从零创建一个能访问的应用",
-    "场景二：使用已经创建好的应用",
-    "场景三：按需增强",
-    "场景四：日常变更速查",
-    "场景五：查询接入信息（随时可用，创建场景的最后一步也用它）",
-    "场景六：删除应用（干净收尾）",
+    "场景一：从零创建一个能访问的应用（新建实例，推荐）",
+    "场景二：挂载已有 PG 实例创建应用",
+    "场景三：创建前置编排与参数基线",
+    "场景四：公网开通（EIP 采购与绑定）",
+    "场景五：OBS 存储对接",
+    "场景六：认证、登录与增强",
+    "场景七：查询接入信息与密钥交付",
+    "场景八：日常变更速查",
+    "场景九：包周期订单支付与取消",
+    "场景十：删除应用与干净收尾",
+    "排障与任务跟踪",
 ]
 JARGON_BLACKLIST = ("台账", "账本", "码道", "未决", "对账")
 EXPECTED_REFERENCES = {"scenarios.md", "acceptance.md", "local-requests.md", "install.md"}

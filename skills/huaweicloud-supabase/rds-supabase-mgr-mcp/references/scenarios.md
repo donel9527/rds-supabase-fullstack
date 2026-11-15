@@ -1,6 +1,6 @@
 # 场景手册（执行详版）
 
-SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与失败处置。执行复杂场景或排障时加载，不必全读。
+SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参数/校验点"操作表与补充契约，执行复杂场景或排障时加载，不必全读。字段级秘密契约见 [本地请求与字段契约](local-requests.md)。
 
 ## 通用流程（十步）
 
@@ -27,133 +27,197 @@ SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与�
 
 确认方案由客户端承接，MCP 只验证本地计划绑定。数据面交接只传非敏感目标及用户诉求，不附带管理 AK/SK 或 ApiKey 明文。
 
-## 场景一：从零创建可用应用
+## 场景一：从零创建（新建实例）
 
 ### 意图四问（进入配置前必须问完，不许默认、不许替用户决定）
 
 | 问题 | 答案的后果 |
 |---|---|
-| 数据库怎么办？新建还是用已有 PG？ | 路线 A（newly_instance）/ 路线 B（existed_instance） |
-| **要传文件吗？**（图片、视频、附件都算） | 要 → **创建前**定 OBS 桶：`discover_supabase_storage` 给两个选择——复用已有桶（私有优先，公共桶标注匿名公开风险尽量不用，无可选转新建）或新建桶（推荐、默认，走 `create_supabase_new_obs`），复用还是新建也问用户；桶名+AK/SK 进 storage_component——**存储事后无法补开**；不要 → storage_component 写 {enabled:false} |
-| 要从公网访问吗？ | 要 → 创建后走 EIP + 安全组 + api_external_url 同步；不要 → 明确告知用户只能内网访问 |
-| 要 https 吗？ | 要 → 买 CCM 证书、创建后切 SSL；不要 → 走 http |
+| 数据库来源？新建还是用已有 PG？ | 新建实例（newly_instance，本场景，推荐）/ 挂载已有实例（existed_instance，见场景二） |
+| 要传文件吗？（图片、视频、附件都算） | 要 → **创建前**按场景五定 OBS 方案（复用或新建也问用户）；桶名+AK/SK 进 `storage_component`——**存储创建后不可再启用**。不要 → `storage_component` 写 `{"enabled":false}`（三字段全空），不能整个省略 |
+| 要从公网访问吗？ | 要 → 创建后走场景四（EIP+安全组+`api_external_url` 同步）；不要 → 明确告知用户只能内网访问 |
+| 要 HTTPS 吗？ | 要 → 用户先备 CCM 证书（本服务无采购能力），创建后切 SSL；不要 → 走 http |
 
-**执行纪律**：逐个问、拿到明确答复才往下走；答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`——托管来源必须先拿到确定性结论（推荐新建实例），编排会实时固化关键参数模块——三大必选模块与 OBS 桶存储对接（关键可选：needs_storage 必须明确答复，创建后不可再启用，答复确认即输出复用/新建两场景与配置方案），并输出步骤编号的 creation_flow（含 obs_integration 步骤），实际创建严格 1:1 执行。用户一笔带过需求时（"帮我建个应用"），四问一个都不能少——没问就默认等于替用户做了业务决定，走偏的根源就在这。部署模式是否支持 Ha 也别猜：`list_supabase_flavors_with_azs(az_code, mode='Ha')` 成功 → Single/Ha 都可选；400 → 该环境仅 Single，如实告知。
+答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`。部署模式是否支持 Ha 不猜：`list_supabase_flavors_with_azs(az_code, mode="Ha")` 成功 → Single/Ha 都可选；被拒 → 该环境仅 Single，如实告知。
 
-### 配置字段来源分类（谁提供什么）
+### 操作表
 
-| 来源 | 字段 |
-|---|---|
-| MCP 工具可查 | 应用规格与各规格支持的 AZ 列表（`list_supabase_flavors_with_azs`，需先有 AZ；返回的 AZ 信息兼作可用区选择依据）；路线 B 的数据库实例（`list_supabase_manageable_instances`）；安全组（可新建） |
-| 可查（优先 MCP 工具） | **应用基础要素一次调 `discover_supabase_create_basic_options(az_code)`（版本/Single-Ha 探测/可售规格，附安全组推荐策略：应用组 8443 入/实例端口 5432 出，具体规则见网络工具）**；PG 引擎版本、数据库规格、磁盘类型（均有专用工具，内部走 KooCLI）；**托管实例按来源分场景：`discover_db_instance_for_create(scenario)`——新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐，已有实例（existed_instance）返回可托管候选，传 instance_id 获取该实例基础/配置/网络信息**；**EIP 采购用 `create_supabase_eip`（空闲优先：先列未绑定 EIP 供用户选定，无空闲按基线新建——按需购买、全动态 BGP 独享 5-1000M 推荐 300M、自动打标），绑定用 `bind_supabase_eip`（in32 结尾应用 ID/归属/格式三重校验，经 RDS AttachEip）；**OBS 桶获取用 `discover_supabase_storage`（复用已有桶：私有优先，公共桶标注匿名公开风险尽量不用，无可选转新建；新建桶：推荐、默认，输出新桶完整参数规格；优先复用环境变量 AK/SK，检测到临时凭证（含 SecurityToken）时明确提示经本地请求文件提供长期 AK/SK，避免凭证过期后应用无法访问 OBS；附 OBS 读测试结果），新建桶走 `create_supabase_new_obs`（桶名按应用/业务名推导：非法字符折叠、小写、supabase- 前缀，重名自动追加 4 位短 uuid 重试；标准存储、私有桶；数据冗余策略 multi_az 默认/single_az 可选；阻止公共访问默认开启且固定不可修改；预览/确认两段式）**；网络与安全组一次调 `discover_network_for_create(scenario)`——新建实例场景选定 VPC/子网并给出双组建组配置（应用组 8443 入方向三选一：默认全 0/当前设备网段/自定义 + 5432 出方向；数据库组 5432 入方向，网段均为所选子网 CIDR），已有实例场景取实例 VPC/子网、数据库组不动、应用组同规则；**发现工具一律不创建资源，只输出配置规格（含可照抄的 apply_steps）供真实创建严格遵循** |
-| KooCLI 可查（工具未覆盖，兜底） | 可用区（用 `list_supabase_flavors_with_azs` 的 AZ 信息或 ECS NovaListAvailabilityZones）、空闲 EIP |
-| 网络自动发现 | **`discover_network_for_create(scenario=newly_instance)`**（一步锁定 IP 充足的 VPC+子网：优先 2 个空闲 IP、兜底 1 个；返回 vpc_id/subnet_id/subnet_cidr 直接填 basic_config，并附双组安全组配置——应用组 8443 入方向【默认全 0（走 KooCLI）/当前设备网段（detect_access_ip=true）/自定义】+ 5432 出方向，数据库组 5432 入方向，网段均为所选子网 CIDR；区域无可用网络时不报错，返回默认推荐 default_vpc 192.168.0.0/16 + default_subnet 192.168.0.0/24（建在实例所在 AZ、网关 192.168.0.1）——按 default_create 建好后再跑一次发现取真实 ID；已有实例场景传 instance_id，取实例 VPC/子网，数据库组不动、应用组同规则） |
-| 必须用户提供 | 应用名称、区域（环境里已有则免）、回调地址类 URL |
-| 本地请求文件（秘密） | 应用密码（本地生成）、路线 B 的 database_pwd、路线 A 的数据库密码、存储 AK/SK、OBS 桶名 |
-| 外部资源 | EIP（用户已有或 KooCLI 新购） |
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 意图四问 | — | needs_storage/needs_public_access/needs_ssl 三态意图 | 四问全有明确答复；存储答复必须在创建前拿到 |
+| 2. 编排基线 | `plan_supabase_creation_arrangement` | manage_type=newly_instance、az_code、意图参数 | 三必选模块已固化、creation_flow 步骤编号齐全、decision_points 清空或已答复 |
+| 3. 应用要素发现 | `discover_supabase_create_basic_options` | az_code | version 取当前最高（x.y.z 应用版本）；Ha 实时探测结果如实采纳 |
+| 4. 实例要素发现 | `discover_db_instance_for_create` | scenario=newly_instance、mode | 引擎版本、规格、磁盘类型均为实时推荐值 |
+| 5. 网络选址 | `discover_network_for_create` | scenario=newly_instance | vpc_id/subnet_id 来自返回；无可用网络时按 default_create 建网后重跑一次取真实 ID |
+| 6. 写请求文件 | 本地操作 | 见"创建请求体" | 秘密全部入文件；预览前过"预览前逐项核对清单" |
+| 7. 预览 | `create_supabase_with_new_instance` | request_ref、public_access_cidr、confirm=false | 脱敏参数、双组安全组方案、obs_plan 交用户核对；plan_id 记录在案 |
+| 8. 确认提交 | `create_supabase_with_new_instance` | 同参数 confirm=true + plan_id | 10 分钟内、参数未变；提交后自动建双安全组与 OBS 桶并回填 |
+| 9. 跟踪 | `show_supabase_creation_progress` | application_id、application_job_id、instance_id、instance_job_id | 实例先就绪、应用任务才开始；约 20-30 分钟 |
+| 10. 回查 | `show_supabase_application` | application_id | 状态 normal、无进行中操作、托管实例正常 |
+| 11. 后续 | 场景四/五/六/七 | — | 公网、登录、交付按需执行 |
+
+`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP，失败提示改传自定义或 open）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 open，自定义必须严格有界）。
 
 ### 创建请求体（写入本地请求文件的完整字段）
 
-下面是一个真实可用的创建请求（同时新建 PG 的路线 A；选主备或包周期时，把 mode/ha/charge_info 换成对应值）：
+真实可用的创建请求示例（新建实例；选主备或包周期时把 mode/ha/charge_info 换成对应值）：
 
 ```json
-{"name":"rds-supabase-5a55","basic_config":{"region":"cn-east-3","vpc_id":"<VPC ID>","subnet_id":"<子网 ID>","time_zone":"UTC+08:00"},"storage_component":{"enabled":false},"version":"1.0.0","mode":"Single","flavor_ref":"rds.supabase.n1.large.2","availability_zone":"cn-east-3a","password":"<本地生成的密码>","manage_type":"newly_instance","managed_instance":{"datastore":{"type":"PostgreSQL","version":"17.11.260901"},"ha":{"mode":"Single","replication_mode":"async"},"charge_info":{"charge_mode":"postPaid"},"flavor_ref":"rds.pg.n1.medium.2","volume":{"type":"ESSD","size":40},"availability_zone":"cn-east-3a","security_group_id":"<数据库安全组 ID>","password":"<本地生成的密码>","port":5432,"enterprise_project_id":"0","configuration_id":"<可选：参数模板 ID>"},"security_group_id":"<应用安全组 ID>"}
+{"name":"rds-supabase-5a55","basic_config":{"region":"cn-east-3","vpc_id":"<VPC ID>","subnet_id":"<子网 ID>","time_zone":"UTC+08:00"},"storage_component":{"enabled":false},"version":"1.0.0","mode":"Single","flavor_ref":"rds.supabase.n1.large.2","availability_zone":"cn-east-3a","password":"<本地生成的密码>","manage_type":"newly_instance","managed_instance":{"datastore":{"type":"PostgreSQL","version":"17.11.260901"},"ha":{"mode":"Single","replication_mode":"async"},"charge_info":{"charge_mode":"postPaid"},"flavor_ref":"rds.pg.n1.medium.2","volume":{"type":"ESSD","size":40},"availability_zone":"cn-east-3a","password":"<本地生成的密码>","port":5432,"enterprise_project_id":"0"},"security_group_id":"<应用安全组 ID，可省略由创建工具自动创建注入>"}
 ```
 
-**密码规则（应用密码与数据库密码同规则）**：8-32 位，至少包含大写字母、小写字母、数字、特殊字符（`~!@#$%^*-_+=?,`）中的**三种**；本地生成时只从这些字符里取。
+密码规则（应用密码与数据库密码同规则）：8-32 位，至少包含大写字母、小写字母、数字、特殊字符（`~!@#$%^*-_+=?,`）中的三种；本地生成时只从这些字符里取，生成后直接入文件。
 
-**公共必填**：name（4-64）、basic_config{region, vpc_id, subnet_id, 可选 time_zone 如 "UTC+08:00"}、version（**应用版本 x.y.z，取当前最高，不是 PG 引擎版本**）、mode（Single 或 Ha，和用户确认）、flavor_ref（应用规格，形如 rds.supabase.n1.large.2）、availability_zone（Single 一个 AZ；Ha 两个不同 AZ，此处为主 AZ）、password（按上述密码规则；默认用户 supabase 的密码）、storage_component（不用存储时写 `{enabled:false}`，不能整个省略）、manage_type。
-**公共可选**：data_vip、security_group_id（应用安全组；**必须新建专用组**，ID 进创建请求，漏传事后无法补——没有换组工具）。
-
-- **路线 A（newly_instance）**追加 managed_instance：datastore{type=PostgreSQL, version=引擎版本（`list_db_instance_engine_versions` 查大版本）}、ha{mode 与顶层 mode 一致：Single 或 Ha；replication_mode: async 或 sync}、charge_info（按需 {charge_mode:"postPaid"}；包周期 {charge_mode:"prePaid", period_type: "month"（月）或 "year"（年）——**字符串，不是 2/3 数字**，官方契约如此，传数字会被本地拒绝, period_num: 1-9 个月或 1-3 年, 可选 is_auto_renew/is_auto_pay 布尔}）、flavor_ref（数据库规格，形如 rds.pg.n1.medium.2，`list_db_instance_flavors_with_azs` 查，和应用规格是两回事，别混用）、volume{type: 按环境查询结果选择的盘型（`list_db_instance_storage_types` 查，如 ESSD）, size: 40-40000（GB）}、availability_zone（与顶层主 AZ 一致，服务端强制）、security_group_id（数据库安全组，必填，**新建专用组**）、password（按密码规则，可以和应用密码用同一个值）、port（固定 5432：显式传或省略）、enterprise_project_id（**默认 default 项目**，ID 为 "0"；多企业项目时让用户选）。可选 configuration_id（参数模板，默认不传）。
-- **路线 B（existed_instance）**追加 existing_instance：instance_id（工具查）、database_name（**固定 root，不能改**）、database_pwd（用户写本地文件；存量密码不受创建密码规则约束）。
-
-不支持：tags、未知字段——如实告知，不静默丢弃用户要求。主备/包周期是否可用以所选环境实际为准：后端拒绝时报错会带 error_code/error_msg，如实转述即可。
+- **公共必填**：name（4-64 字符，中文按 3 字节计，字母或中文开头）、basic_config{region, vpc_id, subnet_id, 可选 time_zone}、version（应用版本，取当前最高）、mode（Single/Ha，与用户确认）、flavor_ref（应用规格，形如 `rds.supabase.n1.large.2`）、availability_zone（Single 一个 AZ；Ha 两个不同 AZ，此处为主 AZ）、password（默认用户 supabase 的密码，兼 Dashboard 管理员登录密码）、storage_component、manage_type。
+- **managed_instance 追加**：datastore{type=PostgreSQL, version=引擎版本}、ha{mode 与顶层一致，replication_mode: async/sync}、charge_info（按需 `{"charge_mode":"postPaid"}`；包周期 `{"charge_mode":"prePaid","period_type":"month"/"year","period_num":1-9 或 1-3}`——period_type 是字符串不是数字）、flavor_ref（数据库规格，形如 `rds.pg.n1.medium.2`，与应用规格是两回事）、volume{type: 按 `list_db_instance_storage_types` 实时结果选择, size: 40-40000 GB}、availability_zone（与顶层主 AZ 一致）、password（规则同上，可与应用密码同值）、security_group_id（可省略，创建工具自动建组注入）、port（固定 5432，传或省略均可）、enterprise_project_id（默认 default 项目 "0"；多企业项目时让用户选）、可选 configuration_id（参数模板 ID，取值来源 ListConfigurations，默认不传）。
+- 不支持 tags 与未知字段——如实告知，不静默丢弃用户要求。主备/包周期是否可用以所选环境实际为准：后端拒绝时报错附 error_code/error_msg，如实转述。
 
 ### 预览前逐项核对清单
 
-预览前把请求体按这张表**逐项过一遍**（秘密字段只核"已配置"，不回显值），有出入先改再预览；结论给用户看一眼。最常见的三类错误：version 填成 PG 版本、漏 ha、密码不合规。
+预览前把请求体逐项过一遍（秘密字段只核"已配置"，不回显值），有出入先改再预览；结论给用户看一眼。最常见的错误：version 填成 PG 版本、漏 ha、密码不合规、period_type 传数字。
 
 | # | 字段 | 规则 | 参考值 |
 |---|---|---|---|
-| 1 | name | 4-64 字符 | rds-supabase-5a55 |
-| 2 | basic_config | region/vpc_id/subnet_id 与环境一致；time_zone 可选 | cn-east-3 / … / UTC+08:00 |
-| 3 | version | **应用版本，取当前最高** | "1.0.0"（不是 17.11.x！） |
-| 4 | mode | Single | Single |
+| 1 | name | 4-64 字符，中文 3 字节，字母/中文开头 | rds-supabase-5a55 |
+| 2 | basic_config | region/vpc_id/subnet_id 与环境一致；time_zone 整段 UTC-12:00~UTC+12:00，推荐 UTC+08:00 | cn-east-3 / … / UTC+08:00 |
+| 3 | version | 应用版本，取当前最高 | "1.0.0"（不是 17.11.x） |
+| 4 | mode | Single 或 Ha（与用户确认） | Single |
 | 5 | flavor_ref | 应用规格 | rds.supabase.n1.large.2 |
-| 6 | availability_zone | Single 一个 AZ；Ha 两个不同 AZ（此处填主 AZ） | cn-east-3a |
+| 6 | availability_zone | Single 一个 AZ；Ha 两个不同 AZ（此处主 AZ） | cn-east-3a |
 | 7 | password | 8-32 位三类字符，本地生成 | （已配置） |
-| 8 | storage_component | 不用存储 | {enabled:false} |
-| 9 | manage_type | 路线 A | newly_instance |
-| 10 | security_group_id（顶层） | 应用安全组 | （自建专用组 ID） |
-| 11 | datastore | PostgreSQL + 引擎版本 | 17.11.260901 |
-| 12 | ha | mode 与顶层 mode 一致（Single/Ha） | {mode:"Single", replication_mode:"async"} |
-| 13 | charge_info | 按需 {charge_mode:"postPaid"}；包周期带 period_type（字符串 "month"/"year"）/period_num | postPaid |
-| 14 | managed flavor_ref | **数据库规格（≠应用规格）** | rds.pg.n1.medium.2 |
-| 15 | volume | 环境支持的盘型 + 容量 | ESSD / 40 |
-| 16 | managed availability_zone | = 顶层值 | cn-east-3a |
-| 17 | managed security_group_id | 数据库安全组 | （组 ID） |
-| 18 | managed password | 规则同应用密码，可同值 | （已配置） |
-| 19 | port | 5432 或省略 | 5432 |
-| 20 | enterprise_project_id | 默认 default 项目 | "0" |
+| 8 | storage_component | 不用存储 | {"enabled":false} |
+| 9 | manage_type | 新建实例 | newly_instance |
+| 10 | datastore | PostgreSQL + 引擎版本 | 17.11.260901 |
+| 11 | ha | mode 与顶层 mode 一致 | {"mode":"Single","replication_mode":"async"} |
+| 12 | charge_info | 按需仅 charge_mode；包周期 period_type 字符串 month/year + period_num | postPaid |
+| 13 | managed flavor_ref | 数据库规格（不等于应用规格） | rds.pg.n1.medium.2 |
+| 14 | volume | 环境支持的盘型 + 容量 | ESSD / 40 |
+| 15 | managed availability_zone | 与顶层主 AZ 一致 | cn-east-3a |
+| 16 | managed password | 规则同应用密码，可同值 | （已配置） |
+| 17 | port | 5432 或省略 | 5432 |
+| 18 | enterprise_project_id | 默认 default 项目 | "0" |
 
 ### 提交与等待
 
-提交按 manage_type 二选一调用创建工具：路线 A（newly_instance）走 `create_supabase_with_new_instance`（推荐），路线 B（existed_instance）走 `create_supabase_link_exist_instance`。安全组由创建工具自动创建注入（public_access_cidr 三选一），请求文件无需手填 security_group_id；任务下发后回显工作流 ID 并跟踪，完成后再做 EIP 自动化。
-
-提交返回 202 + job_id + application_id（路线 A 另有 instance_id + instance_job_id——应用在实例创建成功后才触发创建，实例就绪前查不到应用任务）。**路线 A 有两个任务，分别确认**。等待节奏：**综合进展用 `show_supabase_creation_progress`**（路线 A 传全部四个 ID，自动按"先实例后应用"编排，返回实例创建中/应用等待/应用创建中/完成/失败五态）→ 提交后先查 1 次抓秒级失败 → 告知用户"预计 20-30 分钟"→ 每次用户回来问就再查 1 次；需要单任务细节（entity/时间戳）时才用 `show_operation_job_status`。观察预算用完（observation_exhausted）≠ 云任务失败。
+提交返回 202 + job_id + application_id + instance_id + instance_job_id（应用在实例创建成功后才触发创建，实例就绪前查不到应用任务；**两个任务分别确认**）。等待节奏：`show_supabase_creation_progress` 综合编排查询顺序 → 提交后先查 1 次抓秒级失败 → 告知用户"预计 20-30 分钟"→ 每次用户回来问再查 1 次；单任务细节才用 `show_operation_job_status`。观察预算用完不等于云任务失败。
 
 ### 失败处置（创建）
 
 | 失败 | 工具行为 | 处置 |
 |---|---|---|
-| 请求文件不安全/别名缺失 | MCP_INVALID_ARGS（报错区分"别名不存在"与"注册表不可用"） | 按报错修：补别名，或修权限（0600）/路径；禁止用 Shell 代填秘密 |
-| 结构校验不过 | MCP_INVALID_ARGS（**点名具体字段**，如 ha.mode、volume.size、password） | 按点名字段修正；不删用户要求后静默重试 |
+| 请求文件不安全/别名缺失 | MCP_INVALID_ARGS（区分"别名不存在"与"注册表不可用"） | 补别名或修权限（0600）/路径；禁止用 Shell 代填秘密 |
+| 结构校验不过 | MCP_INVALID_ARGS（点名具体字段） | 按点名字段修正；不删用户要求后静默重试 |
 | 预览超 10 分钟/参数变 | MCP_GUARDRAIL_BLOCKED | 重新预览确认 |
 | 同意图有未完成执行 | MCP_GUARDRAIL_BLOCKED | 查记录核对，不新建计划绕过 |
-| 响应含 order_id（包周期） | status=order_created，计划记 accepted | 走订单工具闭环：`get_supabase_order` 查状态/金额/币种并给用户核对 → 用户核准后 `pay_supabase_order`（预览→确认+plan_id；余额支付，有折扣订单走控制台）→ 支付后才开始创建，按正常节奏查任务；放弃则 `cancel_supabase_order`（未支付才能取消）；金额/状态变化须重新核准 |
+| 响应含 order_id（包周期） | status=order_created，计划记 accepted | 走场景九订单闭环：核对→授权→支付→按正常节奏查任务；放弃则取消 |
 | 提交中断 | submission_unknown + plan_id | `show_operation_job_status` 查任务、回查资源；禁止重放 |
-| 后端明确拒绝（4xx） | MCP_INVALID_ARGS / MCP_PERMISSION_DENIED / MCP_NOT_FOUND 等，报错**附后端 error_code/error_msg**；计划标 **failed** | 如实转述后端报错；修正参数后**重新预览再提交**（failed 不阻塞重试，与结果不明不同） |
-| 写开关没开 / 只读拦截开着 | MCP_READ_ONLY | 操作员同时核对两个变量：SUPABASE_ENABLE_WRITES=true 且 HUAWEICLOUD_MCP_READ_ONLY=false，改完重启 |
+| 后端明确拒绝（4xx） | MCP_INVALID_ARGS 等，报错附后端 error_code/error_msg；计划标 failed | 如实转述；修正参数后重新预览再提交（failed 不阻塞重试，与结果不明不同） |
+| 写开关未开/只读拦截 | MCP_READ_ONLY | 操作员同时核对两个变量并重启 |
 | 任务 failed/状态识别不了 | next_action 指向人工 | 停止当前链路，交操作方 |
-| 资源回查状态非 normal | 后续写操作被护栏挡 | 继续按节奏观察，不强行绑 EIP |
-| 应用完成但数据库失败（路线 A） | 两个任务独立返回 | 分别核对；部分成功**不自动删资源** |
+| 应用完成但数据库失败 | 两个任务独立返回 | 分别核对；部分成功不自动删资源 |
 
-### 公网开通与安全组
+## 场景二：挂载已有实例创建
 
-安全组在创建前就准备好：**应用组必须新建专用组**（别复用已有组），`create_supabase_security_group` 创建时**必须带 description 标记用途**——应用组填 `Supabase应用（自动创建）`，数据库组填 `数据库接入（自动创建）`（控制台一眼可辨、审计清理有据）。服务端自动打 `AUTO_CREATE=true` 与 `USE_FOR=Supabase` 双标签，整组删除只放行带双标签的组。建好后立刻配上规则——入方向 8443（用户来源网段）、出方向 5432（`direction='egress'`）；数据库组（路线 A）同样新建专用组，入方向 5432 放行所选子网。出入方向规则都走 MCP 工具（`add_supabase_security_group_rule` 的 `direction` 参数）；只有 0.0.0.0/0 全网入方向仍须用户明确确认后走 KooCLI（MCP 工具按设计不放行全网规则）。
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 意图四问 | — | 同场景一 | 托管来源取已有实例 |
+| 2. 候选清单 | `discover_db_instance_for_create`（或 `list_supabase_manageable_instances`） | scenario=existed_instance | 分页 20/页；`current_actions` 非空或状态非 ACTIVE 的实例必须排除；用户选定 instance_id |
+| 3. 实例详情 | `discover_db_instance_for_create` | instance_id | 版本/部署类型/端口/可用区/网络信息回填编排 |
+| 4. 写请求文件 | 本地操作 | manage_type=existed_instance、existing_instance{instance_id, database_name="root", database_pwd} | database_name 固定 root 不能改；root 密码只入文件（存量密码不受创建密码规则约束） |
+| 5. 预览 | `create_supabase_link_exist_instance` | request_ref、public_access_cidr、confirm=false | 脱敏参数与应用组方案交用户核对 |
+| 6. 确认提交 | 同上 | confirm=true + plan_id | 自动建应用组（8443 入方向三选一+5432 出方向指向实例子网 CIDR）；实例自身安全组不动 |
+| 7. 跟踪 | `show_supabase_creation_progress` | application_id、application_job_id | 无实例任务；约 20-30 分钟 |
+| 8. 回查 | `show_supabase_application` | application_id | managed_instance 指向所选实例 |
 
-绑定 EIP：`change_supabase_eip`（is_bind=true 须 public_ip_id + IPv4 两样）。**新建 EIP（KooCLI）时必须加标签 `USAGE_FOR: Supabase应用公网访问，自动创建的`**，与其他 EIP 区分开。
+## 场景三：创建前置编排与参数基线
 
-绑定后验证：`show_supabase_application` 的 public_ip 非空 → **同步改 Auth 的 `api_external_url`** 为拼装的公网访问地址（`update_supabase_auth_config` 预览→确认→查任务→回查；邮箱确认链接和 OAuth 回调都指向它，不改则登录链路断）→ curl 探测访问地址（任何状态码=网络可达）→ 不通回头查规则和 EIP。
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 收集意图 | — | manage_type、az_code、mode、instance_id、detect_access_ip | 不确定的意图保持省略（开放决策点），不替用户决定 |
+| 2. 生成基线 | `plan_supabase_creation_arrangement` | 三态意图参数 needs_* | planning_only，不创建任何资源 |
+| 3. 追问决策点 | — | — | 按 decision_points 逐项追问到明确答复 |
+| 4. 展示 | visual 输出 | — | 表格/流程图直接给用户；三大必选模块参数注明实时来源 |
 
-## 场景二：使用已有应用
+基线输出结构：托管来源两决策 → 三必选模块（Supabase 基本信息/托管实例/网络控制，各注明所依赖的发现工具）→ OBS 关键可选模块（needs_storage 答复后给复用/新建两方案）→ EIP 购买基线（按需+全动态 BGP 独享带宽 5-1000M 推荐 300M）→ 步骤化 creation_flow → 创建后动作 → decision_points → 秘密边界。实际创建 1:1 严格按 creation_flow 执行，不偏离目标与计划。
 
-列表阶段：`list_supabase_applications`（name 模糊查/application_id 精确查/排序）。**查询参数没有 status 过滤**——"可用"要自己筛：status=normal 且 current_actions 为空。同名多条用 application_id 精确复核。详情核验：`show_supabase_application`。public_ip 为空 → 提示走场景一第 4 步，或只给内网地址。
+## 场景四：公网开通（EIP 采购与绑定）
 
-## 场景三：按需增强
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 采购 | `create_supabase_eip` | prefer_idle=true、bandwidth_size_mbps=300 | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按基线新建（按需+全动态 BGP+独享带宽 5-1000M+自动打标 USAGE_FOR） |
+| 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
+| 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
+| 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |
 
-字段级契约见 [本地请求与字段契约](local-requests.md)。三个要点：
-- **秘密边界**：SMTP 密码、GitHub Client Secret、存储 AK/SK 只进本地请求文件；对话里收非秘密项
-- **部分更新**：字段省略=不变；没有"传空值清空"；关闭某个登录方式只传对应 false 开关
-- **验证分级**：保存成功（任务+回查）≠ 业务可用（真实发信/登录才算）
+绑定成功后必须同步 `api_external_url`：邮箱确认链接与 OAuth 回调都指向该地址，不同步则登录链路是断的。解绑（`change_supabase_eip` is_bind=false，不带绑定参数）不释放 EIP、不停计费；解绑后旧公网地址失效，与用户确认改回内网地址还是等重新绑定。新建 EIP 的标签（USAGE_FOR）由 `create_supabase_eip` 自动打，用于在控制台区分流程自动创建的 EIP。
 
-## 场景四：日常变更
+## 场景五：OBS 存储对接
 
-见 SKILL.md 速查表。变更后统一节奏：查任务 → 回查资源 → 涉登录的业务验证。Key 重置后新值是**新记录**，不用旧 key_id 取值，用场景五重新交付。
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 两选择 | `discover_supabase_storage` | app_name | 复用（私有优先，公共桶标注匿名公开风险）/ 新建（推荐）；附读测试与凭证检测 |
+| 2. 新建桶 | `create_supabase_new_obs` | app_name、redundancy=multi_az/single_az | 私有桶、标准存储、阻止公共访问固定开启；重名自动追加 4 位短 uuid |
+| 3. 创建对接 | 创建工具自动处理 | storage_component{enabled, bucket_name, ak, sk} | 创建工具确保桶存在（已有复用、缺失新建）并回填最终桶名；凭据必须持久 AK/SK |
+| 4. 变更轮换 | `update_supabase_storage` | 请求文件别名 | 首次或换 AK 给全（桶名+AK+SK）；AK 未变换桶名可只带原 AK 省 SK；禁用三字段全空 |
 
-## 场景五：接入信息
+临时凭证检测：环境使用 SecurityToken 临时凭证时，发现工具明确提示不可作 `storage_component` 凭据，引导经本地请求文件提供持久 AK/SK——避免凭证过期后应用无法访问 OBS。存储启用在创建时决定，创建时未启用的事后无法补开——这是意图四问必须在创建前问清存储的原因。
 
-输入契约：已核验的 application_id（normal、无进行中操作）+ 用户对每个 Key 值查看的明确授权 + `SUPABASE_ENABLE_WRITES=true`（Key 交付虽是云读，但本地写文件需要写开关——容易漏配）。
+## 场景六：认证、登录与增强
 
-交付动作：`deliver_supabase_api_key` 每次一个 key 到一个**必须不存在的新文件**（同一别名交付第二次会失败，换新别名新文件）。四类 Key = 四次交付。输出接入信息卡（格式见 SKILL.md），值只落文件。
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 基线 | `show_supabase_auth_config` | application_id | 空串=未配置；作为更新对照基准 |
+| 2. 开关 | `update_supabase_auth_flags` | enable_account_sign_up / enable_anonymous_users | 只改传入的开关；先评估匿名暴露面 |
+| 3. 邮箱登录 | `update_supabase_auth_config` | 请求文件别名（smtp_config 等） | SMTP 密码只入文件；端口常见 465/587；确认邮件模板是唯一可自定义模板 |
+| 4. GitHub 登录 | `update_supabase_auth_config` | 请求文件别名（github_oauth_provider） | Client ID 非秘密可对话收；Client Secret 只入文件；回调地址与 GitHub App 一致 |
+| 5. 回查 | `show_supabase_auth_config` | application_id | 配置生效；空串仍未配置 |
 
-失败处置：key 非 normal/不唯一 → 护栏拒绝，刷新元数据重选；文件已存在 → 换别名；中途失败 → 操作员检查目标文件，不再拉取、不读内容。
+字段级契约（顶层八选一、值不得为空、省略=不变、关闭只传开关）见 [本地请求与字段契约](local-requests.md)。验证分级：保存成功（任务+回查）不等于业务可用——真实发信、真实登录才算。
 
-## 场景六：删除
+## 场景七：接入信息与密钥交付
 
-**删除前预检**：核验状态与进行中操作；记录 public_ip、安全组 ID、数据库实例 ID、桶名（残留核对用）；问数据要不要导出；可选先解绑 EIP（`change_supabase_eip` is_bind=false，不带任何绑定参数）。**必问**：要不要连托管 PG 实例一起删（`delete_managed_instance` 选 true/false，不能默认）——选是则应用与实例两笔删除同时提交，返回两个任务编号分别跟踪。
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 地址素材 | `show_supabase_application` | application_id | 协议←enable_ssl、主机←public_ip（公网）/private_ip·traffic_vip（内网）、端口←port |
+| 2. Key 元数据 | `list_supabase_api_keys` | application_id | 四类（secret/publishable/service_role/anon）只返回记录不返回值 |
+| 3. 交付 | `deliver_supabase_api_key` | application_id、key_id、delivery_ref | 每类 Key 一个别名一个**新文件**（同别名二次交付失败）；需写开关；交付前用户逐个确认 |
+| 4. 信息卡 | — | — | 按输出格式输出；验证状态如实标注 |
 
-**删除后确认**：按用户节奏查任务 → `list_supabase_applications` 确认消失 → 数据库回到可托管列表（`list_supabase_manageable_instances` 可复核）→ 输出残留清单（见 SKILL.md 六项表）。
+输入契约：已核验的 application_id（状态 normal 且无进行中操作）+ 用户对每个 Key 值查看的明确授权。失败处置：key 非 normal 或不唯一 → 护栏拒绝，刷新元数据重选；文件已存在 → 换别名；中途失败 → 操作员检查目标文件，不再拉取、不读内容。
 
-**残留处置通道**：EIP 释放（控制台/KooCLI，停计费唯一路径）；数据库删除——`delete_supabase_managed_instance`（须传入应用 ID + 其 `managed_instance.id` 双标识，服务端实测校验托管绑定、并确认无其他应用引用同一实例；数据不可恢复，先确认导出；包周期实例走控制台退订）；安全组规则清理（`delete_supabase_security_group_rule`，先核对该组未被共用）；安全组整组下线（`delete_supabase_security_group`，删前核对组未被实例/NIC 引用——后端会拒绝在用组，删组连带删除组内全部规则）；本地 Key 文件与请求文件（用户/操作员自行清理）；项目 MCP 配置（整个项目下线时移除）。
+## 场景八：日常变更
+
+见 SKILL.md 速查表。变更后统一节奏：查任务 → 回查资源 → 涉登录/存储的业务验证。Key 重置后新值是新记录，不用旧 key_id 取值，走场景七重新交付。
+
+## 场景九：包周期订单
+
+计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管的数据库实例；购买方式在创建请求 `managed_instance.charge_info` 中确定。创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；出现创建任务（job_id）才开始建资源。
+
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 核对 | `get_supabase_order` | order_id（limit 默认 20、marker 分页） | 状态、金额、币种、明细逐项给用户核对；amount_after_discount 为优惠后不含券卡 |
+| 2. 支付 | `pay_supabase_order` | order_id、expected_amount、currency、confirm=true | expected_amount 须同时等于 official_amount 与 amount_after_discount（不同=有折扣，拒绝支付走费用中心）；单次提交不自动重试 |
+| 3. 支付复核 | `get_supabase_order` | order_id | payment_submitted/payment_verified；订单状态与支付时间确认到账 |
+| 4. 取消 | `cancel_supabase_order` | order_id、confirm=true | 仅未支付可取消；不可逆；cancellation_verified 为 false 继续查询不重提 |
+
+异常处置：提交结果未知（payment_submitted=false）→ 先查询同一订单，不自动再次付款；已支付资源退订走控制台，本工具不受理；已取消订单再次取消返回幂等结果。
+
+## 场景十：删除与收尾
+
+| 步骤 | 工具 | 关键参数 | 校验点 |
+|---|---|---|---|
+| 1. 预检 | `show_supabase_application` | application_id | 状态正常、无进行中操作；记录 public_ip/安全组 ID/托管实例 ID/桶名 |
+| 2. 问实例去留 | — | delete_managed_instance 必选 | 不能默认：false 留实例留费；true 双删不可逆（仅按需可级联，预付费先控制台退订） |
+| 3. 预览 | `delete_supabase_application` | application_id、delete_managed_instance、confirm=false | 不可逆影响与费用后果展示给用户 |
+| 4. 提交跟踪 | `delete_supabase_application` → `show_operation_job_status` | confirm=true + plan_id | true 时返回 job_id + instance_job_id 双任务，分别跟踪至终态 |
+| 5. 确认消失 | `list_supabase_applications` | application_id 精确查 | 应用不在列表；级联时实例确认消失（可回 `list_supabase_manageable_instances` 交叉复核） |
+| 6. 残留处置 | 见下 | — | 输出残留清单与处置建议 |
+
+四层校验（服务端自动执行）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。残留处置通道：EIP 释放（控制台/KooCLI，停计费唯一路径）；托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，数据不可恢复先确认导出，包周期走控制台退订）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；OBS 桶与数据、本地 Key 文件与请求文件、项目 MCP 配置按需清理。
+
+## 排障补充
+
+- **KooCLI 协同**：安全组六个工具内置 KooCLI（hcloud）能力，开箱即用；原生 RDS 入口不代理 VPC API。二进制定位：`HCLOUD_BIN` → 固定安装目录 → PATH，每次调用重新定位。凭据注入：AK/SK 环境变量同时存在时按命令注入，否则回落 hcloud profile；REST Token 模式须本机 `hcloud configure init`。区域取 `HUAWEICLOUD_REGION`；子项目账号在 profile 配 `--cli-project-id`。VPC 后端 error_code/error_msg/request_id 原样透传。
+- **诊断 CLI**（克隆方式）：`uv run python -m mcp_server_supabase.diagnostics check`（配置与依赖）/ `offline`（stdio 自检）/ `discover`（从凭据发现项目与候选入口，`--probe` 追加只读探测）/ `readonly --allow-cloud-read`（授权环境真实只读检查）。诊断不提交云写操作，摘要不含资源值与凭据。
+- **模式配错症状**：只填 AK/SK 不设 `SUPABASE_TRANSPORT=sdk_core`，服务端按 REST 模式启动并完全忽略 AK/SK，每次调用报 MCP_PERMISSION_DENIED；REST 模式缺 `HUAWEICLOUD_AUTH_TOKEN` 同样报错。
+- **术语表**：plan_id——预览凭证，10 分钟有效、单次使用；request_ref——本地请求文件里含秘密配置的别名；job_id——云端异步任务编号；本地执行记录——每笔写操作在本机留下的结果记录（成功/失败/结果不明），出问题时核对用，永不删除；受理——服务端收到请求，不代表做完。
