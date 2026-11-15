@@ -112,13 +112,13 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.WRITE)
     async def change_supabase_ssl(application_id: str, enable_ssl: bool, cert_id: str | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Preview or submit SSL change. Disabling requires null certificate. Writes require explicit server opt-in."""
+        """Preview or submit SSL change. Disabling requires null certificate. Writes require explicit server opt-in. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.mutate(application_id, "ssl", {"enable_ssl":enable_ssl,"cert_id":cert_id}, confirm, plan_id)
 
     @server.tool()
     @guard(risk=ToolRisk.WRITE)
     async def change_supabase_eip(application_id: str, is_bind: bool, public_ip_id: str | None = None, public_ip_address: str | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Preview or submit EIP binding change. Binding requires ID and IPv4; review public exposure and billing."""
+        """Preview or submit EIP binding change. Binding requires ID and IPv4; review public exposure and billing. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.mutate(application_id, "eip", {"is_bind":is_bind,"public_ip_id":public_ip_id,"public_ip_address":public_ip_address}, confirm, plan_id)
 
     @server.tool()
@@ -130,26 +130,44 @@ def register(server):
         False deletes only the application - the instance is retained and keeps billing.
         True submits both deletions together and returns two job ids; the instance deletion
         is irreversible (all data destroyed, pay-per-use only). All managed-instance
-        guardrails run before anything is submitted.
+        guardrails run before anything is submitted. 任务受理后用 show_operation_job_status(job_id) 查询任务状态（双任务时两个 job 分别查询）。
         """
         return await service.delete_application(application_id, delete_managed_instance, confirm, plan_id)
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def delete_supabase_managed_instance(application_id: str, instance_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Remove the PostgreSQL instance managed by one RDS Supabase application during teardown. The instance must be that application's own managed_instance (verified live) and referenced by no other application; deletion is irreversible. Pay-per-use only - yearly/monthly instances must be unsubscribed in the console. Confirm before applying."""
+        """Remove the PostgreSQL instance managed by one RDS Supabase application during teardown. The instance must be that application's own managed_instance (verified live) and referenced by no other application; deletion is irreversible. Pay-per-use only - yearly/monthly instances must be unsubscribed in the console. Confirm before applying. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.delete_managed_instance(application_id, instance_id, confirm, plan_id)
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
+    async def start_supabase_application(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """启动一个已停止的 RDS Supabase 应用（异步任务）。仅可对已停止的应用操作；启动不会自动启动托管数据库实例，托管实例状态须正常否则可能启动失败。两段式：preview（confirm=false）回读应用当前状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
+        return await service.lifecycle(application_id, "start", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
+    async def stop_supabase_application(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """停止一个运行中的 RDS Supabase 应用（异步任务）。仅运行中（normal）的应用可停止；停止不会停止托管数据库实例（实例保留并继续计费）；停止期间应用功能不可用，建议业务低峰期操作。两段式：preview（confirm=false）回读应用当前状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
+        return await service.lifecycle(application_id, "stop", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
+    async def restart_supabase_application(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """重启一个运行中的 RDS Supabase 应用（异步任务）。仅运行中（normal）的应用可重启，已停止的应用须先启动，异常状态可能重启失败；重启内部组件服务、期间短暂服务中断（状态显示为“重启中”）并自动释放内存缓存，建议低峰操作。两段式：preview（confirm=false）回读应用当前状态、返回影响说明并签发 plan_id；confirm=true+plan_id 一次提交。任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
+        return await service.lifecycle(application_id, "restart", confirm, plan_id)
+
+    @server.tool()
+    @guard(risk=ToolRisk.DANGEROUS)
     async def reset_supabase_api_key(application_id: str, key_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Preview or reset a key. Existing clients can lose access; does not retrieve the new secret."""
+        """Preview or reset a key. Existing clients can lose access; does not retrieve the new secret. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         return await service.mutate(application_id, "reset_key", {"key_id":key_id}, confirm, plan_id)
 
     @server.tool()
     @guard(risk=ToolRisk.WRITE)
     async def update_supabase_auth_flags(application_id: str, enable_account_sign_up: bool | None = None, enable_anonymous_users: bool | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Update only supplied registration flags. Omitted flags remain unchanged; review anonymous access."""
+        """Update only supplied registration flags. Omitted flags remain unchanged; review anonymous access. 任务受理后用 show_operation_job_status(job_id) 查询任务状态。"""
         body = {k:v for k,v in {"enable_account_sign_up":enable_account_sign_up,"enable_anonymous_users":enable_anonymous_users}.items() if v is not None}
         return await service.mutate(application_id, "auth_flags", body, confirm, plan_id)
 
@@ -159,6 +177,7 @@ def register(server):
         """Change only the Supabase application password using an operator-provisioned local request alias.
         Never pass a password in tool arguments. Backend password policy remains authoritative.
         Preview first; explicit confirmation and the unchanged plan are required to submit once.
+        任务受理后用 show_operation_job_status(job_id) 查询任务状态。
         """
         return await service.mutate_reference(application_id,'password',request_ref,confirm,plan_id)
 
@@ -168,6 +187,7 @@ def register(server):
         """Partially update supported Auth URLs/providers/confirmation template via a protected local alias.
         Omitted fields stay unchanged. Provider disabling may clear nested configuration.
         Unknown fields, null clears and unsupported templates are rejected. No secrets in tool input.
+        任务受理后用 show_operation_job_status(job_id) 查询任务状态。
         """
         return await service.mutate_reference(application_id,'auth_config',request_ref,confirm,plan_id)
 
@@ -177,6 +197,7 @@ def register(server):
         """Configure Storage using a protected local alias: first enable requires full bucket/AK/SK.
         Omitted SK retains the current value only when Storage is already enabled with the same AK. Disabling requires empty/omitted secret fields.
         Review OBS cost and access effects; accepted job is not business completion.
+        任务受理后用 show_operation_job_status(job_id) 查询任务状态。
         """
         return await service.mutate_reference(application_id,'storage',request_ref,confirm,plan_id)
 

@@ -188,7 +188,15 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 场景八：日常变更
 
-见 SKILL.md 速查表。变更后统一节奏：查任务 → 回查资源 → 涉登录/存储的业务验证。Key 重置后新值是新记录，不用旧 key_id 取值，走场景七重新交付。
+见 SKILL.md 速查表。变更后统一节奏：`show_operation_job_status` 查询任务至终态 → 回查资源 → 涉登录/存储的业务验证；所有返回 job_id 的操作类工具受理后必须跟踪至终态（应用创建除外，走专用 `show_supabase_creation_progress`）。Key 重置后新值是新记录，不用旧 key_id 取值，走场景七重新交付。
+
+### 应用启停与重启
+
+| 操作 | 工具 | 校验点 |
+|---|---|---|
+| 启动应用 | `start_supabase_application` | 操作前 `show_supabase_application` 核对状态与 `current_actions`（状态护栏：start 仅停止态且无进行中操作）；启动不自动拉起托管实例，实例状态异常可能启动失败；异步返回 job_id，跟踪至终态后回查应用状态 |
+| 停止应用 | `stop_supabase_application` | 操作前同上核对（状态护栏：stop 仅运行态 normal 且无进行中操作）；不停托管实例、实例继续计费，停止期间应用功能不可用；建议低峰执行；异步 job 跟踪至终态 |
+| 重启应用 | `restart_supabase_application` | 操作前同上核对（状态护栏：restart 仅运行态 normal 且无进行中操作，已停止应用须先启动）；重启内部组件、短暂服务中断并释放内存缓存；建议低峰执行；异步 job 跟踪至终态 |
 
 ## 场景九：包周期订单
 

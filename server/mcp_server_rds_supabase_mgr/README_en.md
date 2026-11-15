@@ -4,8 +4,8 @@
 
 ## Version
 
-Current version: `0.4.0a48` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 45 tools.
+Current version: `0.4.0a49` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 48 tools.
 
 ## Overview
 
@@ -14,7 +14,8 @@ applications as MCP tools, covering creation arrangement and scenario-based
 creation (two managed-instance sources), network and security-group
 specification, EIP provisioning and binding, SSL certificate query and
 purchase, OBS storage integration,
-authentication and login configuration, API key delivery, prepaid orders, and
+authentication and login configuration, API key delivery, prepaid orders,
+application start/stop/restart, and
 change and deletion. It serves AgentArts and other MCP clients; the REST-token
 and SDK credential modes, over stdio and Streamable HTTP, share one tool set,
 one set of safety guardrails, and one output protocol. It is read-only by
@@ -117,6 +118,11 @@ database hosting.
   local file — key values never enter conversation.
 - **Orders**: prepaid order query, balance payment, and cancellation, with
   amount and currency verified item by item.
+- **Application lifecycle**: start (does not start the managed instance),
+  stop (does not stop the managed instance, which keeps billing), and
+  restart (brief interruption, off-peak recommended); status-guardrail
+  checks, asynchronous tasks tracked to a terminal state via
+  `show_operation_job_status`.
 - **Change and deletion**: SSL, EIP, and storage-integration changes;
   application deletion (optional managed-instance cascade) and standalone
   managed-instance teardown; task query and bounded waiting.
@@ -366,6 +372,9 @@ pre-provisioned into a local request file and referenced by alias.
 | `create_supabase_link_exist_instance` | Creation for the attach-existing scenario: application group auto-created, database group untouched | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `delete_supabase_application` | Application deletion; delete_managed_instance mandatory (instance cascade optional) | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | Standalone managed-instance teardown, four-layer verification | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
+| `start_supabase_application` | Start a stopped Supabase application, asynchronous task tracked via `show_operation_job_status`; the managed instance is not started automatically and may fail if unhealthy | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
+| `stop_supabase_application` | Stop a Supabase application, unavailable while stopped, asynchronous task tracked; the managed instance is not stopped (still billing), off-peak recommended | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
+| `restart_supabase_application` | Restart a running (normal) Supabase application, asynchronous task tracked; internal components restart with a brief service interruption and memory cache cleared; stopped applications must start first | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |
 | `get_supabase_order` | Query prepaid order status, amounts, currency, and line items | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
 | `pay_supabase_order` | Balance-pay a pending order after amount/currency verification | DANGEROUS | [PayOrders](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=PayOrders) |
 | `cancel_supabase_order` | Cancel an unneeded pending-payment order | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
@@ -394,6 +403,13 @@ some Supabase APIs are newer than the published catalog — when API Explorer
 lacks one, this server's actual behavior is authoritative.
 
 ## Usage guide
+
+Starting, stopping, and restarting an application are asynchronous
+operations: once accepted with a `job_id`, track it to a terminal state with
+`show_operation_job_status` and re-read the application; stopping does not
+stop the managed database instance (it keeps billing) and starting does not
+start the instance; restarting briefly interrupts the service — prefer
+off-peak windows.
 
 ### Prerequisites
 

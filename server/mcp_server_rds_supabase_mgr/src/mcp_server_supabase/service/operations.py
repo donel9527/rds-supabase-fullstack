@@ -20,6 +20,20 @@ ROOT = "/v3/{project}/ai-application"
 # accepted): a clean 4xx from the gateway/backend. Everything else (transport,
 # 429/5xx, unparseable responses) leaves the write result genuinely unknown.
 _DEFINITE_REJECTIONS = {"invalid_request", "authentication", "permission", "not_found", "state_conflict"}
+_JOB_FOLLOW_UP = "任务已受理（异步）：用 show_operation_job_status(job_id) 查询任务状态直至终态；wait_operation_job_complete(job_id) 可有界等待；终态后回查资源确认业务结果"
+_DUAL_JOB_FOLLOW_UP = "任务已受理（异步）：job_id 与 instance_job_id 是两个独立任务，用 show_operation_job_status 分别查询直至终态；wait_operation_job_complete(job_id) 可有界等待；终态后回查应用列表与实例清单确认业务结果"
+_LIFECYCLE_WARNINGS = {
+    "start": ["仅可对已停止的应用执行启动；运行中（normal）的应用无需启动。",
+              "启动不会自动启动托管数据库实例；托管实例状态须正常，否则应用可能启动失败。"],
+    "stop": ["停止不会停止托管数据库实例；实例保留并继续计费。",
+             "停止期间应用功能不可用。",
+             "建议在业务低峰期执行停止操作。"],
+    "restart": ["仅可对运行中（normal）的应用执行重启；已停止的应用不支持重启，须先启动。",
+                "异常状态的应用执行重启可能失败。",
+                "重启会重启应用内部组件服务，期间出现短暂服务中断（应用状态显示为“重启中”）。",
+                "重启会自动释放内存缓存。",
+                "建议在业务低峰期执行重启操作。"],
+}
 
 
 def safe(value, depth=0):
@@ -142,7 +156,8 @@ class Operations:
                                     'The application deletion was accepted; the instance deletion result is unknown. '
                                     'Re-verify the instance inventory before any retry - never resubmit blindly.', plan_id) from None
         self.plans.finish(plan_id, 'accepted', job_id)
-        result = {**result, **notices, 'plan_id': plan_id}
+        result = {**result, **notices, 'plan_id': plan_id,
+                  'job_follow_up': _DUAL_JOB_FOLLOW_UP if delete_managed_instance else _JOB_FOLLOW_UP}
         if delete_managed_instance:
             result['instance_id'] = instance_id
             result['instance_job_id'] = instance_job_id
@@ -266,7 +281,7 @@ class Operations:
             self.plans.finish(plan_id, 'accepted', job_id)
             return {'status': 'accepted', 'job_id': job_id, 'application_id': application_id,
                     'instance_id': instance_id, 'instance_name': rows[0].get('name'),
-                    'plan_id': plan_id, **notices}
+                    'plan_id': plan_id, 'job_follow_up': _JOB_FOLLOW_UP, **notices}
         except BaseException:
             self.plans.finish(plan_id, 'unknown'); raise unknown from None
 
@@ -615,6 +630,69 @@ class Operations:
         try:
             result = accepted_job(status, data)
             self.plans.finish(plan_id, "accepted", result["job_id"])
-            return {**result, **notices, "plan_id":plan_id}
+            return {**result, **notices, "job_follow_up": _JOB_FOLLOW_UP, "plan_id": plan_id}
         except BaseException:
             self.plans.finish(plan_id, "unknown");raise unknown from None
+
+    async def lifecycle(self, application_id, action, confirm=False, plan_id=None):
+        """Start, stop or restart one Supabase application (asynchronous job).
+
+        The lifecycle endpoints sit directly on the ai-application resource
+        (ROOT/<id>/<action>, no /supabase segment). State guardrail, per official
+        contract: stop and restart require status == normal; start requires a
+        non-normal status; every action requires no in-flight current_actions.
+        Starting never starts the managed PG instance; stopping never stops it.
+        """
+        application_id = segment(application_id)
+        if action not in _LIFECYCLE_WARNINGS:
+            raise McpToolError("MCP_INVALID_ARGS", "Unsupported lifecycle action",
+                               hint="action must be one of start, stop, restart.")
+        path = ROOT + "/" + application_id + "/" + action
+        if confirm and (os.getenv("SUPABASE_ENABLE_WRITES") != "true" or os.getenv("HUAWEICLOUD_MCP_READ_ONLY", "false").lower() == "true"):
+            raise McpToolError("MCP_READ_ONLY", "Writes are disabled")
+        _, target = await self.client.request("GET", self.app(application_id))
+        if not isinstance(target, dict) or target.get("id") != application_id:
+            raise McpToolError("MCP_NOT_FOUND", "Application not found",
+                               hint="Discover the application id first, then preview again.")
+        status = target.get("status")
+        if target.get("current_actions"):
+            raise McpToolError("MCP_GUARDRAIL_BLOCKED", "应用有进行中操作，须等待其完成后再执行生命周期操作",
+                               hint="用 show_operation_job_status 查询进行中任务，终态后重新 preview。")
+        if action == "start":
+            if status == "normal":
+                raise McpToolError("MCP_GUARDRAIL_BLOCKED", "应用已在运行，无需启动",
+                                   hint="启动仅适用于已停止的应用。")
+        elif status != "normal":
+            raise McpToolError("MCP_GUARDRAIL_BLOCKED",
+                               "仅运行中（normal）的应用可重启，已停止的应用须先启动" if action == "restart"
+                               else "仅运行中（normal）的应用可停止，已停止的应用无需停止",
+                               hint="先用 show_supabase_application 回查应用状态，确认后再操作。")
+        warnings = _LIFECYCLE_WARNINGS[action]
+        digest = self.intent_digest("POST", path, None)
+        if not confirm:
+            return {"status": "confirmation_required", "execution": "not_executed",
+                    "application_id": application_id, "action": action, "current_status": status,
+                    "impact": list(warnings), "resource_path": path, **self.plans.issue(digest)}
+        from huaweicloud_mcp_core.guardrails import assert_not_protected
+        assert_not_protected(target)
+        self.plans.claim(plan_id, digest)
+        unknown = RecoveryError("MCP_SDK_ERROR", "Lifecycle change result unknown", "submission_unknown",
+                                "Query the operation task and the application directly; do not resubmit - previews and the recorded intent are single-use.", plan_id)
+        try:
+            http_status, data = await self.client.request("POST", path, body=None)
+        except RecoveryError as error:
+            if error.recovery.get("category") in _DEFINITE_REJECTIONS:
+                self.plans.finish(plan_id, "failed"); raise
+            self.plans.finish(plan_id, "unknown"); raise unknown from None
+        except McpToolError:
+            self.plans.finish(plan_id, "failed"); raise
+        except BaseException:
+            self.plans.finish(plan_id, "unknown"); raise unknown from None
+        try:
+            result = accepted_job(http_status, data)
+            self.plans.finish(plan_id, "accepted", result["job_id"])
+            return {**result, "application_id": application_id, "action": action,
+                    "notices": {"warnings": list(warnings)}, "job_follow_up": _JOB_FOLLOW_UP,
+                    "plan_id": plan_id}
+        except BaseException:
+            self.plans.finish(plan_id, "unknown"); raise unknown from None

@@ -1,15 +1,15 @@
 ---
 name: rds-supabase-mgr-mcp
 description: |
-  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，45 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
+  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，48 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、应用启停与重启、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
 metadata:
   tags: [huawei-cloud, rds, supabase, mcp, lifecycle]
-  version: "2.2.0"
+  version: "2.3.0"
 ---
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.2.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a48`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，45 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.3.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a49`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，48 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -25,6 +25,7 @@ metadata:
 - 认证与登录：注册开关、邮箱（SMTP）登录、GitHub OAuth 登录、确认邮件模板。
 - 接入信息与密钥：访问地址拼装、四类 Key 元数据查询、受保护本地文件交付。
 - 包周期订单：金额币种核对、余额支付、未支付订单取消。
+- 应用启停与重启：启动（不自动拉起托管实例）、停止（不停托管实例、继续计费）与重启（短暂中断、低峰执行），状态护栏校验与异步任务跟踪。
 - 日常变更与删除：密码、Key、SSL、EIP、安全组规则；应用删除与托管实例干净收尾。
 
 典型用例：
@@ -39,6 +40,7 @@ metadata:
 - “把四类 API Key 交付给我，明文别贴在对话里。”
 - “这个包周期订单多少钱？核对无误后帮我支付。”
 - “改一下应用密码，再把 anon Key 重置掉。”
+- “把这个应用停掉省点风险——托管实例继续计费先说清。”
 - “应用下线：应用和托管数据库一起删干净，安全组也收掉。”
 
 ## 能力边界与路由
@@ -57,7 +59,7 @@ metadata:
 
 ## 前置条件
 
-1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a48`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
+1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a49`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
 2. MCP 客户端已注册本服务。安装、宿主注册模板、凭据模式与会话内使能见[安装手册](references/install.md)。来源锁定：服务端未发布 PyPI，uvx 一律从本仓 GitHub 拉取；PyPI 同名第三方包不是本服务，禁止安装。
 3. 凭据模式二选一：AK/SK（含临时密钥）必须设 `SUPABASE_TRANSPORT=sdk_core`，否则服务端按 REST 模式启动并忽略 AK/SK；服务 Token 走 REST 模式（`HUAWEICLOUD_AUTH_TOKEN`）。`HUAWEICLOUD_REGION` 驱动 RDS 端点推导、项目 IAM 自动发现与安全组工具；子项目账号显式配置 `HUAWEICLOUD_PROJECT_ID`。
 4. 安全组六个工具依赖本机 KooCLI（`hcloud`）并已接受首次运行隐私协议；探测与安装方法见技能根目录 `INSTALL.md` 第四节。
@@ -175,6 +177,9 @@ metadata:
 
 | 变更 | 工具 | 关键点 |
 |---|---|---|
+| 启动应用 | `start_supabase_application` | 状态护栏：仅停止态且无进行中操作可受理；启动不自动拉起托管实例，实例状态异常可能启动失败；异步返回 job_id，跟踪至终态后回查 |
+| 停止应用 | `stop_supabase_application` | 状态护栏：仅运行态（normal）且无进行中操作可受理；不停托管实例、实例继续计费，停止期间应用功能不可用；建议低峰执行；异步 job 跟踪 |
+| 重启应用 | `restart_supabase_application` | 状态护栏：仅运行态（normal）且无进行中操作可受理，已停止应用须先启动；重启内部组件、短暂服务中断并释放内存缓存；建议低峰执行；异步 job 跟踪 |
 | 改应用密码 | `change_supabase_application_password` | 新密码写本地请求文件；只改应用密码，不动数据库密码 |
 | 重置 API Key | `reset_supabase_api_key` | 异步：旧 Key 逐渐失效、新 Key 是一条新记录；新值须走场景七重新交付；提前告知下游会断 |
 | 开/关 SSL | `change_supabase_ssl` | 开需证书 ID——三路径获取：复用（`list_ssl_certificates`）/购买（`purchase_supabase_ssl_cert` 推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 证书仅文件验证；关必须不带证书；切换会闪断，建议低峰执行，生效后提醒改回调地址协议 |
@@ -184,7 +189,7 @@ metadata:
 | 存储变更/轮换 | `update_supabase_storage` | 同场景五第 4 步 |
 | 安全组规则收窄 | `delete_supabase_security_group_rule` | 先核对该组未被其他资源共用 |
 
-每次变更后统一节奏：查任务 → 回查资源 → （涉及登录或存储的）业务验证。
+每次变更后统一节奏：job 跟踪至终态（`show_operation_job_status`）→ 回查资源 → （涉及登录或存储的）业务验证。
 
 **验证方式**：变更任务到终态后回查对应资源字段已生效。
 
@@ -214,7 +219,7 @@ metadata:
 
 ## 排障与任务跟踪
 
-**任务跟踪**：`show_operation_job_status(job_id)` 查单任务细节（entity/时间戳）；`wait_operation_job_complete(job_id)` 有界等待至终态（观察预算用完不等于云任务失败）；`show_supabase_creation_progress` 覆盖创建全阶段。等待节奏：提交后先查一次抓秒级失败 → 告知用户预计时长 → 每次用户回来问再查，不连续刷。
+**任务跟踪（全局纪律）**：所有返回 `job_id` 的操作类工具——启停与重启、SSL、EIP、密码、存储、Auth、Key 重置、删除等修改与更新类操作——受理后必须用 `show_operation_job_status(job_id)` 查询至终态（`wait_operation_job_complete` 可有界等待），终态后回查资源确认业务结果；**应用创建除外**——创建进度用专用的 `show_supabase_creation_progress` 跟踪（覆盖创建全阶段，实例先就绪、应用后建）。`show_operation_job_status` 返回单任务细节（entity/时间戳）。等待节奏：提交后先查一次抓秒级失败 → 告知用户预计时长 → 每次用户回来问再查，不连续刷。
 
 | 错误码 | 含义 | 处置 |
 |---|---|---|
@@ -230,7 +235,7 @@ metadata:
 
 ## 核心命令（MCP 工具）
 
-45 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
+48 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
 
 **编排与发现（READ）**
 
@@ -272,6 +277,9 @@ metadata:
 | `update_supabase_auth_flags` | 注册/匿名访问开关（只改传入的） | WRITE |
 | `update_supabase_auth_config` | Auth URL、邮箱/GitHub 登录、确认模板（敏感字段经请求文件） | WRITE |
 | `reset_supabase_api_key` | 重置 Key（异步；新值须重新交付） | DANGEROUS |
+| `start_supabase_application` | 启动已停止应用（状态护栏：start 仅停止态；不自动拉起托管实例） | DANGEROUS |
+| `stop_supabase_application` | 停止应用（状态护栏：仅运行态 normal；不停托管实例、继续计费，停止期间功能不可用） | DANGEROUS |
+| `restart_supabase_application` | 重启应用（状态护栏：仅运行态 normal，已停止须先启动；短暂中断，低峰执行） | DANGEROUS |
 | `list_supabase_security_groups` | 浏览安全组列表 | READ |
 | `show_supabase_security_group` | 查看安全组详情与全部规则 | READ |
 | `create_supabase_security_group` | 建专用组（自动打 AUTO_CREATE/USE_FOR 双标签） | WRITE |
@@ -324,6 +332,7 @@ metadata:
 | 密码规则 | 8-32 位，大写/小写/数字/特殊字符（`~!@#$%^*-_+=?,`）至少三类；本地生成后只入请求文件 |
 | `request_ref`/`plan_id` | 秘密只经别名引用；预览计划 10 分钟有效、单次使用、参数变更即失效 |
 | `api_external_url` | EIP 绑定成功后必须同步为拼装的公网访问地址 |
+| `应用启停/重启` | start 仅停止态、stop/restart 仅运行态（normal）且无进行中操作；停止不停托管实例（继续计费）；启动不自动拉起实例；均异步返回 job_id，用 `show_operation_job_status` 跟踪 |
 
 ## 输出格式
 
@@ -382,7 +391,7 @@ Key 值：已按别名交付到本地受保护文件，向操作员索取，不�
 - [场景手册](references/scenarios.md)：各场景详细操作参考（步骤/工具/参数/校验点）、创建请求体与预览前核对清单、失败处置。
 - [本地请求与字段契约](references/local-requests.md)：请求文件机制与各工具敏感字段级契约。
 - [验收手册](references/acceptance.md)：验收清单与单轮/多轮异常对话用例。
-- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（45 工具表与五大业务场景）。
+- 服务端权威文档：本仓 `server/mcp_server_rds_supabase_mgr/README.md`（48 工具表与五大业务场景）。
 
 ## 注意事项
 

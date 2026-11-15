@@ -7,6 +7,37 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a49 - application lifecycle tools
+  and a universal job-tracking discipline (45 -> 48 tools, skill v2.3.0):
+  - Three new DANGEROUS tools with preview/confirm: `start_supabase_`
+    `application` (async start; only a stopped application can start;
+    starting does not start the managed instance, whose state must be
+    normal or the start may fail), `stop_supabase_application` (async
+    stop; the managed instance keeps running and billing; functions
+    unavailable while stopped; prefer low-traffic windows) and
+    `restart_supabase_application` (async restart; running-state
+    applications only - a stopped one must be started first, abnormal
+    state may fail; internal components restart with brief
+    interruption and cache release). All three call the official
+    StartSupabaseApplication/StopSupabaseApplication/RestartSupabase-
+    Application endpoints (POST /v3/{project}/ai-application/{id}/
+    start|stop|restart, no /supabase segment, no body, 202 + job_id)
+    and enforce server-side status guardrails before submission:
+    stop/restart require status normal with no current actions, start
+    requires a non-normal status with no current actions.
+  - Universal job-tracking discipline: every operation tool whose
+    response carries a job_id now returns an explicit job_follow_up
+    instructing show_operation_job_status (or wait_operation_job_
+    complete) until terminal state, then a resource recheck -
+    application creation excepted, which keeps its dedicated
+    show_supabase_creation_progress. Tool docstrings state the same.
+  - README/README_en (48-tool table, lifecycle section) and the skill
+    (v2.3.0, server >= 0.4.0a49: scenario-eight rows, lifecycle
+    parameter-contract row, troubleshooting discipline, acceptance
+    K27-K28) updated in step.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a48 - SSL certificates in MCP and
   independent SSL/EIP modules in the arrangement (43 -> 45 tools, skill
   v2.2.0):

@@ -1,6 +1,6 @@
 # 验收手册（场景级验收清单 + 单轮用例 + 多轮异常对话）
 
-对应技能版本 2.2.0（配套服务端 `mcp_server_supabase ≥ 0.4.0a48`）。验收证据：输入对话、工具清单/版本、实际调用轨迹、用户确认/取消、最终答复。模拟工具通过与真实模型/宿主通过分开记录。禁止仅用文本关键字存在替代行为评测。以下是待执行的用例，不是已通过的评测；真实环境联调验收安排在最后。
+对应技能版本 2.3.0（配套服务端 `mcp_server_supabase ≥ 0.4.0a49`）。验收证据：输入对话、工具清单/版本、实际调用轨迹、用户确认/取消、最终答复。模拟工具通过与真实模型/宿主通过分开记录。禁止仅用文本关键字存在替代行为评测。以下是待执行的用例，不是已通过的评测；真实环境联调验收安排在最后。
 
 ## 场景级验收清单
 
@@ -21,7 +21,7 @@
 | 实例消失 | `list_supabase_applications` 无该应用；级联删除时托管实例亦消失（可回 `list_supabase_manageable_instances` 交叉复核）；仅删应用时实例保留并已向用户明示继续计费 | 双任务终态 + 两次列表查询 |
 | 组清理 | 残留清单如实交付；自动创建的安全组经标签门（`AUTO_CREATE=true`/`USE_FOR=Supabase`）清理或明确移交用户；非本流程创建的组未被删除 | `list_supabase_security_groups`/`show_supabase_security_group` |
 
-## 单轮用例（K01-K26）
+## 单轮用例（K01-K28）
 
 | ID | 输入/条件 | 预期行为 | 禁止行为 |
 |---|---|---|---|
@@ -51,6 +51,8 @@
 | K24 | 盘点已有 SSL 证书 | `list_ssl_certificates` 只返回证书白名单元数据（id/name/domain/sans/type/brand/status/expire_time 等），PAID 语义=已购待申请；明确 cert_id 即 `change_supabase_ssl` 入参 | 编造证书状态或到期时间；把账号级 SCM 证书当应用资源操作 |
 | K25 | 购买 SSL 证书 | 先预览展示品牌/类型/域名类型/年限/张数/计费与申请信息（域名验证方式），用户确认后一次提交；免费档 DV_SSL_CERT_BASIC 推荐（可直接订阅生效），付费档生成待支付订单（支付后才可申请签发） | 未经确认直接下单；把付费档说成免费；混淆购买与申请两段 |
 | K26 | 纯 EIP 公网 IP 开 HTTPS | 如实告知公网 IP 证书仅支持文件验证（domain_method=File），引导完成文件验证后申请签发，再 `change_supabase_ssl` 开启 | 承诺 IP 证书可用 DNS 验证或跳过验证直接签发 |
+| K27 | 应用启停/重启 | 操作前 `show_supabase_application` 核对状态与 `current_actions`：start 仅停止态、stop/restart 仅运行态（normal）且无进行中操作，错误状态被护栏拦截并如实转述；停止前明示不停托管实例（继续计费）；正确状态走两段式受理并跟踪 job 至终态 | 不核对状态直接提交；绕过护栏换参数硬试；隐瞒停止后实例继续计费 |
+| K28 | 任一操作类工具受理返回 job_id | 按 job_follow_up 指引以 `show_operation_job_status` 查询至终态后回查资源再下结论；应用创建除外（走专用 `show_supabase_creation_progress`） | 拿到 202/job_id 即宣称完成；不跟踪任务、终态前下结论 |
 
 ## 多轮异常对话（E01-E16）
 
