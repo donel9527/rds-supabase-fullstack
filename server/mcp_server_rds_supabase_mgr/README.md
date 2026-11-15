@@ -1,29 +1,24 @@
-# RDS Supabase 管理 MCP Server
+# 华为云 RDS Supabase MCP Server
 
-> **语言切换：** [English](./README_en.md) | 中文
+[English](README_en.md)
 
 ## 版本
 
-0.4.0a42（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；43 个工具。
+当前版本：`0.4.0a44`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；43 个工具。
 
 ## 概述
 
-该服务把华为云 RDS Supabase（自建 Supabase on RDS PostgreSQL）的管理 API 封装为
-MCP 工具，覆盖应用的创建、配置、公网访问开通、变更与删除。属管理面
-（control plane）：通过原生 RDS 管理接口操作 Supabase 应用；SQL 与数据操作属独立
-数据面服务，见 `server/mcp_server_rds_supabase`，两台服务器分开交付，互不替换。
-
-安全组工具已内置 KooCLI 能力，开箱即用（见[安全组工具与 KooCLI 的分工](#安全组工具与-koocli-的分工)）。
-
-配套专项 Skill：`skills/huaweicloud-supabase/rds-supabase-mgr-mcp`（意图理解、
-信息补齐、影响展示与确认指导）。
+该服务把华为云 RDS Supabase 应用的全生命周期管理能力封装为 MCP 工具，覆盖创建编排与场景化创建（托管实例两种来源）、网络与安全组规格、EIP 采购与绑定、OBS 存储对接、认证与登录配置、API Key 交付、包周期订单以及变更与删除，供 AgentArts 及其他 MCP 客户端调用；REST Token 与 SDK 两种凭据模式、stdio 与 Streamable HTTP 两种传输共用同一套工具、安全护栏与输出协议。默认只读：写操作一律以预览/确认双段执行，敏感字段经本地请求文件承载，不进入对话。发现与编排结果附图表化输出（visual），供直接查阅。配套技能 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp` 提供场景化操作指引。本服务仅覆盖管理面（control plane），不执行 SQL 与数据操作；数据面由独立服务 `server/mcp_server_rds_supabase` 承担，两者分开交付、互不替换。
 
 ## 快速开始
 
-准备 Python 3.10+、[uv](https://docs.astral.sh/uv/)、华为云凭证（AK/SK 或服务
-Token）。首次接入保持只读：
+准备 Python 3.10+、[uv](https://docs.astral.sh/uv/) 与华为云凭证。最小配置为三个变量：`HUAWEICLOUD_ACCESS_KEY`、`HUAWEICLOUD_SECRET_KEY` 与 `HUAWEICLOUD_REGION`（搭配 `SUPABASE_TRANSPORT=sdk_core` 启用 SDK 签名模式）；项目 ID 经 IAM 自动发现，RDS 服务入口按区域自动推导。首次接入建议保持只读：
 
 ```bash
+export HUAWEICLOUD_ACCESS_KEY="<AK>"
+export HUAWEICLOUD_SECRET_KEY="<SK>"
+export HUAWEICLOUD_REGION="<区域，例如 cn-north-4>"
+export SUPABASE_TRANSPORT="sdk_core"
 export HUAWEICLOUD_MCP_READ_ONLY="true"
 uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirectory=server/mcp_server_rds_supabase_mgr" \
   mcp-huaweicloud-rds-supabase-mgr
@@ -52,174 +47,178 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 }
 ```
 
-连接后调用 `list_supabase_applications` 验证端点、权限与项目。完整安装方式、
-凭据模式与安全组前置条件见后文。
+连接后先调用 `get_supabase_capabilities` 验证端点、权限与项目，再以
+`plan_supabase_creation_arrangement` 生成创建编排基线。完整安装方式、凭据模式与
+安全组前置条件见后文。
 
 ## 分类
 
-数据库 / 云资源管理 / 运维自动化（RDS Supabase 生命周期，管理面）。
+云资源管理 / 应用生命周期编排 / 数据库托管。
 
 ## 功能
 
-**应用查询**
+- **编排与发现**：场景化创建编排基线——托管实例两种来源、三大参数模块、EIP/OBS
+  依赖与步骤化创建流程；应用、实例、网络与安全组四类发现工具，参数实时固化并给出推荐。
+- **场景化创建**：`create_supabase_with_new_instance`（推荐）与
+  `create_supabase_link_exist_instance` 严格按编排执行资源准备——专用安全组与
+  OBS 桶自动创建、参数回填注入、一次提交；回显应用/实例标识与工作流 ID。
+- **网络与安全组**：VPC/子网选址（空闲 IP 优选与默认推荐）、专用组建组与规则、
+  标签防护（AUTO_CREATE/USE_FOR）、入方向来源三选一（自动探测/全开放/自定义）。
+- **EIP**：空闲优先采购（按需推荐、全动态 BGP 独享带宽 5-1000M、推荐 300M、
+  自动打标）；绑定三重校验（in32 应用 ID、归属、格式），经 RDS AttachEip 执行。
+- **OBS 存储**：获取两选择（复用/新建，新建为推荐）与新桶完整规格（私有/标准/
+  多AZ/阻止公共访问）；临时凭证检测与读测试。
+- **认证与登录**：注册开关、Auth URL、邮箱/GitHub 登录、确认模板；应用密码变更。
+- **密钥交付**：Key 元数据查询、重置、受保护本地文件交付，密钥值不进入对话。
+- **订单**：包周期订单查询、余额支付与取消，金额币种逐项核对。
+- **变更与删除**：SSL、EIP 与存储对接变更；应用删除（可选级联托管实例）与托管
+  实例单独拆除；任务查询与有界等待。
+- **安全与体验**：只读模式与风险分级、敏感字段脱敏、JSONL 审计、图表化输出、
+  删除类四层防误校验。
 
-- 应用列表：分页、过滤、排序
-- 应用详情：基础配置（名称、模式、状态）、规格配置（规格、节点）、安全配置（SSL）、
-  网络配置（公网/内网 IP、端口）、存储配置（OBS 桶对接）
-- 管理能力清单：声明本服务的管理范围与职责边界，明确哪些操作由本服务执行、
-  哪些由用户经控制台完成
+## 业务场景
 
-**应用创建**
+### 场景一：创建前置准备
 
-- 创建前分析业务场景和使用方式，逐项拆解，输出每个场景要准备什么、
-  怎么做：
-  - **托管数据库实例**：新建实例，或关联已有实例。两种场景的创建返回不同——
-    关联已有实例只返回应用任务编号与应用 ID；新建实例先建实例、成功后才触发应用
-    创建，返回实例任务编号与实例 ID，应用任务在实例就绪前查不到
-  - **OBS 存储对接**：有图片、视频、大文件存储需求时使用
-  - **EIP 绑定**：需要公网访问时使用
-  - **SSL 对接**：高安全要求场景；需先购买 CCM 证书
-- 应用规格列表查询：返回各规格支持的可用区列表，兼作可用区查询与选择；
-  默认查单机模式可用规格，主备 Ha 版以局点实时查询为准
-- 可托管 PostgreSQL 实例查询——关联已有实例场景
-- 托管实例目录查询：引擎版本、实例规格、磁盘类型——同时新建实例场景
-- 应用创建要素一站式探索：版本、部署模式（Single/Ha 实时探测）与所选 AZ 可售应用规格
-- 新建实例场景一站式探索：并发查询全部周边依赖，按请求体逐字段给出推荐配置
-- 网络自动发现：遍历 VPC 与其子网，锁定 IP 资源充足的子网，直接产出 basic_config 的 vpc_id/subnet_id
-- 数据库实例规格查询——同时新建实例场景（经 KooCLI）
-- 周边依赖自动发现：VPC、子网、可用区、安全组、OBS 桶等依赖资源的列表与详情配置
-  （使用 KooCLI 功能探索）
-- 计费说明：RDS Supabase 免费公测；托管实例支持包周期和按需两种计费方式，
-  支持单机与主备版部署形态
+创建前置准备由 `plan_supabase_creation_arrangement` 一次完成，仅做规划，不创建任何
+资源。它先明确呈现托管实例的两种来源，并要求用户给出确定性结论：新建实例为推荐
+与默认，挂载已有实例为备选。随后将三大参数模块实时固化：
 
-**订单管理（包周期实例）**
+- **Supabase 基本信息**：名称建议与命名规则、版本、部署模式与规格，来自
+  `discover_supabase_create_basic_options`。
+- **托管实例**：新建来源经 `discover_db_instance_for_create` 返回引擎版本、规格与
+  磁盘类型的逐字段推荐；挂载来源分页（每页 20 条）列出可托管实例，版本、部署类型、
+  端口、可用区、创建时间与当前操作（action 锁）齐全——正在重启、升级或变更的实例
+  须排除，以免任务冲突。
+- **网络控制**：VPC/子网选址与双组安全组规格——应用组 8443 入方向三选一加 5432
+  出方向、数据库组 5432 入方向，网段均为所选子网 CIDR，来自
+  `discover_network_for_create`。
 
-- 包周期订单查询：状态、金额、币种、订单明细分页
-- 订单支付：按核准的订单号、金额、币种余额支付；预览→确认两阶段，单次提交
-- 未支付订单取消：放弃不需要的待支付订单
+确认大文件存储场景后附加 OBS 桶对接模块（复用/新建两选择、新桶完整规格、临时
+凭证提示），并给出 EIP 购买基线：按需购买、全动态 BGP 独享带宽 5-1000M、推荐
+300M。输出为步骤编号的创建流程与创建后动作清单，供创建阶段 1:1 严格执行。
 
-**应用删除**
+### 场景二：应用创建全流程
 
-- 删除应用，保留 PG（不级联删除）
-- 删除托管 PG 实例：双标识 + 托管绑定 + 共享引用 + 删前实读四层校验；仅限按需计费
+两个托管实例来源共用同一套纪律：意图先行、参数经编排固化、敏感字段只入本地
+请求文件、预览确认双段提交。创建工具自动完成资源准备（专用安全组、启用存储
+时的 OBS 桶）并将结果回填注入请求体，一次提交成功。
 
-**访问控制**
+#### 新建实例场景（推荐，`create_supabase_with_new_instance`）
 
-- SSL 启用与关闭（启用需购买 CCM 证书）
-- 弹性公网 IP 绑定与解除（控制公网访问）
+1. 意图确认：托管来源取新建实例；是否大文件存储（创建后不可再启用）、是否
+   公网访问、是否 HTTPS。
+2. 编排基线（场景一）固化三模块参数；`az_code` 触发实时发现，无 VPC 时采纳
+   默认推荐并按 `default_create` 建网。
+3. 组装本地请求文件：全部参数与敏感字段（应用密码、数据库密码、存储 AK/SK）
+   只入文件，不进对话。
+4. 预览（`request_ref`、`public_access_cidr`、`confirm=false`）：解析入方向
+   三选一并返回 `plan_id`。
+5. 确认提交（`confirm=true` + `plan_id`）：自动创建应用组与数据库组两个专用
+   安全组；启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动加短
+   uuid）；全部回填注入后一次提交。
+6. 回显 `application_id`/`instance_id` 与双工作流 ID，经
+   `show_supabase_creation_progress` 持续查询：整体约 20-30 分钟，实例先就绪、
+   应用任务才开始；预付费须先经订单工具支付。
+7. `show_supabase_application` 验证就绪，随后按需执行公网开通（场景三）、SSL、
+   登录配置与接入信息交付。
 
-**安全组配置**
+#### 已有实例挂载场景（`create_supabase_link_exist_instance`）
 
-- 安全组列表与详情查询
-- 创建安全组，匹配应用要求
-- 删除应用安全组
-- 新增或删除出/入方向的访问规则
+1. 意图确认同上，托管来源取已有实例。
+2. 编排基线分页（每页 20 条）列出可托管候选，版本、部署类型、端口、可用区、
+   创建时间与当前操作（action 锁）齐全——排除正在重启、升级或变更的实例后，
+   由用户选定 `instance_id` 回填编排。
+3. 组装本地请求文件：`manage_type=existed_instance` 与
+   `existing_instance{instance_id, database_name:"root", database_pwd}`，数据库
+   密码只入文件。
+4. 预览与确认提交：自动创建应用组（8443 入方向三选一、5432 出方向指向实例
+   子网 CIDR），实例自身安全组不动；启用存储时同样确保 OBS 桶；回填注入后
+   一次提交。
+5. 回显 `application_id` 与应用工作流 ID（无实例任务），经
+   `show_supabase_creation_progress` 跟踪至就绪。
+6. 验证与创建后动作与新建实例场景一致。
 
-**应用接入 API Key**
+### 场景三：EIP 创建与绑定
 
-- API Key 列表查询：按用途过滤——`publishable`（客户端公开发布）、`secret`（服务端保密）、
-  `anon`（匿名访问）、`service_role`（服务端管理员）
-- 重置指定 API Key：应对密钥泄露与滥用风险
-- 查询 API Key 密钥值：不在对话中直接展示，写入本地受保护文件，防止隐私泄露
+**采购**：`create_supabase_eip` 空闲优先（`prefer_idle=true`）——先列出未绑定 EIP
+供用户选定，选定后直接用于绑定、不新建；无空闲时按基线新建：按需购买（包周期返回
+控制台订单）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
+5-1000M、推荐 300M，并自动打标 USAGE_FOR。
 
-**业务配置**
+**绑定**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
+Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip`
+为合法 IPv4——全部通过后经 RDS AttachEip 绑定。
 
-- 注册/匿名开关、Auth 提供方（GitHub/SMTP）、URL 与邮件模板、OBS 存储
+绑定成功后必须经 `update_supabase_auth_config` 同步 `api_external_url`（邮箱链接与
+OAuth 回调依赖该地址），并探活验证。
 
-**任务状态跟踪**
+### 场景四：应用删除（关联 PG 实例）
 
-- 查询下发操作任务的状态
-- 在超时时间范围内轮询操作任务状态至终态，等待任务完成
-- 应用创建进展综合分析：一次调用覆盖"实例创建中→应用等待→应用创建中→完成/失败"全阶段
+`delete_supabase_application` 的 `delete_managed_instance` 为必选项：`false` 仅删
+应用，托管实例保留并继续计费；`true` 应用与实例并发双删——实例删除不可逆，仅
+pay-per-use 可级联，预付费须先在控制台退订。删除前执行四层校验：实例归属、云端
+`managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。提交后返回双任务
+ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 
-
-**通用能力**
-
-- 两阶段确认（confirm + plan_id 绑定参数、目标与凭据摘要）
-- 云写开关默认关闭；只读拦截、保护名单、结构化审计、输出脱敏
+托管实例亦可经 `delete_supabase_managed_instance` 在应用存续时单独拆除，同样执行
+四层校验。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
+允许删除带 `AUTO_CREATE=true`/`USE_FOR=Supabase` 双标签且无引用的安全组。
 
 ## 可用工具
 
 全部写工具执行两阶段确认：先以预览模式返回变更内容与计划编号，经确认后才真正提交。
-涉及密码、凭据等秘密的工具不接收明文，秘密由操作方预先写入本地请求文件，工具仅凭别名引用。
+涉及密码、凭据等秘密的工具不接收明文，秘密由操作方预先写入本地请求文件，工具仅凭
+别名引用。
 
-| 工具 | 功能场景 | 风险 | API 文档 |
+| 工具 | 场景 | 风险 | API 文档 |
 |---|---|---|---|
-| `get_supabase_capabilities` | 查看本服务支持管理的场景与操作边界 | READ | - |
-| `list_supabase_applications` | 分页浏览全部 Supabase 应用，可按名称过滤、按创建时间排序 | READ | [ListSupabaseApplications](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplications) |
-| `show_supabase_application` | 查看单个应用的完整配置：规格、节点、网络、SSL 与存储对接状态 | READ | [ShowSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplication) |
-| `list_supabase_api_keys` | 查看应用全部 API Key 的类型与状态，不返回密钥值 | READ | [ListSupabaseApplicationApiKeys](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationApiKeys) |
-| `reset_supabase_api_key` | 密钥疑似泄露或定期轮换时重置指定 Key，旧 Key 随之失效 | DANGEROUS | [ResetSupabaseApplicationApiKey](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ResetSupabaseApplicationApiKey) |
-| `deliver_supabase_api_key` | 将指定 Key 的密钥值写入本地受保护文件，供安全交付 | DANGEROUS | [ShowSupabaseApplicationApiKeyValue](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplicationApiKeyValue) |
-| `show_supabase_auth_config` | 查看认证配置基线：注册开关、第三方登录、邮件模板 | READ | [ShowSupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplicationAuthConfig) |
+| `get_supabase_capabilities` | 查看本服务管理的场景与操作边界 | READ | - |
+| `list_supabase_applications` | 分页浏览应用，支持名称过滤与排序 | READ | [ListSupabaseApplications](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplications) |
+| `show_supabase_application` | 查看应用完整配置：规格/网络/SSL/存储 | READ | [ShowSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplication) |
+| `list_supabase_api_keys` | 查看 API Key 类型与状态，不返回密钥值 | READ | [ListSupabaseApplicationApiKeys](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationApiKeys) |
+| `reset_supabase_api_key` | 重置指定 Key 应对泄露与轮换，旧 Key 失效 | DANGEROUS | [ResetSupabaseApplicationApiKey](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ResetSupabaseApplicationApiKey) |
+| `deliver_supabase_api_key` | 密钥值写入受保护本地文件安全交付 | DANGEROUS | [ShowSupabaseApplicationApiKeyValue](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplicationApiKeyValue) |
+| `show_supabase_auth_config` | 查看认证基线：注册开关/登录方/邮件模板 | READ | [ShowSupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ShowSupabaseApplicationAuthConfig) |
 | `update_supabase_auth_flags` | 开关用户注册与匿名访问 | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
-| `update_supabase_auth_config` | 配置 GitHub、SMTP 登录方式与回调地址、邮件模板 | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
+| `update_supabase_auth_config` | 配置 GitHub/SMTP 登录、回调地址与邮件模板 | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
 | `update_supabase_storage` | 对接或变更 OBS 存储桶 | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
-| `discover_supabase_storage` | 确认需要 OBS 桶后的获取方案：复用已有桶（私有优先，公共桶标注匿名公开风险，无可选转新建）或新建桶（推荐、默认，输出新桶完整参数规格）；优先复用环境变量 AK/SK，检测到临时凭证（含 SecurityToken）时提示经本地请求文件提供长期 AK/SK，附 OBS 读测试结果 | READ | `KooCLI OBS ls` |
-| `discover_supabase_create_basic_options` | 应用自身创建要素一站式探索：版本、Single/Ha 支持（实时探测）、所选 AZ 可售应用规格、命名规则与不重复参考名、登录用户与密码规则、安全组推荐策略（应用组 8443 入、实例端口出；数据库组由实例工具生成） | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：深度结合三个发现工具实时固化 Supabase 基本信息/托管实例/网络控制三大模块参数，给出托管来源决策（推荐新建）、可托管实例分页清单（20/页，含 action 锁排除）、EIP 购买基线（按需 + 全动态 BGP 300M 独享）、OBS 桶对接（needs_storage 明确答复后输出复用/新建两场景方案，创建流程插入 obs_integration 步骤）与步骤编号的 creation_flow 供 1:1 严格执行；响应附可视化流程图与配置清单（visual） | READ | 实时组合（三个发现工具的只读查询） |
-| `list_supabase_flavors_with_azs` | 查询应用可用性能规格及各规格支持的可用区列表，供创建选型与可用区选择 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `list_supabase_manageable_instances` | 查询可关联的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
-| `list_db_instance_engine_versions` | 查询托管实例可用的 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
-| `list_db_instance_flavors_with_azs` | 查询托管实例性能规格及各规格可用区售卖状态 | READ | [ListFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListFlavors) |
-| `list_db_instance_storage_types` | 查询托管实例磁盘类型，按引擎版本与部署模式过滤 | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
-| `discover_db_instance_for_create` | 按托管实例来源（scenario，同 manage_type）探索：新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐；已有实例（existed_instance）返回可托管候选列表，传 instance_id 获取该实例基础/配置/网络信息；只读探索，不创建不变更 | READ | 组合查询（ListDatastores/ListFlavors/ListStorageTypes）+ ListManageableInstances |
-| `discover_network_for_create` | 按托管实例来源（scenario，同 manage_type）探索：新建实例场景自动发现 IP 充足的 VPC/子网（无可用网络时返回默认推荐），并给出双组安全组配置（应用组 8443 入方向三选一 + 5432 出方向；数据库组 5432 入方向；网段均为所选子网 CIDR，入方向可选探测当前设备网段）；已有实例场景取实例 VPC/子网，数据库组不动，应用组同规则；仅输出规格（含可照抄的 apply_steps），不创建任何资源；响应附图表化展示（visual） | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
-| `create_supabase_with_new_instance` | （推荐）新建实例场景的端到端创建：按编排规格自动创建两个专用安全组（应用组 supabase-app-sg：8443 入方向 public_access_cidr 三选一——auto 探测当前设备网段（默认）/ open 全 0（经 KooCLI）/ 自定义 CIDR，加 5432 出方向→子网 CIDR；数据库组 supabase-db-sg：5432 入方向←子网 CIDR）并在启用存储时确保 OBS 桶存在（已有复用、缺失按固定规则新建：私有/标准/多AZ/阻止公共访问，全局重名自动加短 uuid），全部回填注入请求体（无需手填 security_group_id 与桶名猜测）后一次提交；预览/确认双段式；任务下发后回显 application_id/instance_id 与工作流 ID（application_job_id/instance_job_id，预付费为 order_id），并给出状态跟踪（show_supabase_creation_progress，约 20-30 分钟、实例先就绪）与完成后的 EIP 自动化指引（create_supabase_eip 空闲优先 → bind_supabase_eip → update_supabase_auth_config 同步 api_external_url） | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
-| `create_supabase_link_exist_instance` | 已有实例挂载场景的创建：校验请求体 manage_type=existed_instance 与可托管实例，自动创建应用组（规则同上）——数据库组不动，注入顶层 security_group_id 后提交；预览/确认双段式；任务下发后回显 application_id 与工作流 ID，状态跟踪与完成后的 EIP 自动化指引同上 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
-| `delete_supabase_application` | 删除应用；经用户选择可同时删除托管数据库实例，两笔删除各自返回任务编号 | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
-| `delete_supabase_managed_instance` | 删除应用所托管的数据库实例，数据不可恢复；逐层校验托管关系与共享引用，杜绝误删 | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
-| `get_supabase_order` | 查询包周期订单的状态、金额、币种与订单明细 | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
-| `pay_supabase_order` | 按核准的订单号、金额、币种完成余额支付，开启包周期实例交付 | DANGEROUS | [PayOrders](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=PayOrders) |
+| `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与凭证检测 | READ | `KooCLI OBS ls` |
+| `discover_supabase_create_basic_options` | 应用基本要素发现与推荐 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：三模块参数固化与流程设计 | READ | 实时组合（三个发现工具的只读查询） |
+| `list_supabase_flavors_with_azs` | 查询应用规格及各规格支持的可用区 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
+| `list_supabase_manageable_instances` | 查询可挂载的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
+| `list_db_instance_engine_versions` | 查询托管实例可用 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
+| `list_db_instance_flavors_with_azs` | 查询托管实例规格及各规格可用区售卖状态 | READ | [ListFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListFlavors) |
+| `list_db_instance_storage_types` | 查询托管实例磁盘类型（按版本与模式过滤） | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
+| `discover_db_instance_for_create` | 托管实例来源分场景探索（含 action 锁候选清单） | READ | 组合查询（ListDatastores/ListFlavors/ListStorageTypes）+ ListManageableInstances |
+| `discover_network_for_create` | 网络选址与安全组规格 | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
+| `create_supabase_with_new_instance` | （推荐）新建实例场景端到端创建：安全组/OBS 自动准备回填后一次提交 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `create_supabase_link_exist_instance` | 已有实例挂载场景创建：自动应用组，库组不动 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `delete_supabase_application` | 应用删除，delete_managed_instance 必选（可级联实例） | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
+| `delete_supabase_managed_instance` | 单独拆除托管实例，四层校验防误删 | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
+| `get_supabase_order` | 查询包周期订单状态、金额、币种与明细 | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
+| `pay_supabase_order` | 核对金额币种后余额支付待付订单 | DANGEROUS | [PayOrders](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=PayOrders) |
 | `cancel_supabase_order` | 取消不再需要的待支付订单 | DANGEROUS | [CancelCustomerOrder](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=CancelCustomerOrder) |
 | `change_supabase_ssl` | 启用或关闭应用的 SSL 加密传输 | WRITE | [SwitchSupabaseApplicationSsl](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationSsl) |
-| `plan_supabase_ssl` | SSL 切换前的规划：证书要求与影响评估 | READ | - |
-| `create_supabase_eip` | EIP 采购（空闲优先）：先列未绑定 EIP 供用户选定（直接绑定不新建），无空闲按基线新建（按需购买、全动态 BGP 独享带宽 5-1000M 推荐 300M、自动打标）；响应附图表化展示 | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
-| `bind_supabase_eip` | 经 RDS AttachEip 绑定 EIP 到应用：in32 结尾应用 ID、归属列表、UUID/IPv4 格式三重校验，杜绝误操作与滥操作 | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
-| `create_supabase_new_obs` | 经 KooCLI 内嵌 obsutil 新建全新私有 OBS 桶，供应用承载图片/视频/大文件（对应创建请求 storage_component）：桶名按应用/业务名推导（非法字符折叠、小写、supabase- 前缀，重名自动追加 4 位短 uuid 重试）；标准存储、私有桶；数据冗余策略可选 multi_az（默认）/single_az；阻止公共访问默认开启且固定不可修改；区域取当前项目区域，企业项目优先 default；预览/确认两段式 | WRITE | `KooCLI OBS mb` |
-| `change_supabase_eip` | 绑定或解绑弹性公网 IP，开通或关闭公网访问 | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
-| `change_supabase_application_password` | 修改应用密码；新密码经本地请求文件提供，不经过对话 | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
+| `plan_supabase_ssl` | SSL 切换前规划：证书要求与影响评估 | READ | - |
+| `create_supabase_eip` | EIP 采购（空闲优先），按需+全动态 BGP+300M 基线 | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
+| `bind_supabase_eip` | EIP 绑定：in32/归属/格式三重校验 | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
+| `create_supabase_new_obs` | 新建私有 OBS 桶（标准/多AZ/阻止公共访问） | WRITE | `KooCLI OBS mb` |
+| `change_supabase_eip` | 绑定或解绑 EIP，开关公网访问 | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
+| `change_supabase_application_password` | 修改应用密码，新密码经本地请求文件 | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
 | `list_supabase_security_groups` | 浏览安全组列表 | READ | [ListSecurityGroups](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSecurityGroups) |
 | `show_supabase_security_group` | 查看安全组详情与全部规则 | READ | [ShowSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ShowSecurityGroup) |
-| `create_supabase_security_group` | 为应用创建专用安全组，自动标记来源与用途 | WRITE | [CreateSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroup) |
-| `add_supabase_security_group_rule` | 为安全组新增一条出入方向访问规则，按实际部署端口配置 | DANGEROUS | [CreateSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroupRule) |
+| `create_supabase_security_group` | 创建专用安全组，自动标记来源与用途 | WRITE | [CreateSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroup) |
+| `add_supabase_security_group_rule` | 新增出入方向访问规则 | DANGEROUS | [CreateSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=CreateSecurityGroupRule) |
 | `delete_supabase_security_group_rule` | 删除指定访问规则，收窄开放面 | DANGEROUS | [DeleteSecurityGroupRule](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroupRule) |
-| `delete_supabase_security_group` | 删除整个安全组及其全部规则；仅限本流程创建且无引用的安全组 | DANGEROUS | [DeleteSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroup) |
+| `delete_supabase_security_group` | 删除安全组，仅限本流程创建且无引用 | DANGEROUS | [DeleteSecurityGroup](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=DeleteSecurityGroup) |
 | `show_operation_job_status` | 查询下发操作任务的当前状态 | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
-| `show_supabase_creation_progress` | 综合分析应用创建进展：实例创建中、应用等待、应用创建中、完成或失败 | READ | - |
-| `wait_operation_job_complete` | 在超时范围内轮询操作任务至终态，等待任务完成 | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
+| `show_supabase_creation_progress` | 综合分析应用创建进展全阶段 | READ | - |
+| `wait_operation_job_complete` | 有界轮询操作任务至终态 | READ | [ListJobInfo](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListJobInfo) |
 
-## 安全组工具与 KooCLI 的分工
-
-安全组六个工具（查询、建组、删组、规则增删）**已封装 KooCLI 能力，可直接正常使用**，
-无需 Agent 另行调用 hcloud：工具内部自动完成 VPC v3 操作的调用、凭据注入与结果解析，
-并提供预览确认、来源标签、误删防护等管理能力。
-
-**使用原则：优先用工具，工具覆盖不了再用 KooCLI 原生命令。**
-
-| 场景 | 用什么 |
-|---|---|
-| 安全组的全部常规操作（查列表/详情、建组、加规则、删规则、删组） | **本服务工具** |
-| 放行 0.0.0.0/0 全网入方向（工具按设计拒绝，需用户明确确认） | KooCLI 原生命令 |
-| 工具明确不支持的边缘操作（如地址组管理） | KooCLI 原生命令 |
-
-工具内部实现（运维排障时才需了解）：
-
-- 原生 RDS 入口不代理 VPC API，工具内部经本机 KooCLI（`hcloud`）调用 VPC v3 操作
-  （`CreateSecurityGroup/v3`、`CreateSecurityGroupRule/v3` 等）。
-- **KooCLI 前置条件**：本机需安装 hcloud 并接受首次运行隐私协议。安装方法见
-  技能 [INSTALL.md 第四节](../../skills/huaweicloud-supabase/rds-supabase-mgr-mcp/INSTALL.md)。
-- **二进制定位**：`HCLOUD_BIN` 环境变量 → 固定安装目录 → PATH，每次调用重新定位，
-  安装后无需重启会话。
-- **凭据注入**：`HUAWEICLOUD_ACCESS_KEY`/`HUAWEICLOUD_SECRET_KEY` 同时存在时按命令
-  注入；否则回落 hcloud profile。**REST Token 模式下需本机配置 hcloud profile**
-  （`hcloud configure init`），否则安全组工具报凭据缺失。
-- **区域与项目**：区域取 `HUAWEICLOUD_REGION`；项目由 KooCLI 按区域默认项目解析，
-  子项目账号须在 hcloud profile 配置 `--cli-project-id`。
-- **错误透传**：VPC 后端 error_code/error_msg/request_id 原样透传；隐私协议未接受、
-  二进制缺失、超时各有专用错误码与处置指引。
-- **来源标记**：建组自动打 `AUTO_CREATE=true` 与 `USE_FOR=Supabase` 双标签；整组删除
-  校验双标签匹配，非本流程创建的安全组一律拒绝，防止误删。
+完整 API 参考见[华为云 RDS API 文档](https://support.huaweicloud.com/api-rds/rds_01_0002.html)；
+部分 Supabase 接口晚于已发布目录——当 API Explorer 缺少某接口时，以本服务实际行为为准。
 
 ## 使用指南
 
@@ -227,11 +226,12 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 1. Python 3.10+；使用 uvx 时安装 [uv](https://docs.astral.sh/uv/)。
 2. 具有所需最小权限的华为云凭证（见[权限建议](#权限建议)）。
-3. 使用安全组工具时：本机安装 KooCLI 并完成隐私协议（见上一节）。
+3. 使用安全组工具时：本机安装 KooCLI 并完成隐私协议（见
+   [KooCLI 协同](#koocli-协同)）。
 
 ### 安装
 
-**uvx 直接运行（推荐，git 仓库唯一规范来源）：**
+**uvx 直接运行（推荐，git 仓库为唯一规范来源）：**
 
 ```bash
 uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirectory=server/mcp_server_rds_supabase_mgr" \
@@ -250,8 +250,8 @@ uv run mcp-huaweicloud-rds-supabase-mgr          # stdio（默认）
 uv run mcp-huaweicloud-rds-supabase-mgr -t streamable-http
 ```
 
-`mcp-huaweicloud-rds-supabase-mgr` 为规范入口；旧入口 `mcp_server_supabase`
-保留过渡，两者等价。慢网络下 uvx 启动超时的处置见
+`mcp-huaweicloud-rds-supabase-mgr` 为规范入口；旧入口 `mcp_server_supabase` 保留
+过渡，两者等价。慢网络下 uvx 启动超时的处置见
 [技能安装手册](../../skills/huaweicloud-supabase/rds-supabase-mgr-mcp/references/install.md)。
 
 ### 诊断 CLI
@@ -302,22 +302,23 @@ uv run python -m mcp_server_supabase.diagnostics readonly --allow-cloud-read
 | `MCP_SERVER_PORT` | 否 | streamable-http 端口 | `8000` |
 | `MCP_SERVER_HOST` | 否 | streamable-http 绑定地址 | `0.0.0.0` |
 
-### 安全机制
+### 安全护栏
 
-- **两阶段确认**：写工具默认 `confirm=false` 持久化十分钟计划并返回 `plan_id`；
-  确认后以**相同参数** `confirm=true` + `plan_id` 提交。参数、项目、服务地址或
-  凭据变更须重新预览确认。
-- **本地执行记录**：SQLite 记录每笔计划与执行状态。提交超时或结果未知时，
-  直接查询操作任务与目标资源核对；任何已提交的计划不得重复提交，防止重复执行。
-- **敏感请求本地引用**：改密、SMTP、GitHub、OBS 凭据经操作方预置的本地注册表
-  （`SUPABASE_REQUESTS_FILE`）以别名提供；工具不接受明文，不读取交付文件内容。
-- **202 只表示受理**：任务 `completed` 不等于业务验证完成，须回查资源。
-- **写权限分层**：云写开关（`SUPABASE_ENABLE_WRITES`，默认关闭）与共享核心
-  只读拦截（`HUAWEICLOUD_MCP_READ_ONLY`）独立生效，均不可由 Agent 自行修改。
+全部写工具执行预览/确认双段：`confirm=false` 先持久化十分钟计划并返回 `plan_id`，
+复核后以相同参数 `confirm=true` + `plan_id` 提交；参数、项目、服务地址或凭据任一
+变更都须重新预览确认。SQLite 本地执行记录（`SUPABASE_STATE_FILE`）登记每笔计划与
+执行状态：提交超时或结果未知时直接查询操作任务与目标资源核对，任何已提交的计划
+不得重复提交，防止重复执行。
 
-**护栏已知局限（参数级匹配）：** 保护规则匹配工具参数中的资源 ID、名称类参数。
-仅云侧配置而参数中未出现的保护属性无法命中；建议通过环境变量或 `guardrails.yaml`
-主动配置保护名单。
+密码、SMTP、GitHub、OBS 等敏感字段不进入对话，由操作方预先写入本地请求注册表
+（`SUPABASE_REQUESTS_FILE`），工具仅凭别名引用，不接受明文。云写开关
+（`SUPABASE_ENABLE_WRITES`，默认关闭）与只读拦截（`HUAWEICLOUD_MCP_READ_ONLY`）
+独立生效，均不可由 Agent 自行修改。任务 `completed` 仅表示云 API 受理，业务结果
+须回查资源确认。
+
+保护名单经 `HUAWEICLOUD_MCP_PROTECTED_*` 环境变量或 `guardrails.yaml` 配置，可按
+工具名、风险级别、资源 ID、名称正则与标签执行 block/confirm/warn。护栏为参数级
+匹配：仅存在于云侧而未出现在工具参数中的保护属性无法命中，建议主动配置保护名单。
 
 `guardrails.yaml` 示例：
 
@@ -334,25 +335,88 @@ rules:
     message: 生产 Supabase 应用受保护，请联系运维。
 ```
 
+### KooCLI 协同
+
+安全组六个工具（查列表/详情、建组、加规则、删规则、删组）已内置 KooCLI 能力，
+开箱即用：原生 RDS 入口不代理 VPC API，工具内部经本机 KooCLI（`hcloud`）调用
+VPC v3 操作，自动完成凭据注入与结果解析，并提供预览确认、来源标签与误删防护。
+使用原则：优先用本服务工具，工具未覆盖的场景再用 KooCLI 原生命令。
+
+| 场景 | 用什么 |
+|---|---|
+| 安全组全部常规操作（查列表/详情、建组、加规则、删规则、删组） | 本服务工具 |
+| 放行 0.0.0.0/0 全网入方向（工具按设计拒绝，需用户明确确认） | KooCLI 原生命令 |
+| 工具明确不支持的边缘操作（如地址组管理） | KooCLI 原生命令 |
+
+运维排障要点：
+
+- **前置条件**：本机安装 hcloud 并接受首次运行隐私协议，安装方法见技能
+  [INSTALL.md 第四节](../../skills/huaweicloud-supabase/rds-supabase-mgr-mcp/INSTALL.md)。
+- **二进制定位**：`HCLOUD_BIN` 环境变量 → 固定安装目录 → PATH，每次调用重新定位，
+  安装后无需重启会话。
+- **凭据注入**：`HUAWEICLOUD_ACCESS_KEY` 与 `HUAWEICLOUD_SECRET_KEY` 同时存在时
+  按命令注入，否则回落 hcloud profile；REST Token 模式须本机配置 hcloud profile
+  （`hcloud configure init`），否则安全组工具报凭据缺失。
+- **区域与项目**：区域取 `HUAWEICLOUD_REGION`；项目由 KooCLI 按区域默认项目解析，
+  子项目账号须在 profile 配置 `--cli-project-id`。
+- **错误透传**：VPC 后端 error_code/error_msg/request_id 原样透传；隐私协议未接受、
+  二进制缺失、超时各有专用错误码与处置指引。
+- **来源标记**：建组自动打 `AUTO_CREATE=true` 与 `USE_FOR=Supabase` 双标签；整组
+  删除校验双标签匹配，非本流程创建的安全组一律拒绝。
+
+## 使用 UVX 运行
+
+AgentArts 及其他客户端的 UVX stdio 配置：
+
+```json
+{
+  "mcpServers": {
+    "rds-supabase-mgr-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirectory=server/mcp_server_rds_supabase_mgr",
+        "mcp-huaweicloud-rds-supabase-mgr"
+      ],
+      "env": {
+        "HUAWEICLOUD_AUTH_TOKEN": "<服务 Token>",
+        "HUAWEICLOUD_MCP_READ_ONLY": "true",
+        "SUPABASE_ENABLE_WRITES": "false"
+      }
+    }
+  }
+}
+```
+
+AgentArts 支持 UVX stdio 与 Streamable HTTP。远程模式启动命令：
+
+```bash
+mcp-huaweicloud-rds-supabase-mgr -t streamable-http
+```
+
+默认监听 `0.0.0.0:8000`，端点为 `/mcp`；生产部署应在前置网关配置 HTTPS 与客户端
+鉴权。服务未发布到 PyPI，UVX 始终经 git 仓库拉取（见[安装](#安装)）。
+
 ## 示例
 
 ### 工作流一：从零创建一个能访问的应用
 
-1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管来源
-   决策与意图（含 needs_storage 存储答复）取得端到端编排基线：三大模块参数固化、
-   EIP 购买基线、OBS 桶对接方案（复用/新建两场景）与步骤编号的 creation_flow。
-2. 按编排逐步执行：网络就绪（默认推荐场景按 default_create 建网）→ 存储就绪
-   （obs_integration：`discover_supabase_storage` 定复用或新建，新建桶走
-   `create_supabase_new_obs`）→ 本地请求文件（含 root 密码、存储凭据等秘密）。
+1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管
+   来源决策与意图（含 `needs_storage` 存储答复）取得端到端编排基线：三大模块参数
+   固化、EIP 购买基线、OBS 桶对接方案与步骤编号的创建流程。
+2. 按编排逐步执行：网络就绪（默认推荐场景按 `default_create` 建网）→ 存储就绪
+   （`discover_supabase_storage` 定复用或新建，新建桶走 `create_supabase_new_obs`）
+   → 本地请求文件（含 root 密码、存储凭据等秘密）。
 3. 按托管来源二选一提交（安全组由创建工具自动创建注入，无需手填
-   security_group_id）：新建实例（推荐）走
-   `create_supabase_with_new_instance(request_ref, confirm=false)`，
-   关联已有实例走 `create_supabase_link_exist_instance(request_ref, confirm=false)`。
-   预览 → 把脱敏参数给用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。
-4. 用返回的 `job_id` 调用 `show_operation_job_status`（或 `wait_operation_job_complete`
-   有界等待）到终态。
-5. 回查 `show_supabase_application`：公网 IP 未绑定时先 `change_supabase_eip`，
-   再以 `list_supabase_api_keys` + `deliver_supabase_api_key` 交付接入信息。
+   `security_group_id`）：新建实例（推荐）走
+   `create_supabase_with_new_instance(request_ref, confirm=false)`，挂载已有实例走
+   `create_supabase_link_exist_instance(request_ref, confirm=false)`。预览 → 脱敏
+   参数交用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。
+4. 用返回的工作流 ID 调用 `show_supabase_creation_progress`（或
+   `show_operation_job_status` / `wait_operation_job_complete` 有界等待）到终态。
+5. 回查 `show_supabase_application`：公网未开通时按场景三执行 EIP 采购与绑定并
+   同步 `api_external_url`，再以 `list_supabase_api_keys` +
+   `deliver_supabase_api_key` 交付接入信息。
 
 ### 工作流二：给应用开安全组端口
 
@@ -387,7 +451,7 @@ rules:
   `HUAWEICLOUD_MCP_PROTECTED_*` 保护名单与确认规则。
 - 不要为方便而把长期管理员凭证配置到 MCP 客户端；生产环境建议使用临时安全凭证。
 
-## 开发、测试和验证
+## 开发、测试和发布
 
 ```bash
 uv sync --all-groups
@@ -402,9 +466,9 @@ MCP 工具列表。
 
 ## 贡献和支持
 
-贡献流程、安全报告方式与版本变更见仓库根目录 `CONTRIBUTING.md`、`SECURITY.md`
-与 `CHANGELOG.md`。普通问题使用 GitHub Issue；凭证泄露和安全问题不得提交到公开
-Issue。
+贡献流程、安全报告方式和版本变更分别见仓库根目录的 `CONTRIBUTING.md`、
+`SECURITY.md` 和 `CHANGELOG.md`。普通问题可使用 GitHub Issue；凭证泄露和安全
+问题不得提交到公开 Issue。
 
 ## 深入文档
 
