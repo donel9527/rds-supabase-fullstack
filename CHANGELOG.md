@@ -7,6 +7,25 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a52 - documentation correction:
+  the feature lists and the skill's applicable-scenario list are
+  restored to their detailed narrative form (they had been wrongly
+  compressed in 0.4.0a51) and now integrate every capability added
+  through a47-a51 in full detail: grouped flavor discovery with the
+  split two-question interaction and same-spec default in the
+  arrangement entry, security-group rebinding with its three targets
+  and full-replacement semantics in the network entry, and the
+  password scope guard in the authentication entry. The
+  twenty-character conciseness discipline the project intended is
+  applied where it belongs: the scenario column of the available-tools
+  tables - all 53 rows in the MCP README, its English mirror (noun
+  phrases of at most six words) and the skill's core-command tables
+  are compressed to at most twenty characters per cell, keeping the
+  tables scannable while the detailed constraints remain in the
+  business-scenario chapters.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a51 - security-group set tool,
   password scope guard and doc-wide operations consolidation
   (52 -> 53 tools, skill v2.5.0):

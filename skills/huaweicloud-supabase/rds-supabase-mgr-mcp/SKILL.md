@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.5.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a51`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.5.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a52`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -17,19 +17,18 @@ metadata:
 
 适用场景：
 
-- 创建编排：来源两决策，参数实时固化
-- 场景化创建：新建或挂载实例，自动备资源
-- 公网开通：EIP 采购、绑定与同步
-- SSL：证书盘点、两段式购买与开关
-- OBS 对接：复用/新建与凭据轮换
-- 认证与登录：注册开关、邮箱/GitHub
-- 密钥交付与重置：元数据查询，值只入文件
-- 包周期订单：核对、支付与取消
-- 应用启停与重启：状态护栏，任务跟踪
-- 托管实例运维：强制解析，启停重启与详情
-- 安全组换绑：三目标，多组全量替换
-- 日常变更：密码/Key/SSL/安全组
-- 删除收尾：应用与托管实例干净拆除
+- 创建前置编排：托管来源两种决策、三大必选参数模块与 OBS 桶存储对接（关键可选）实时固化、SSL 与公网 EIP 两个独立配置模块、步骤化创建流程；应用与实例规格分开单独询问——全部可售规格按规格类型（group_type 十大类）分组展示、实例默认推荐与应用同规格、磁盘类型带中文名与实时兼容清单。
+- 场景化创建：新建实例（推荐）或挂载已有 PostgreSQL 实例；专用安全组与 OBS 桶自动准备、参数回填注入、一次提交。
+- 公网开通：EIP 空闲优先采购、三重校验绑定、`api_external_url` 同步与探活验证。
+- SSL 与 HTTPS：账号已有证书盘点（`list_ssl_certificates`）、两段式证书购买与申请（`purchase_supabase_ssl_cert`，免费档 DV_SSL_CERT_BASIC 推荐、付费档生成待支付订单、纯 EIP 公网 IP 证书仅文件验证）、SSL 开关变更。
+- OBS 存储对接：复用/新建两选择、临时凭证检测、桶与凭据变更轮换。
+- 认证与登录：注册开关、邮箱（SMTP）登录、GitHub OAuth 登录、确认邮件模板。
+- 接入信息与密钥：访问地址拼装、四类 Key 元数据查询、受保护本地文件交付。
+- 包周期订单：金额币种核对、余额支付、未支付订单取消。
+- 应用启停与重启：启动（不自动拉起托管实例）、停止（不停托管实例、继续计费）与重启（短暂中断、低峰执行），状态护栏校验与异步任务跟踪。
+- 托管实例生命周期：详情查询（引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中动作，附计费与十五天自动启动说明）与启停/重启——目标强制解析自应用 `managed_instance`，不接受裸 `instance_id`，杜绝误操作独立数据库实例；停止仅按需实例（VM 停止计费，EIP/存储/备份继续计费，十五天内未开启将于可维护时段自动启动）；先启实例再启应用。
+- 安全组换绑：`change_supabase_security_group` 三目标（应用自身/托管实例/待挂载实例——挂载场景前置准备），多组全量替换（未列入即摘除），托管与可挂载目标强校验，workflowId 经任务工具跟踪。
+- 日常变更与删除：应用密码（仅应用登录密码，托管实例 root 密码不在范围）、Key、SSL、EIP、安全组规则；应用删除与托管实例干净收尾。
 
 典型用例：
 
@@ -65,7 +64,7 @@ metadata:
 
 ## 前置条件
 
-1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a51`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
+1. Python 3.10+ 与 `uv` 已安装；管理面 MCP 服务端 `mcp_server_supabase ≥ 0.4.0a52`，以运行时 `tools/list` 返回的清单为准，不把文档中的工具数量当作固定上限。
 2. MCP 客户端已注册本服务。安装、宿主注册模板、凭据模式与会话内使能见[安装手册](references/install.md)。来源锁定：服务端未发布 PyPI，uvx 一律从本仓 GitHub 拉取；PyPI 同名第三方包不是本服务，禁止安装。
 3. 凭据模式二选一：AK/SK（含临时密钥）必须设 `SUPABASE_TRANSPORT=sdk_core`，否则服务端按 REST 模式启动并忽略 AK/SK；服务 Token 走 REST 模式（`HUAWEICLOUD_AUTH_TOKEN`）。`HUAWEICLOUD_REGION` 驱动 RDS 端点推导、项目 IAM 自动发现与安全组工具；子项目账号显式配置 `HUAWEICLOUD_PROJECT_ID`。
 4. 安全组 VPC 六个工具（查列表/查详情、建组、增删规则、删组）依赖本机 KooCLI（`hcloud`）并已接受首次运行隐私协议；换绑安全组的 `change_supabase_security_group` 走 RDS 接口，无 KooCLI 依赖。探测与安装方法见技能根目录 `INSTALL.md` 第四节。
@@ -255,84 +254,84 @@ metadata:
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `plan_supabase_creation_arrangement` | 端到端创建编排基线：托管来源两决策、三必选模块实时固化+OBS 关键可选模块、SSL 与公网 EIP 独立配置模块、步骤化 creation_flow；应用与实例规格分开单独询问，实例默认推荐与应用同规格 | READ |
-| `discover_supabase_create_basic_options` | 应用基本要素发现（按 az_code）：版本、Single/Ha 实时探测、可售规格与默认值（规格按类型分组展示全部可售） | READ |
-| `discover_db_instance_for_create` | 托管实例来源分场景探索（newly/existed）；existed 候选分页 20/页含 action 锁；newly 规格按 group_type 十类分组展示全部可售，磁盘类型含中文名与实时兼容规格类型 | READ |
-| `discover_network_for_create` | VPC/子网选址（空闲 IP 优选、无网络给默认推荐）与双组安全组规格 | READ |
-| `discover_supabase_storage` | OBS 获取两选择（复用/新建推荐）与临时凭证检测，附读测试 | READ |
-| `list_ssl_certificates` | 盘点账号已有 SSL 证书（SCM 全局服务）；cert_id 即 `change_supabase_ssl` 入参，PAID=已购待申请 | READ |
-| `list_supabase_flavors_with_azs` | 应用规格及各规格支持的可用区 | READ |
-| `list_db_instance_engine_versions` | 托管实例可用 PostgreSQL 引擎版本 | READ |
-| `list_db_instance_flavors_with_azs` | 托管实例规格及各可用区售卖状态 | READ |
-| `list_db_instance_storage_types` | 托管实例磁盘类型（按版本与部署模式过滤） | READ |
-| `list_supabase_manageable_instances` | 可挂载的已有 PostgreSQL 实例 | READ |
-| `plan_supabase_ssl` | SSL 切换前规划：证书要求与影响评估 | READ |
-| `get_supabase_capabilities` | 本服务能力范围声明（离线，不探测云状态） | READ |
+| `plan_supabase_creation_arrangement` | 端到端创建编排与参数基线 | READ |
+| `discover_supabase_create_basic_options` | 应用要素发现，规格分组展示 | READ |
+| `discover_db_instance_for_create` | 实例来源发现，规格分组展示 | READ |
+| `discover_network_for_create` | 网络选址与安全组规格 | READ |
+| `discover_supabase_storage` | OBS 获取两选择与凭证检测 | READ |
+| `list_ssl_certificates` | 盘点已有 SSL 证书 | READ |
+| `list_supabase_flavors_with_azs` | 查应用规格与可用区售卖 | READ |
+| `list_db_instance_engine_versions` | 查托管实例引擎版本 | READ |
+| `list_db_instance_flavors_with_azs` | 查实例规格与可用区售卖 | READ |
+| `list_db_instance_storage_types` | 查磁盘类型与兼容规格 | READ |
+| `list_supabase_manageable_instances` | 查可挂载的 PG 实例 | READ |
+| `plan_supabase_ssl` | SSL 切换前规划评估 | READ |
+| `get_supabase_capabilities` | 查看服务能力与操作边界 | READ |
 
 **创建（DANGEROUS）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `create_supabase_with_new_instance` | （推荐）新建实例场景创建：自动建双安全组+确保 OBS 桶+回填一次提交；`public_access_cidr` 三选一 | DANGEROUS |
-| `create_supabase_link_exist_instance` | 挂载已有实例创建：自动应用组，库组不动 | DANGEROUS |
-| `create_supabase_eip` | EIP 采购（空闲优先；按需+全动态 BGP 5-1000M 推荐 300M+自动打标） | DANGEROUS |
-| `create_supabase_new_obs` | 新建私有 OBS 桶（标准/多AZ 默认/阻止公共访问固定；重名追加短 uuid） | DANGEROUS |
+| `create_supabase_with_new_instance` | 新建实例场景创建（推荐） | DANGEROUS |
+| `create_supabase_link_exist_instance` | 挂载已有实例创建应用 | DANGEROUS |
+| `create_supabase_eip` | EIP 空闲优先采购 | DANGEROUS |
+| `create_supabase_new_obs` | 新建私有 OBS 桶 | DANGEROUS |
 
 **绑定与变更（含安全组工具：`list_supabase_security_groups`、`show_supabase_security_group`、`create_supabase_security_group`、`add_supabase_security_group_rule`、`delete_supabase_security_group_rule`、`delete_supabase_security_group`、`change_supabase_security_group`）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `bind_supabase_eip` | EIP 绑定：in32/归属/UUID-IPv4 三重校验，经 RDS AttachEip | DANGEROUS |
-| `change_supabase_eip` | 绑定/解绑 EIP，开关公网访问 | WRITE |
-| `change_supabase_ssl` | 开关 SSL（开需证书 ID；关不带证书） | WRITE |
-| `purchase_supabase_ssl_cert` | 两段式购买 SCM SSL 证书，可选同步申请签发（免费档 DV_SSL_CERT_BASIC 推荐；付费档生成待支付订单；纯 EIP 公网 IP 证书仅文件验证） | DANGEROUS |
-| `change_supabase_application_password` | 仅改应用登录密码（dashboard 用户 supabase，托管实例 root 密码不在范围），新密码经本地请求文件 | DANGEROUS |
-| `update_supabase_storage` | OBS 对接变更与凭据轮换 | WRITE |
-| `update_supabase_auth_flags` | 注册/匿名访问开关（只改传入的） | WRITE |
-| `update_supabase_auth_config` | Auth URL、邮箱/GitHub 登录、确认模板（敏感字段经请求文件） | WRITE |
-| `reset_supabase_api_key` | 重置 Key（异步；新值须重新交付） | DANGEROUS |
-| `start_supabase_application` | 启动已停止应用（状态护栏：start 仅停止态；不自动拉起托管实例） | DANGEROUS |
-| `stop_supabase_application` | 停止应用（状态护栏：仅运行态 normal；不停托管实例、继续计费，停止期间功能不可用） | DANGEROUS |
-| `restart_supabase_application` | 重启应用（状态护栏：仅运行态 normal，已停止须先启动；短暂中断，低峰执行） | DANGEROUS |
-| `stop_supabase_managed_instance` | 停止托管实例（目标强制解析自应用 managed_instance，不接受裸 instance_id；仅按需可停，VM 停计费 EIP/存储/备份继续，十五天可维护时段自动启动） | DANGEROUS |
-| `start_supabase_managed_instance` | 开启已停止托管实例（仅 shutdown；先启实例再启应用） | DANGEROUS |
-| `restart_supabase_managed_instance` | 重启托管实例（仅 normal 未冻结无进行中操作；重启期间不可用，低峰执行） | DANGEROUS |
+| `bind_supabase_eip` | EIP 三重校验绑定 | DANGEROUS |
+| `change_supabase_eip` | 绑定或解绑 EIP | WRITE |
+| `change_supabase_ssl` | 开关应用 SSL | WRITE |
+| `purchase_supabase_ssl_cert` | 两段式购买并申请证书 | DANGEROUS |
+| `change_supabase_application_password` | 改应用登录密码，不涉实例 | DANGEROUS |
+| `update_supabase_storage` | 对接或轮换 OBS 存储 | WRITE |
+| `update_supabase_auth_flags` | 开关注册与匿名访问 | WRITE |
+| `update_supabase_auth_config` | 配置邮箱/GitHub 登录与模板 | WRITE |
+| `reset_supabase_api_key` | 重置 Key，旧 Key 渐进失效 | DANGEROUS |
+| `start_supabase_application` | 启动已停止的应用 | DANGEROUS |
+| `stop_supabase_application` | 停止应用，实例继续计费 | DANGEROUS |
+| `restart_supabase_application` | 重启运行中的应用 | DANGEROUS |
+| `stop_supabase_managed_instance` | 停托管实例，VM 停计费 | DANGEROUS |
+| `start_supabase_managed_instance` | 开启已停止的托管实例 | DANGEROUS |
+| `restart_supabase_managed_instance` | 重启托管实例，低峰执行 | DANGEROUS |
 | `list_supabase_security_groups` | 浏览安全组列表 | READ |
-| `show_supabase_security_group` | 查看安全组详情与全部规则 | READ |
-| `create_supabase_security_group` | 建专用组（自动打 AUTO_CREATE/USE_FOR 双标签） | WRITE |
-| `add_supabase_security_group_rule` | 新增出入方向规则（拒收 0.0.0.0/0 入方向） | DANGEROUS |
-| `delete_supabase_security_group_rule` | 删除规则，收窄开放面 | DANGEROUS |
-| `delete_supabase_security_group` | 删组（标签门：仅双标签且无引用） | DANGEROUS |
-| `change_supabase_security_group` | 换绑安全组：三目标（应用/托管实例/待挂载实例），多组全量替换（未列入即摘除）；托管与可挂载强校验；workflowId 经 `show_operation_job_status` 跟踪 | DANGEROUS |
+| `show_supabase_security_group` | 查安全组详情与规则 | READ |
+| `create_supabase_security_group` | 建专用组并打双标签 | WRITE |
+| `add_supabase_security_group_rule` | 新增规则，拒收全 0 入 | DANGEROUS |
+| `delete_supabase_security_group_rule` | 删规则收窄开放面 | DANGEROUS |
+| `delete_supabase_security_group` | 删组，标签门防误删 | DANGEROUS |
+| `change_supabase_security_group` | 换绑安全组，多组全量替换 | DANGEROUS |
 
 **查询与跟踪（READ）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `list_supabase_applications` | 分页浏览应用（名称过滤/排序） | READ |
-| `show_supabase_application` | 应用详情：规格/网络/SSL/存储/托管实例；访问地址拼装素材 | READ |
-| `show_supabase_managed_instance` | 托管实例详情：引擎/版本/instance_status 语义/规格/磁盘/可用区/进行中动作（附计费与十五天自动启动说明） | READ |
-| `show_supabase_creation_progress` | 创建全阶段进展分析（实例先就绪、应用后建） | READ |
-| `show_supabase_auth_config` | Auth 配置基线（update 的对照基准） | READ |
-| `list_supabase_api_keys` | 四类 Key 元数据（永不返回值） | READ |
-| `show_operation_job_status` | 查询单个异步任务状态 | READ |
+| `list_supabase_applications` | 分页浏览应用，可过滤排序 | READ |
+| `show_supabase_application` | 查应用详情与接入素材 | READ |
+| `show_supabase_managed_instance` | 查托管实例详情与状态 | READ |
+| `show_supabase_creation_progress` | 跟踪应用创建全阶段 | READ |
+| `show_supabase_auth_config` | 查认证配置基线 | READ |
+| `list_supabase_api_keys` | 查 Key 元数据，不返回值 | READ |
+| `show_operation_job_status` | 查询异步任务状态 | READ |
 | `wait_operation_job_complete` | 有界轮询任务至终态 | READ |
-| `get_supabase_order` | 包周期订单状态/金额/币种/明细（20 条/marker 分页） | READ |
+| `get_supabase_order` | 查订单状态金额与明细 | READ |
 
 **交付（受控）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `deliver_supabase_api_key` | Key 值写入受保护本地文件（新文件独占创建；需写开关） | 受控 |
+| `deliver_supabase_api_key` | Key 值落受保护本地文件 | 受控 |
 
 **订单与删除（DANGEROUS）**
 
 | 工具 | 用途 | 风险 |
 |---|---|---|
-| `pay_supabase_order` | 余额支付（expected_amount 须同等于 official_amount 与 amount_after_discount；单次提交不重试） | DANGEROUS |
-| `cancel_supabase_order` | 取消未支付订单（不可逆/幂等/cancellation_verified 复核） | DANGEROUS |
-| `delete_supabase_application` | 删应用（delete_managed_instance 必选；false 留实例留费/true 双删不可逆仅按需可级联） | DANGEROUS |
-| `delete_supabase_managed_instance` | 应用存续时单独拆除托管实例（四层校验防误删） | DANGEROUS |
+| `pay_supabase_order` | 核对后余额支付订单 | DANGEROUS |
+| `cancel_supabase_order` | 取消待支付订单 | DANGEROUS |
+| `delete_supabase_application` | 删应用，实例去留必选 | DANGEROUS |
+| `delete_supabase_managed_instance` | 单独拆除托管实例 | DANGEROUS |
 
 ## 参数契约速查
 
