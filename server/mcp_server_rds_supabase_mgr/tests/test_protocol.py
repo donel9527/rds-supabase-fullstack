@@ -22,7 +22,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         for name, args in (
-                            ('plan_supabase_creation', {'manage_type':'newly_instance'}),
+                            ('plan_supabase_creation_arrangement', {'manage_type':'newly_instance'}),
                             ('change_supabase_ssl', {'application_id':'fixture-app','enable_ssl':False}),
                         ):
                             result = await session.call_tool(name, {**args, 'unsupported_marker':'private-marker-value'})

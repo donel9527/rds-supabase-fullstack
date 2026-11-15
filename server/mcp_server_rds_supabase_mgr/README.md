@@ -156,7 +156,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 | `update_supabase_auth_config` | 配置 GitHub、SMTP 登录方式与回调地址、邮件模板 | WRITE | [ModifySupabaseApplicationAuthConfig](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationAuthConfig) |
 | `update_supabase_storage` | 对接或变更 OBS 存储桶 | WRITE | [ModifySupabaseApplicationStorage](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationStorage) |
 | `discover_supabase_create_basic_options` | 应用自身创建要素一站式探索：版本、Single/Ha 支持（实时探测）、所选 AZ 可售应用规格、命名规则与不重复参考名、登录用户与密码规则、安全组推荐策略（应用组 8443 入、实例端口出；数据库组由实例工具生成） | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
-| `plan_supabase_creation` | 创建前的场景规划：输出分阶段的资源准备清单与操作流程 | READ | - |
+| `plan_supabase_creation_arrangement` | 端到端创建编排基线：深度结合三个发现工具实时固化 Supabase 基本信息/托管实例/网络控制三大模块参数，给出托管来源决策（推荐新建）、可托管实例分页清单（20/页，含 action 锁排除）、EIP 购买基线（按需 + 全动态 BGP 300M 独享）与步骤编号的 creation_flow 供 1:1 严格执行 | READ | 实时组合（三个发现工具的只读查询） |
 | `list_supabase_flavors_with_azs` | 查询应用可用性能规格及各规格支持的可用区列表，供创建选型与可用区选择 | READ | [ListSupabaseApplicationFlavors](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseApplicationFlavors) |
 | `list_supabase_manageable_instances` | 查询可关联的已有 PostgreSQL 实例 | READ | [ListSupabaseManageableInstances](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListSupabaseManageableInstances) |
 | `list_db_instance_engine_versions` | 查询托管实例可用的 PostgreSQL 引擎版本 | READ | [ListDatastores](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListDatastores) |
@@ -333,11 +333,12 @@ rules:
 
 ### 工作流一：从零创建一个能访问的应用
 
-1. 调用 `plan_supabase_creation`，按意图（数据库路线/存储/公网/SSL）取得阶段化
-   准备方案与必供字段清单。
-2. 按方案准备：安全组（`create_supabase_security_group` 建专用组，
-   `add_supabase_security_group_rule` 配 8443 入方向与 5432 出方向）、本地请求
-   文件（含 root 密码、存储凭据等秘密）。
+1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管来源
+   决策与意图取得端到端编排基线：三大模块参数固化、EIP 购买基线与步骤编号的
+   creation_flow。
+2. 按编排逐步执行：网络就绪（默认推荐场景按 default_create 建网）→ 安全组
+   （按 security_group_plan 的 apply_steps 建组配规则，8443 入方向三选一、5432
+   出方向）→ 本地请求文件（含 root 密码、存储凭据等秘密）。
 3. `create_supabase_application(request_ref, confirm=false)` 预览 → 把脱敏参数
    给用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。
 4. 用返回的 `job_id` 调用 `show_operation_job_status`（或 `wait_operation_job_complete`

@@ -7,6 +7,41 @@ semantic versioning.
 
 ### Changed
 
+- `mcp_server_rds_supabase_mgr` v0.4.0a40: plan_supabase_creation is
+  thoroughly reworked into plan_supabase_creation_arrangement - a
+  scenario-based, end-to-end creation orchestration design plus a fixed
+  parameter baseline, assembled live from the three discovery tools.
+  The managed-instance source is presented first as an explicit decision
+  (newly_instance recommended and the default; existed_instance attaches
+  an existing PG) and the user's definitive conclusion is required up
+  front. Three step modules are consolidated live: Supabase basics
+  (name suggestion, version, mode, flavor via
+  discover_supabase_create_basic_options), managed instance (newly:
+  engine/flavor/storage field options via discover_db_instance_for_create;
+  existed: the attachable candidates listed paginated at 20 per page,
+  each row carrying the complete basic information - version,
+  deployment type, port, availability zones, created time - and its
+  current action locks so instances mid-restart/upgrade/change can be
+  excluded before submission, avoiding task conflicts), and network
+  control (placement plus the specification-only security-group plan via
+  discover_network_for_create). The EIP purchase baseline is fixed:
+  pay-per-use recommended (prepaid documented with its order constraints),
+  dedicated full-dynamic-BGP bandwidth 5-1000M with 300M recommended
+  (KooCLI EIP CreatePublicip/CreatePrePaidPublicip verified in the
+  CLI catalog; MCP binds via change_supabase_eip only). A step-numbered
+  creation_flow (network ready -> security groups -> request file ->
+  preview -> submit -> progress -> verify) and a conditioned
+  post-creation flow are emitted for strict 1:1 execution; the response
+  declares that nothing is created here. Offline diagnostics and the
+  smoke test now validate the tool's registration and argument
+  validation without triggering live discovery. Verified live in
+  cn-east-3: an 11-step newly-instance arrangement with live-basics,
+  PG-18 flavor and default-network modules, the detected egress
+  117.88.75.25/32, and an empty paginated candidate inventory.
+  Skill v0.9.11; tool count unchanged (38).
+
+### Changed
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a39: the discovery tools' security-group
   output is now an explicit, copy-ready specification contract. A code audit
   confirmed the discovery paths only ever call List/GET operations (RDS

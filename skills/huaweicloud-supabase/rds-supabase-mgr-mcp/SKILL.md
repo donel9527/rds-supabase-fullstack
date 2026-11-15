@@ -5,7 +5,7 @@ description: RDS Supabase 应用全生命周期管理技能：从零创建一个
 
 # RDS Supabase 应用全生命周期管理
 
-版本 0.9.10；配套服务端 mcp_server_supabase ≥ 0.4.0a39（uvx 规范入口 mcp-huaweicloud-rds-supabase-mgr）。工具存在不代表服务端已在真实环境联调。
+版本 0.9.11；配套服务端 mcp_server_supabase ≥ 0.4.0a40（uvx 规范入口 mcp-huaweicloud-rds-supabase-mgr）。工具存在不代表服务端已在真实环境联调。
 
 贯穿所有场景的四条铁律：
 1. **写操作两段式**：先预览（confirm=false），把参数、影响、费用展示给用户；用户确认后才提交（confirm=true + 预览返回的 plan_id）。预览 10 分钟有效，参数变了重新预览。
@@ -79,14 +79,14 @@ https://github.com/huaweicloud/rds-supabase-fullstack
 
 ### 第 1 步：选路线、摸意图（必须问，不许跳过、不许替用户决定）
 
-**这一步是提问环节，不是猜测环节。** 逐个把四个问题抛给用户、拿到明确答复才往下走；用户没答全就照 `plan_supabase_creation` 返回的 decision_points 继续追问。**禁止**凭"用户没提存储"就默认不要 OBS、凭"看着像测试"就默认 Single——没问就默认，等于把用户的业务决定偷走了：
+**这一步是提问环节，不是猜测环节。** 逐个把四个问题抛给用户、拿到明确答复才往下走；用户没答全就照 `plan_supabase_creation_arrangement` 返回的 decision_points 继续追问。**禁止**凭"用户没提存储"就默认不要 OBS、凭"看着像测试"就默认 Single——没问就默认，等于把用户的业务决定偷走了：
 
 - **数据库怎么办？** 路线 A：一起新建（推荐新用户，干净、自动配好）；路线 B：用已有的 PG 实例纳入托管
 - **要传文件吗？**（图片、视频、附件都算）要 → 按场景三第 1 节**先备好 OBS 桶**（复用私有桶还是新建专用桶，也问用户），桶名和凭据进创建请求的 storage_component；不要 → storage_component 写 `{enabled:false}`。**存储事后无法补开**，所以这一问必须在创建前问清
 - **要从公网访问吗？** 要 → EIP + 安全组开通（第 4 步）；不要 → 创建完成后提示用户当前只能内网访问
 - **要 https 吗？** 要 → 买 CCM 证书（场景四 SSL 行）
 
-把答案喂给 `plan_supabase_creation(manage_type, needs_storage, needs_public_access, needs_ssl)`（邮箱/GitHub 登录意图可加 `needs_email_login`/`needs_github_login`），拿回**分阶段的准备方案**：decision_points（待用户定的意图）/ 创建前准备（含路线分支与 OBS 桶决策）/ 创建与等待 / 创建后动作（公网开通、api_external_url 同步、SSL、登录配置、接入信息）/ 外部依赖 / 秘密边界。
+把答案喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`（意图参数同前，可加 `needs_email_login`/`needs_github_login`），拿回**端到端编排基线**：托管来源决策（两种方式明确呈现，推荐且默认新建实例；已有实例场景输出分页 20/页的可托管清单并标注 action 锁——正在重启/升级/变更的实例必须排除，避免任务冲突失败）/ 三大步骤模块参数固化（Supabase 基本信息、托管实例、网络控制，深度结合三个 discover 工具实时推荐）/ EIP 购买基线（按需购买 + 全动态 BGP 独享带宽 5-1000M 推荐 300M）/ 步骤编号的 creation_flow（实际创建 1:1 严格逐步执行，不偏离目标与计划）/ 创建后动作（公网开通与 api_external_url 同步、SSL、登录配置、接入信息交付）/ decision_points / 秘密边界。
 
 ### 第 2 步：确定配置项
 

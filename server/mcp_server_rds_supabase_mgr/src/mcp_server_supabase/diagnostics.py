@@ -87,7 +87,7 @@ async def protocol_report(mode, application_id=None, job_id=None):
                 tools = await session.list_tools()
                 names = {tool.name for tool in tools.tools}
                 checks.append({'check':'tool_discovery','passed':{'get_supabase_capabilities',
-                    'plan_supabase_creation','list_supabase_api_keys','wait_operation_job_complete','show_operation_job_status'} <= names})
+                    'plan_supabase_creation_arrangement','list_supabase_api_keys','wait_operation_job_complete','show_operation_job_status'} <= names})
                 async def call(name, args, predicate=None):
                     result = await session.call_tool(name,args)
                     data = payload(result)
@@ -100,8 +100,14 @@ async def protocol_report(mode, application_id=None, job_id=None):
                            lambda d: len(d.get('scenarios') or {})==6
                            and isinstance(d.get('implemented_operations'),list))
                 if offline:
-                    await call('plan_supabase_creation',{'manage_type':'newly_instance'},
-                               lambda d:d.get('execution')=='not_executed')
+                    # The arrangement integrates live discovery; offline validation stops it
+                    # before any cloud call via an invalid page and checks the error envelope.
+                    arrangement = await session.call_tool('plan_supabase_creation_arrangement',
+                                                          {'manage_type':'newly_instance','page':0})
+                    arrangement_data = payload(arrangement)
+                    checks.append({'check':'plan_supabase_creation_arrangement',
+                                   'passed': not arrangement.is_error and isinstance(arrangement_data,dict)
+                                             and arrangement_data.get('error',{}).get('code')=='MCP_INVALID_ARGS'})
                     await call('plan_supabase_ssl',{'enable_ssl':True},lambda d:d.get('execution')=='not_executed')
                     await call('change_supabase_ssl',{'application_id':'offline-fixture','enable_ssl':False},
                                lambda d:d.get('status')=='confirmation_required' and bool(d.get('plan_id')))
