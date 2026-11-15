@@ -7,6 +7,27 @@ semantic versioning.
 
 ### Changed
 
+- `mcp_server_rds_supabase_mgr` v0.4.0a39: the discovery tools' security-group
+  output is now an explicit, copy-ready specification contract. A code audit
+  confirmed the discovery paths only ever call List/GET operations (RDS
+  catalogs, VPC/subnet lists, attachable-candidate queries, the egress-IP
+  echo); zero write paths - and the responses now say so explicitly.
+  discover_network_for_create's security_group_plan gains plan_type
+  "specification" and a declaration that nothing is created here, names the
+  two dedicated groups concretely (supabase-app-sg / supabase-db-sg with
+  their purpose descriptions), and adds apply_steps: an ordered list of
+  {tool, args} pairs - create_supabase_security_group and
+  add_supabase_security_group_rule with exact direction/protocol/port/CIDR
+  arguments and group_id placeholders - so the later real creation follows
+  the plan strictly and prepares quickly. The basic-options strategy
+  carries the same declaration. Tool descriptions and READMEs state
+  read-only/specification-only explicitly. Verified live in cn-east-3:
+  the plan returns the five newly-scenario steps (three for existing
+  instances) with the declaration and named groups. Skill v0.9.10; tool
+  count unchanged (38).
+
+### Changed
+
 - `mcp_server_rds_supabase_mgr` v0.4.0a38: the two creation-scenario discovery
   tools are renamed and restructured around the managed-instance source, with
   the security-group planning consolidated into the network tool.

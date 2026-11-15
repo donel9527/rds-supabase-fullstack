@@ -259,7 +259,8 @@ def register(server):
         from discover_db_instance_for_create. The strategy here is guidance only: application
         group 8443 ingress (source options: default 0.0.0.0/0, current-device CIDR, custom) plus
         egress opening the managed instance's port (default 5432); the database group is created
-        for new instances and left untouched for existing ones.
+        for new instances and left untouched for existing ones. Guidance only - nothing is
+        created here.
         """
         return await BasicOptionsDiscovery().discover(az_code)
 
@@ -277,7 +278,9 @@ def register(server):
         ingress from the subnet CIDR (egress default allow-all), without which Supabase is
         unusable. existed_instance: instance_id required; takes VPC/subnet from that attachable
         instance, leaves the instance's security group untouched, same application-group rules.
-        All rule CIDRs are the chosen VPC subnet's CIDR.
+        All rule CIDRs are the chosen VPC subnet's CIDR. Specification only - nothing is
+        created here; the later creation follows the returned apply_steps strictly
+        (create_supabase_security_group / add_supabase_security_group_rule, KooCLI for /0 rules).
         """
         network = NetworkDiscovery()
         return await network.discover_network_for_create(scenario, availability_zone, instance_id, detect_access_ip)
@@ -292,6 +295,7 @@ def register(server):
         existed_instance: the attachable PG candidates (same source as
         list_supabase_manageable_instances); pass instance_id to get that instance's basic,
         configuration and network information for the attach decision. Network placement and
-        security-group planning belong to discover_network_for_create.
+        security-group planning belong to discover_network_for_create. Read-only: nothing
+        is created or changed here.
         """
         return await catalog.discover_db_instance_for_create(scenario, mode, instance_id)

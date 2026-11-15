@@ -349,12 +349,20 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['available_ip_count'], 251)
         self.assertEqual(fake.calls[1], ('VPC', 'ListSubnets', {'limit': 100, 'vpc_id': 'v1'}))
         plan = result['security_group_plan']
+        self.assertEqual(plan['plan_type'], 'specification')
+        self.assertIn('不创建任何资源', plan['declaration'])
+        self.assertEqual(plan['application_group']['name'], 'supabase-app-sg')
         self.assertEqual(plan['application_group']['ingress']['port'], 8443)
         self.assertEqual(plan['application_group']['egress']['destination_cidr'], '192.168.s1.0/24')
         self.assertEqual(plan['database_group']['ingress']['source_cidr'], '192.168.s1.0/24')
         self.assertEqual([o['key'] for o in plan['application_group']['ingress']['source_cidr_options']],
                          ['open', 'detected', 'custom'])
         self.assertIsNone(plan['application_group']['ingress']['source_cidr_options'][1]['source_cidr'])
+        self.assertEqual([step['tool'] for step in plan['apply_steps']],
+                         ['create_supabase_security_group', 'add_supabase_security_group_rule',
+                          'add_supabase_security_group_rule', 'create_supabase_security_group',
+                          'add_supabase_security_group_rule'])
+        self.assertEqual(plan['apply_steps'][2]['args']['source_cidr'], '192.168.s1.0/24')
 
     async def test_falls_back_to_one_free_ip(self):
         ops, _ = self.make([
@@ -452,6 +460,8 @@ class NetworkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plan['database_group']['action'], '不动')
         self.assertEqual(plan['database_group']['current_security_group_id'], 'g1')
         self.assertNotIn('precondition', plan)
+        self.assertEqual(len(plan['apply_steps']), 3)  # app group only; the instance's group stays untouched
+        self.assertEqual(plan['apply_steps'][2]['args']['source_cidr'], '192.168.5.0/24')
 
     async def test_detect_access_ip_fills_the_detected_option(self):
         ops, _ = self.make([{'vpcs': []}])
@@ -517,6 +527,7 @@ class BasicOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['probe_status']['existing_application_names'], 'ok')
         strategy=result['security_group_strategy']
         self.assertFalse(strategy['determined'])
+        self.assertIn('不创建任何资源',strategy['declaration'])
         self.assertIn('discover_network_for_create',strategy['reason'])
         self.assertEqual(strategy['application_group']['ingress']['port'],8443)
         self.assertEqual(strategy['application_group']['egress']['port'],5432)

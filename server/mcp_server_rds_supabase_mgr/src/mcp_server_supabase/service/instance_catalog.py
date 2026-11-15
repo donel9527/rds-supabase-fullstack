@@ -278,10 +278,11 @@ class NetworkDiscovery:
                 'security_group_plan':plan}
 
     def _security_group_plan(self,scenario,subnet_cidr,detect_access_ip):
-        """Creation configuration for the two dedicated groups. The application group
-        gates the product: 8443 ingress without which the app cannot be logged into and
-        5432 egress without which it cannot reach the database; the database group (new
-        instances only) needs the database-port ingress from the chosen subnet CIDR."""
+        """Specification for the two dedicated groups - nothing is created here. The
+        application group gates the product: 8443 ingress without which the app cannot
+        be logged into and 5432 egress without which it cannot reach the database; the
+        database group (new instances only) needs the database-port ingress from the
+        chosen subnet CIDR. The real creation follows apply_steps strictly."""
         detected=self._detect_access_cidr() if detect_access_ip else None
         detect_note='传 detect_access_ip=true 自动探测当前设备出口 IP'
         if detect_access_ip:
@@ -293,14 +294,14 @@ class NetworkDiscovery:
              'note':'当前设备访问网段（出口 IP /32，动态出口可放宽为 /24 或改自定义）。'+detect_note},
             {'key':'custom','source_cidr':None,'note':'用户自定义网段，须为有界 CIDR'},
         ]
-        application_group={'create':'create_supabase_security_group（描述：Supabase应用（自动创建））',
+        application_group={'name':'supabase-app-sg','description':'Supabase应用（自动创建）',
                            'ingress':{'protocol':'tcp','port':8443,
                                       'purpose':'应用服务入口——不放通无法登录 Supabase 应用',
                                       'source_cidr_options':source_options},
                            'egress':{'protocol':'tcp','port':5432,'destination_cidr':subnet_cidr,
                                      'purpose':'连接托管数据库——不放通则应用异常不可用'}}
         if scenario=='newly_instance':
-            database_group={'create':'create_supabase_security_group（描述：数据库接入（自动创建））',
+            database_group={'name':'supabase-db-sg','description':'数据库接入（自动创建）',
                             'ingress':{'protocol':'tcp','port':5432,'source_cidr':subnet_cidr,
                                        'purpose':'应用连接数据库——不放通则 Supabase 异常，功能不可用'},
                             'egress':{'destination_cidr':'0.0.0.0/0','note':'默认放行，无需额外规则'}}
@@ -308,7 +309,31 @@ class NetworkDiscovery:
             database_group={'action':'不动',
                             'current_security_group_id':None,
                             'note':'已有实例的安全组保持现状，不做任何变更'}
-        return {'application_group':application_group,'database_group':database_group,
+        apply_steps=[
+            {'tool':'create_supabase_security_group',
+             'args':{'name':application_group['name'],'description':application_group['description']},
+             'returns':'security_group_id'},
+            {'tool':'add_supabase_security_group_rule',
+             'args':{'group_id':'<新应用组的 security_group_id>','direction':'ingress','protocol':'tcp','port':8443,
+                     'source_cidr':'<三选一：默认 0.0.0.0/0（走 KooCLI）/ 当前设备网段 / 自定义>'}},
+            {'tool':'add_supabase_security_group_rule',
+             'args':{'group_id':'<新应用组的 security_group_id>','direction':'egress','protocol':'tcp','port':5432,
+                     'source_cidr':subnet_cidr}},
+        ]
+        if scenario=='newly_instance':
+            apply_steps+= [
+                {'tool':'create_supabase_security_group',
+                 'args':{'name':database_group['name'],'description':database_group['description']},
+                 'returns':'security_group_id'},
+                {'tool':'add_supabase_security_group_rule',
+                 'args':{'group_id':'<新数据库组的 security_group_id>','direction':'ingress','protocol':'tcp','port':5432,
+                         'source_cidr':subnet_cidr}},
+            ]
+        return {'plan_type':'specification',
+                'declaration':'本工具不创建任何资源；以下为安全组配置规格、选项与推荐，真实创建时严格遵循'
+                              '（create_supabase_security_group / add_supabase_security_group_rule，全 0 网段走 KooCLI）',
+                'application_group':application_group,'database_group':database_group,
+                'apply_steps':apply_steps,
                 'note':'规则中的网段均为所选 VPC 子网 CIDR（%s）；应用组入方向来源三选一：默认全 0 / 当前设备网段 / 自定义'%subnet_cidr}
 
     def _detect_access_cidr(self):
@@ -433,6 +458,7 @@ class BasicOptionsDiscovery:
         cannot be pinned down - the concrete plan comes from discover_network_for_create
         once the scenario is known."""
         return {'determined':False,
+                'declaration':'本工具不创建任何资源；以下为推荐方法策略，具体规格由 discover_network_for_create 输出',
                 'reason':'实例与网络尚未选定，以下为推荐方法策略；具体建组与出入方向规则由 discover_network_for_create（scenario 与 manage_type 一致）给出',
                 'application_group':{
                     'ingress':{'protocol':'tcp','port':8443,'note':'应用服务入口，不放通无法登录；来源三选一：默认全 0 / 当前设备网段 / 自定义'},
