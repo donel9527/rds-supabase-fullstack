@@ -9,27 +9,13 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.READ)
     async def get_supabase_capabilities() -> dict[str, object]:
-        """List the available capabilities of the RDS Supabase management MCP. Run first; returns an offline scope declaration (transport mode, execution policies, implemented operations, six scenario contracts), never cloud status."""
+        """查询本 MCP 的能力范围声明（传输模式、执行策略、已实现操作与六大场景契约）。纯离线声明，不探测云状态；会话应最先调用以确认操作边界。"""
         return service.capabilities()
 
     @server.tool()
     @guard(risk=ToolRisk.READ)
     async def plan_supabase_creation_arrangement(manage_type: str, az_code: str | None = None, mode: str | None = None, page: int = 1, instance_id: str | None = None, detect_access_ip: bool = False, needs_storage: bool | None = None, needs_public_access: bool | None = None, needs_ssl: bool | None = None, needs_email_login: bool | None = None, needs_github_login: bool | None = None) -> dict[str, object]:
-        """Design the end-to-end, scenario-based arrangement for creating a Supabase application: an orchestration flow plus a consolidated parameter baseline, assembled live from the three discovery tools - Supabase basics (discover_supabase_create_basic_options), managed instance (discover_db_instance_for_create) and network control (discover_network_for_create).
-
-        manage_type is the definitive user conclusion required up front: newly_instance (recommended and
-        the default - the managed PG is created together with the application) or existed_instance
-        (attach an existing PG; candidates are listed paginated at 20 per page with their current
-        action locks so instances in a restart/upgrade/change can be excluded, and instance_id fixes
-        that instance and its network). az_code enables the live basics module; mode shapes the new
-        instance (Single recommended); detect_access_ip probes the current-device egress CIDR for the
-        8443 ingress options. The arrangement carries the EIP purchase baseline (pay-per-use
-        recommended; dedicated full-dynamic-BGP bandwidth 5-1000M, 300M recommended) and a
-        step-numbered creation_flow plus post-creation flow to follow strictly 1:1. Optional intents
-        (needs_storage/needs_public_access/needs_ssl/needs_email_login/needs_github_login): omitted =
-        open decision point, true = plan the branch, false = plan the exclusion. Planning only -
-        nothing is created here.
-        """
+        """规划 Supabase 应用端到端创建编排与参数基线（编排流程、网络、托管实例规格与意图分支），仅规划不创建资源。SSL 与公网 EIP 为独立配置模块，不在编排内。响应含 visual 图表。"""
         result = await service.arrangement(manage_type, az_code, mode, page, instance_id, detect_access_ip, needs_storage, needs_public_access, needs_ssl, needs_email_login, needs_github_login)
         if result.get('status') == 'arrangement_baseline':
             result['visual'] = visual.render_arrangement(result)
@@ -38,5 +24,5 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.READ)
     async def plan_supabase_ssl(enable_ssl: bool = True) -> dict[str, object]:
-        """Plan SSL selection without cloud calls. Args: enable_ssl defaults true; false plans disabling. Returns planning status and missing contracts."""
+        """规划 SSL 启停切换方案，不执行变更。纯本地规划、无云调用；返回规划状态与缺失契约，供 change_supabase_ssl 正式提交前核对。"""
         return await service.ssl(enable_ssl)

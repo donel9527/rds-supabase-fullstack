@@ -81,75 +81,36 @@ modes, and the security-group prerequisites are covered below.
 Cloud resource management / application lifecycle orchestration /
 database hosting.
 
-## Features
+## Feature overview
 
-- **Arrangement and discovery**: scenario-based creation arrangement
-  baseline — two managed-instance sources, three mandatory parameter modules plus
-  the OBS bucket integration (a key optional module that must be confirmed before
-  creation), two independent intent modules (SSL configuration and public access
-  via EIP), and a step-numbered creation flow; the application flavor and the
-  instance flavor are asked as two separate questions, with every saleable spec
-  grouped by its group_type (ten official classes), the instance default
-  matching the application's spec, and disk types carrying Chinese labels and
-  live compatibility lists; four discovery tool families (application,
-  instance, network, security group) consolidate parameters live with
-  recommendations.
-- **Scenario-based creation**: `create_supabase_with_new_instance`
-  (recommended) and `create_supabase_link_exist_instance` execute resource
-  preparation strictly per the arrangement — dedicated security groups and
-  the OBS bucket auto-created, parameters backfilled and injected, one
-  submission; application/instance identifiers and workflow IDs echoed.
-- **Network and security groups**: VPC/subnet placement (free-IP preference
-  and default recommendation), dedicated group creation and rules, tag
-  protection (AUTO_CREATE/USE_FOR), three-way ingress source choice
-  (auto-detect / open / custom); security-group rebinding
-  (`change_supabase_security_group`) — three targets (the application, its
-  managed instance, or an attachable instance), multiple groups with
-  full-replacement semantics, strict managed/attachable resolution.
-- **EIP**: idle-first provisioning (pay-per-use recommended, dedicated
-  full-dynamic BGP 5-1000M with 300M recommended, auto-tagged); binding with
-  triple validation (in32 application ID, ownership, format) via the RDS
-  AttachEip API.
-- **SSL certificates**: account certificate inventory (`list_ssl_certificates`,
-  the SCM global service), two-phase certificate purchase and application
-  (`purchase_supabase_ssl_cert`: free-tier DV_SSL_CERT_BASIC recommended,
-  paid tiers produce pending-payment orders, pure-EIP public-IP certificates
-  support file validation only), and the SSL switch.
-- **OBS storage**: two acquisition options (reuse / create-new, new
-  recommended) with the full new-bucket specification (private / standard /
-  multi-AZ / block-public-access); temporary-credential detection and a read
-  test.
-- **Authentication and login**: sign-up toggles, Auth URLs, email/GitHub
-  login, confirmation templates; application password change (the application
-  login password only — the managed instance root password is out of scope).
-- **Key delivery**: key metadata, reset, and delivery through a protected
-  local file — key values never enter conversation.
-- **Orders**: prepaid order query, balance payment, and cancellation, with
-  amount and currency verified item by item.
-- **Application lifecycle**: start (does not start the managed instance),
-  stop (does not stop the managed instance, which keeps billing), and
-  restart (brief interruption, off-peak recommended); status-guardrail
-  checks, asynchronous tasks tracked to a terminal state via
-  `show_operation_job_status`.
-- **Managed-instance lifecycle**: `show_supabase_managed_instance` inspects
-  the managed instance (engine/version/status/flavor/disk/AZ/in-progress
-  actions, with billing and the fifteen-day auto-start note); start, stop,
-  and restart all take `application_id` only — the target instance is
-  strictly resolved from the application's `managed_instance` field and a
-  bare `instance_id` is never accepted, preventing operations on standalone
-  database instances; only pay-per-use instances on ultra-high-IO/SSD
-  cloud disk/ESSD storage can be stopped (dedicated clouds unsupported) —
-  the VM stops billing while EIP/storage/backup keep billing, and a
-  default fifteen-day stop auto-starts in the maintenance window if not
-  started within fifteen days; the instance is unavailable during restart;
-  start the instance before the application; asynchronous tasks are
-  tracked to a terminal state via `show_operation_job_status`.
-- **Change and deletion**: SSL, EIP, and storage-integration changes;
-  application deletion (optional managed-instance cascade) and standalone
-  managed-instance teardown; task query and bounded waiting.
-- **Safety and experience**: read-only mode with risk grading, sensitive-field
-  redaction, JSONL audit, chart-rendered output, and four-layer
-  wrong-deletion verification for delete-class tools.
+- **Arrangement and discovery**
+  - Creation arrangement baseline: two managed-instance decisions, three mandatory modules consolidated live, SSL and public-access (EIP) as independent modules, step-numbered creation flow
+  - Flavor discovery: every saleable spec grouped by group_type (ten official classes); application and instance flavors asked separately, instance default matching the application's spec
+  - Disk types: Chinese labels, official constraints, and live compatibility lists
+  - Four discovery families (application, instance, network, security group) consolidating parameters live with recommendations
+- **Scenario-based creation**: two scenario tools — create with a new instance (recommended) or by attaching an existing one; dedicated security groups and the OBS bucket auto-prepared, parameters backfilled and injected, one submission
+- **Network and security groups**
+  - VPC/subnet placement: free-IP preference, default recommendation when no network exists
+  - Dedicated group creation and rules, dual-tag protection (AUTO_CREATE/USE_FOR), three-way ingress source choice
+  - Security-group rebinding: three targets (application / managed instance / attachable instance), multiple groups with full-replacement semantics
+- **EIP**: idle-first provisioning (pay-per-use, dedicated full-dynamic BGP bandwidth); binding with triple validation (in32 application ID, ownership, format)
+- **SSL certificates**
+  - Account certificate inventory (SCM global service)
+  - Two-phase purchase and application: free-tier DV_SSL_CERT_BASIC recommended; pure-EIP public-IP certificates support file validation only
+  - SSL switch changes
+- **OBS storage**: reuse / create-new options; fixed private-bucket specification (standard / multi-AZ / block-public-access); temporary-credential detection and a read test
+- **Authentication and login**: sign-up toggles, email/GitHub login, confirmation templates; application password change (application login password only — the managed-instance root password is out of scope)
+- **Key delivery**: key metadata query, reset, and protected local-file delivery — key values never enter conversation
+- **Orders**: prepaid order query, balance payment, and cancellation with amount and currency verified item by item
+- **Application lifecycle**
+  - Start (does not start the managed instance), stop (does not stop the instance, which keeps billing), restart (brief interruption, off-peak advised)
+  - Status guardrails; asynchronous tasks tracked to terminal state via `show_operation_job_status`
+- **Managed-instance lifecycle**
+  - Detail query: engine/version/status/flavor/disk/AZ/in-progress actions, with billing and the fifteen-day auto-start note
+  - Target strictly resolved from the application's `managed_instance`; bare `instance_id` never accepted, preventing operations on standalone instances
+  - Stop for pay-per-use instances only (VM stops billing, EIP/storage/backup continue); start the instance before the application
+- **Change and deletion**: SSL, EIP, and storage-integration changes; application deletion (optional managed-instance cascade) and standalone managed-instance teardown
+- **Safety and experience**: read-only mode with risk grading, sensitive-field redaction, JSONL audit, chart-rendered output, four-layer wrong-deletion verification
 
 ## Business scenarios
 

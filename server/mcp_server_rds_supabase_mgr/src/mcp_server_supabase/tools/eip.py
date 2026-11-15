@@ -9,7 +9,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def create_supabase_eip(prefer_idle: bool = True, charge_mode: str = 'postPaid', bandwidth_size_mbps: int = 300, name: str | None = None, period_type: str | None = None, period_num: int | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Provision the public entry EIP for a Supabase application, idle-first. Purchase baseline: pay-per-use recommended (prepaid needs period_type month/year and period_num, and returns a console order), dedicated full-dynamic-BGP bandwidth (publicip.type=5_bgp, share_type PER) sized 5-1000M with 300M recommended. prefer_idle=true first lists unbound EIPs so the user picks one (returned directly, nothing created); with none idle, or prefer_idle=false, it previews (confirm=false) then creates via KooCLI - a newly created postPaid EIP is tagged USAGE_FOR=Supabase应用公网访问，自动创建的. The response carries a chart-rendered visual for user review."""
+        """为 Supabase 应用采购公网入口 EIP，两段式提交。空闲优先：先列出未绑定 EIP 供选用，无空闲才新建；采购基线为按需计费加全动态 BGP 独享带宽。响应含 visual 图表。"""
         result = await EipService().ensure_publicip(prefer_idle, charge_mode, bandwidth_size_mbps, name, period_type, period_num, confirm, plan_id)
         result['visual'] = visual.render_eip(result)
         return result
@@ -17,7 +17,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def bind_supabase_eip(instance_id: str, public_ip_id: str, public_ip: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Bind an EIP to a Supabase application through the RDS AttachEip API. Strict validation prevents mistaken and stray operations: instance_id must be this environment's Supabase application ID (in32 suffix, then verified to exist in the application list), public_ip_id a canonical UUID, public_ip a valid IPv4 address. Preview with confirm=false; submit once with confirm=true plus the returned plan_id. After binding, sync api_external_url via update_supabase_auth_config and probe the address."""
+        """为 Supabase 应用绑定 EIP，两段式提交，经 RDS AttachEip 通道。三重校验：instance_id 须为本环境 in32 应用 ID 且真实存在、public_ip_id 为规范 UUID、public_ip 为合法 IPv4。"""
         result = await EipBindService().bind_public_ip(instance_id, public_ip_id, public_ip, confirm, plan_id)
         rows = [[result.get('instance_id'), (result.get('eip') or {}).get('public_ip'),
                  (result.get('eip') or {}).get('public_ip_id'), result.get('status')]]

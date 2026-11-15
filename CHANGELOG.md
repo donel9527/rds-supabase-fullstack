@@ -7,6 +7,36 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a53 - concise tool descriptions,
+  feature-overview restructure, and English READMEs for all seven skills:
+  - All 53 MCP tool descriptions (the docstrings agents preview in
+    tools/list) are rewritten to a uniform concise register: a one-line
+    functional positioning, the strongest one or two constraints (two-
+    phase confirmation, full-replacement semantics, strict managed-
+    instance resolution, application-password scope, /0 rejection, tag
+    gates, amount double-equality), and the special return semantics
+    (job_id tracking, key values never in conversation). Average length
+    drops from 431 to about 86 characters; parameter enumerations,
+    value ranges, flow steps and billing detail now live only in
+    preview responses and documentation.
+  - The MCP READMEs' feature chapter becomes a feature overview:
+    each capability group is split into focused sub-points - the
+    arrangement entry separates baseline/flavor-interaction/disk
+    labels/discovery families; the managed-instance entry separates
+    detail query, strict resolution, stop-billing boundaries and the
+    start-ordering rule - with zero fidelity loss. English mirror in
+    step.
+  - English READMEs (README_en.md) are added for all seven Supabase
+    skills (mgr-mcp, mcp, frontend, function-graph, usage,
+    postgres-best-practices, web-build): professional technical
+    translation, structure mirrored one-to-one, terminology aligned
+    with the codebase (two-phase confirmation, managed instance,
+    local request file, checkpoint resumption), facts verified
+    against the Chinese sources, each opening with an
+    English | 中文 language switch.
+
+### Added
+
 - `mcp_server_rds_supabase_mgr` 0.4.0a52 - documentation correction:
   the feature lists and the skill's applicable-scenario list are
   restored to their detailed narrative form (they had been wrongly
