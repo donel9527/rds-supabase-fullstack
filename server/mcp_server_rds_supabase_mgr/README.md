@@ -4,7 +4,7 @@
 
 ## 版本
 
-0.4.0a42（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；42 个工具。
+0.4.0a42（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；43 个工具。
 
 ## 概述
 
@@ -165,7 +165,8 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 | `list_db_instance_storage_types` | 查询托管实例磁盘类型，按引擎版本与部署模式过滤 | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
 | `discover_db_instance_for_create` | 按托管实例来源（scenario，同 manage_type）探索：新建实例（newly_instance）返回引擎版本/规格/磁盘与逐字段推荐；已有实例（existed_instance）返回可托管候选列表，传 instance_id 获取该实例基础/配置/网络信息；只读探索，不创建不变更 | READ | 组合查询（ListDatastores/ListFlavors/ListStorageTypes）+ ListManageableInstances |
 | `discover_network_for_create` | 按托管实例来源（scenario，同 manage_type）探索：新建实例场景自动发现 IP 充足的 VPC/子网（无可用网络时返回默认推荐），并给出双组安全组配置（应用组 8443 入方向三选一 + 5432 出方向；数据库组 5432 入方向；网段均为所选子网 CIDR，入方向可选探测当前设备网段）；已有实例场景取实例 VPC/子网，数据库组不动，应用组同规则；仅输出规格（含可照抄的 apply_steps），不创建任何资源；响应附图表化展示（visual） | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
-| `create_supabase_application` | 创建 Supabase 应用，支持新建实例或关联已有实例；两种场景返回不同任务组合 | DANGEROUS | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `create_supabase_with_new_instance` | （推荐）新建实例场景的端到端创建：按编排规格自动创建两个专用安全组（应用组 supabase-app-sg：8443 入方向 public_access_cidr 三选一——auto 探测当前设备网段（默认）/ open 全 0（经 KooCLI）/ 自定义 CIDR，加 5432 出方向→子网 CIDR；数据库组 supabase-db-sg：5432 入方向←子网 CIDR）并在启用存储时确保 OBS 桶存在（已有复用、缺失按固定规则新建：私有/标准/多AZ/阻止公共访问，全局重名自动加短 uuid），全部回填注入请求体（无需手填 security_group_id 与桶名猜测）后一次提交；预览/确认双段式；任务下发后回显 application_id/instance_id 与工作流 ID（application_job_id/instance_job_id，预付费为 order_id），并给出状态跟踪（show_supabase_creation_progress，约 20-30 分钟、实例先就绪）与完成后的 EIP 自动化指引（create_supabase_eip 空闲优先 → bind_supabase_eip → update_supabase_auth_config 同步 api_external_url） | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `create_supabase_link_exist_instance` | 已有实例挂载场景的创建：校验请求体 manage_type=existed_instance 与可托管实例，自动创建应用组（规则同上）——数据库组不动，注入顶层 security_group_id 后提交；预览/确认双段式；任务下发后回显 application_id 与工作流 ID，状态跟踪与完成后的 EIP 自动化指引同上 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `delete_supabase_application` | 删除应用；经用户选择可同时删除托管数据库实例，两笔删除各自返回任务编号 | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | 删除应用所托管的数据库实例，数据不可恢复；逐层校验托管关系与共享引用，杜绝误删 | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
 | `get_supabase_order` | 查询包周期订单的状态、金额、币种与订单明细 | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
@@ -340,13 +341,14 @@ rules:
 1. 调用 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`，按托管来源
    决策与意图（含 needs_storage 存储答复）取得端到端编排基线：三大模块参数固化、
    EIP 购买基线、OBS 桶对接方案（复用/新建两场景）与步骤编号的 creation_flow。
-2. 按编排逐步执行：网络就绪（默认推荐场景按 default_create 建网）→ 安全组
-   （按 security_group_plan 的 apply_steps 建组配规则，8443 入方向三选一、5432
-   出方向）→ 存储就绪（obs_integration：`discover_supabase_storage` 定复用或
-   新建，新建桶走 `create_supabase_new_obs`）→ 本地请求文件（含 root 密码、
-   存储凭据等秘密）。
-3. `create_supabase_application(request_ref, confirm=false)` 预览 → 把脱敏参数
-   给用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。
+2. 按编排逐步执行：网络就绪（默认推荐场景按 default_create 建网）→ 存储就绪
+   （obs_integration：`discover_supabase_storage` 定复用或新建，新建桶走
+   `create_supabase_new_obs`）→ 本地请求文件（含 root 密码、存储凭据等秘密）。
+3. 按托管来源二选一提交（安全组由创建工具自动创建注入，无需手填
+   security_group_id）：新建实例（推荐）走
+   `create_supabase_with_new_instance(request_ref, confirm=false)`，
+   关联已有实例走 `create_supabase_link_exist_instance(request_ref, confirm=false)`。
+   预览 → 把脱敏参数给用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。
 4. 用返回的 `job_id` 调用 `show_operation_job_status`（或 `wait_operation_job_complete`
    有界等待）到终态。
 5. 回查 `show_supabase_application`：公网 IP 未绑定时先 `change_supabase_eip`，

@@ -564,5 +564,131 @@ class RenderArrangementObsTests(unittest.TestCase):
         self.assertNotIn('凭证提示',out)
 
 
+def creation_preview_fixture():
+    return {'status':'confirmation_required','scenario':'newly_instance',
+            'request':{'name':'supabase-app-1115','version':'1.1.0','mode':'Single',
+                       'flavor_ref':'rds.supabase.n1.medium.2',
+                       'basic_config':{'vpc_id':'v1','subnet_id':'s1','availability_zone':'cn-east-3a'},
+                       'managed_instance':{'datastore':{'type':'PostgreSQL','version':'17'},
+                                           'flavor_ref':'rds.pg.n1.medium.2',
+                                           'volume':{'type':'ESSD','size':40}}},
+            'security_group_plan':{
+                'application_group':{'name':'supabase-app-sg','ingress':{'port':8443,'cidr':'0.0.0.0/0'}},
+                'database_group':{'name':'supabase-db-sg','ingress':{'port':5432,'cidr':'192.168.0.0/24'}},
+                'egress':{'port':5432,'cidr':'192.168.0.0/24'},
+                'note':'确认后随应用创建一并建组配规则'},
+            'warnings':['确认后才会真正提交创建','包周期实例将返回订单，需支付后生效'],
+            'plan_id':'plan-123'}
+
+
+def creation_submitted_fixture():
+    return {'status':'submitted','scenario':'newly_instance','job_id':'job-1','application_id':'app-1',
+            'instance_id':'inst-1','instance_job_id':'job-2',
+            'security_groups':{
+                'application_group_id':'sg-app-1','database_group_id':'sg-db-1',
+                'rules':[{'group':'应用组','direction':'ingress','port':8443,'cidr':'0.0.0.0/0'},
+                         {'group':'应用组','direction':'egress','port':5432,'cidr':'192.168.0.0/24'},
+                         {'group':'数据库组','direction':'ingress','port':5432,'cidr':'192.168.0.0/24'}]},
+            'workflow':{'track':{'tool':'show_supabase_creation_progress',
+                                 'args':{'application_id':'app-1','application_job_id':'job-1',
+                                         'instance_id':'inst-1','instance_job_id':'job-2'}},
+                        'reminder':'实例创建完成后应用创建才会开始，请轮询至 succeeded',
+                        'after_completion':{
+                            'eip_automation':[
+                                {'tool':'create_supabase_eip',
+                                 'args':{'charge_mode':'postPaid','bandwidth_size_mbps':300}},
+                                {'tool':'bind_supabase_eip',
+                                 'args':{'application_id':'app-1','public_ip_id':'<EIP ID>'}},
+                                {'tool':'console/KooCLI','action':'为已绑定的 EIP 打标 supabase-managed'}],
+                            'note':'绑定成功后 update_supabase_auth_config 同步 api_external_url'}},
+            'plan_id':'plan-123'}
+
+
+def creation_submitted_existed_fixture():
+    result=creation_submitted_fixture()
+    result['scenario']='existed_instance'
+    result['instance_id']=None
+    result['instance_job_id']=None
+    result['security_groups']={
+        'application_group_id':'sg-app-2','database_group_id':None,
+        'database_group':'不动（保持实例现状）',
+        'rules':[{'group':'应用组','direction':'ingress','port':8443,'cidr':'0.0.0.0/0'},
+                 {'group':'应用组','direction':'egress','port':5432,'cidr':'192.168.0.0/24'}]}
+    return result
+
+
+def creation_order_fixture():
+    result=creation_submitted_fixture()
+    result['status']='order_created'
+    result['order_id']='CS123456'
+    return result
+
+
+class RenderCreationFlowTests(unittest.TestCase):
+    def test_preview_full(self):
+        out=visual.render_creation_flow(creation_preview_fixture())
+        self.assertIn('【创建任务预览（场景 newly_instance）】',out)
+        self.assertIn('plan-123',out)
+        self.assertIn('【请求体（脱敏）】',out)
+        self.assertIn('supabase-app-1115',out)
+        self.assertIn('rds.supabase.n1.medium.2',out)
+        self.assertIn('"vpc_id": "v1"',out)
+        self.assertIn('"type": "PostgreSQL"',out)
+        self.assertIn('【将自动创建的安全组】',out)
+        self.assertIn('8443',out)
+        self.assertIn('5432',out)
+        self.assertIn('0.0.0.0/0',out)
+        self.assertIn('192.168.0.0/24',out)
+        self.assertIn('【注意】',out)
+        self.assertIn('确认后才会真正提交创建',out)
+        self.assertIn('包周期实例将返回订单，需支付后生效',out)
+
+    def test_submitted_full(self):
+        out=visual.render_creation_flow(creation_submitted_fixture())
+        self.assertIn('【创建任务已下发（场景 newly_instance）】',out)
+        self.assertIn('submitted',out)
+        self.assertIn('job-1',out)
+        self.assertIn('app-1',out)
+        self.assertIn('inst-1',out)
+        self.assertIn('job-2',out)
+        self.assertIn('【自动创建的安全组】',out)
+        self.assertIn('sg-app-1',out)
+        self.assertIn('sg-db-1',out)
+        self.assertIn('8443',out)
+        self.assertIn('0.0.0.0/0',out)
+        self.assertIn('【工作流】',out)
+        self.assertIn('跟踪：show_supabase_creation_progress',out)
+        self.assertIn('"application_id": "app-1"',out)
+        self.assertIn('实例创建完成后应用创建才会开始，请轮询至 succeeded',out)
+        self.assertIn('【创建完成后：EIP 自动化】',out)
+        self.assertIn('1. create_supabase_eip',out)
+        self.assertIn('"charge_mode": "postPaid"',out)
+        self.assertIn('2. bind_supabase_eip',out)
+        self.assertIn('3. console/KooCLI',out)
+        self.assertIn('为已绑定的 EIP 打标 supabase-managed',out)
+        self.assertIn('绑定成功后 update_supabase_auth_config 同步 api_external_url',out)
+
+    def test_submitted_existed_database_untouched(self):
+        out=visual.render_creation_flow(creation_submitted_existed_fixture())
+        self.assertIn('【创建任务已下发（场景 existed_instance）】',out)
+        self.assertIn('数据库组：不动（保持实例现状）',out)
+        self.assertIn('sg-app-2',out)
+
+    def test_order_created(self):
+        out=visual.render_creation_flow(creation_order_fixture())
+        self.assertIn('order_created',out)
+        self.assertIn('CS123456（控制台/订单工具支付后生效）',out)
+
+    def test_missing_keys_do_not_raise(self):
+        for payload in ({},None,{'status':'confirmation_required'},
+                        {'status':'submitted','security_groups':{'database_group_id':None},
+                         'workflow':{'track':{},'after_completion':{}}}):
+            with self.subTest(payload=payload):
+                self.assertTrue(isinstance(visual.render_creation_flow(payload),str))
+        out=visual.render_creation_flow({})
+        self.assertIn('【创建任务已下发（场景 -）】',out)
+        self.assertIn('status',out)
+
+
 if __name__=='__main__':
     unittest.main()

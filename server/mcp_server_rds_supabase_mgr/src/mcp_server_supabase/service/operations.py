@@ -342,6 +342,49 @@ class Operations:
         except BaseException:
             self.plans.finish(plan_id,'unknown');raise unknown from None
 
+    async def submit_creation(self,body,plan_id=None):
+        """Direct submission of a validated (and security-group-augmented) creation
+        body: the execute tail of create_reference without its own preview/gates,
+        reserved for the orchestrated scenario flows that gate once at their level."""
+        path=ROOT+'/supabases'
+        notices={'completion_verified':False,'warnings':[
+            'Review application and PG credentials, network, ownership, quota and ongoing charges before confirming.',
+            'Single or Ha mode; postPaid or prepaid (period_type is the string month/year, period_num 1-9 months or 1-3 years). Prepaid returns an order paid via the order tools - no automatic payment.',
+            'Structural validation only: backend password, version, capacity and sale policies remain authoritative.'],
+            'follow_up':'Observe application job and any PG job separately, query both resources and validate login. Partial success never authorizes automatic resource deletion.'}
+        unknown=RecoveryError('MCP_SDK_ERROR','Creation result unknown','submission_unknown',
+                              'Inspect the plan and application/PG inventories. An unexpected order must be reconciled manually; do not pay, replay or auto-delete.',plan_id)
+        try:
+            status,data=await self.client.request('POST',path,body=body)
+        except RecoveryError as error:
+            if error.recovery.get('category') in _DEFINITE_REJECTIONS:
+                self.plans.finish(plan_id,'failed');raise
+            self.plans.finish(plan_id,'unknown');raise unknown from None
+        except McpToolError:
+            self.plans.finish(plan_id,'failed');raise
+        except BaseException:
+            self.plans.finish(plan_id,'unknown');raise unknown from None
+        try:
+            if data.get('job_id'):
+                result=accepted_job(status,data)
+                result['application_id']=segment(data.get('application_id'))
+                for key in ('instance_id','instance_job_id'):
+                    if data.get(key):result[key]=segment(data[key])
+                if data.get('order_id'):result['order_id']=segment(data['order_id'])
+                self.plans.finish(plan_id,'accepted',result['job_id'])
+                return {**result,**notices,'plan_id':plan_id}
+            if data.get('order_id'):
+                result={'status':'order_created','order_id':segment(data['order_id']),'job_id':None}
+                self.plans.finish(plan_id,'accepted',None)
+                return {**result,**notices,'warnings':notices['warnings']+[
+                    'A prepaid order was created; it must be paid before the resource is provisioned.',
+                    'Query the order with get_supabase_order, obtain approval for the exact amount and currency, then pay with pay_supabase_order (or cancel with cancel_supabase_order if abandoned).',
+                    'Resource creation starts after payment - re-verify resources once a job appears.'],
+                    'plan_id':plan_id}
+            raise ValueError()
+        except BaseException:
+            self.plans.finish(plan_id,'unknown');raise unknown from None
+
     async def mutate_reference(self, application_id, action, request_ref, confirm=False, plan_id=None):
         from mcp_server_supabase.service.request_refs import load_request, validate_request
         body=validate_request(action,load_request(request_ref))

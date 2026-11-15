@@ -529,3 +529,122 @@ def render_storage(result):
     if result.get('mode')=='storage_options':
         return _render_storage_options(result)
     return _render_storage_bucket(result)
+
+
+def _creation_request_rows(request):
+    rows=[]
+    for key,value in _dict(request).items():
+        if isinstance(value,(dict,list)):
+            text=_wrap(json.dumps(value,ensure_ascii=False),60)
+            lines=text.split('\n') if text else ['-']
+        else:
+            lines=[_scalar(value)]
+        for index,line in enumerate(lines):
+            rows.append([key if index==0 else '',line])
+    return rows
+
+
+def _creation_plan_body(plan):
+    plan=_dict(plan)
+    application=_dict(plan.get('application_group'))
+    ingress=_dict(application.get('ingress'))
+    egress=_dict(plan.get('egress') or application.get('egress'))
+    rows=[['应用组','入',ingress.get('port'),ingress.get('cidr')],
+          ['应用组','出',egress.get('port'),egress.get('cidr')]]
+    database=plan.get('database_group')
+    if isinstance(database,dict):
+        db_ingress=_dict(database.get('ingress'))
+        rows.append(['数据库组','入',db_ingress.get('port'),db_ingress.get('cidr')])
+    body=table(['组','方向','端口','网段'],rows)
+    if isinstance(database,str) and database:
+        body='%s\n数据库组：%s'%(body,database)
+    return body
+
+
+def _creation_groups_body(security_groups):
+    security_groups=_dict(security_groups)
+    database_id=security_groups.get('database_group_id')
+    database_note=security_groups.get('database_group')
+    id_rows=[['应用组',security_groups.get('application_group_id')]]
+    if database_id is not None:
+        id_rows.append(['数据库组',database_id])
+        ids=table(['组','ID'],id_rows)
+    elif isinstance(database_note,str) and database_note:
+        ids='%s\n数据库组：%s'%(table(['组','ID'],id_rows),database_note)
+    else:
+        id_rows.append(['数据库组',None])
+        ids=table(['组','ID'],id_rows)
+    rule_rows=[[_dict(rule).get('group'),_dict(rule).get('direction'),_dict(rule).get('port'),
+                _dict(rule).get('cidr')] for rule in _list(security_groups.get('rules'))]
+    return '%s\n\n%s'%(ids,table(['组','方向','端口','网段'],rule_rows))
+
+
+def _creation_workflow_lines(workflow):
+    workflow=_dict(workflow)
+    track=_dict(workflow.get('track'))
+    head='跟踪：%s'%_scalar(track.get('tool'))
+    if track.get('args') is not None:
+        head='%s %s'%(head,json.dumps(track.get('args'),ensure_ascii=False))
+    lines=[_wrap(head,90)]
+    if workflow.get('reminder') is not None:
+        lines.append(str(workflow.get('reminder')))
+    return lines
+
+
+def _creation_eip_lines(after_completion):
+    after=_dict(after_completion)
+    lines=[]
+    for index,entry in enumerate(_list(after.get('eip_automation')),1):
+        entry=_dict(entry)
+        if entry.get('args') is not None:
+            detail=_clip(json.dumps(entry.get('args'),ensure_ascii=False),70)
+        else:
+            detail=_clip(entry.get('action'),70)
+        lines.append('%s. %s %s'%(index,_scalar(entry.get('tool')),detail))
+    if after.get('note') is not None:
+        lines.append(str(after.get('note')))
+    return lines
+
+
+def _creation_preview_blocks(result):
+    result=_dict(result)
+    scenario=result.get('scenario')
+    if scenario is None:scenario='-'
+    summary=table(['项','值'],[[key,result.get(key)] for key in ('scenario','status','plan_id')])
+    blocks=[block('创建任务预览（场景 %s）'%scenario,summary),
+            block('请求体（脱敏）',table(['字段','值'],_creation_request_rows(result.get('request')))),
+            block('将自动创建的安全组',_creation_plan_body(result.get('security_group_plan')))]
+    warnings=_list(result.get('warnings'))
+    if warnings:
+        blocks.append(block('注意',[str(item) for item in warnings]))
+    return blocks
+
+
+def _creation_submitted_blocks(result):
+    result=_dict(result)
+    scenario=result.get('scenario')
+    if scenario is None:scenario='-'
+    order_id=result.get('order_id')
+    if order_id is not None and result.get('status')=='order_created':
+        order_shown='%s（控制台/订单工具支付后生效）'%order_id
+    else:
+        order_shown=order_id
+    summary_rows=[[key,result.get(key)] for key in
+                  ('status','job_id','application_id','instance_id','instance_job_id')]
+    summary_rows.append(['order_id',order_shown])
+    workflow=_dict(result.get('workflow'))
+    return [block('创建任务已下发（场景 %s）'%scenario,table(['项','值'],summary_rows)),
+            block('自动创建的安全组',_creation_groups_body(result.get('security_groups'))),
+            block('工作流',_creation_workflow_lines(workflow)),
+            block('创建完成后：EIP 自动化',_creation_eip_lines(workflow.get('after_completion')))]
+
+
+def render_creation_flow(result):
+    """create_supabase_with_new_instance / create_supabase_link_exist_instance ->
+    the confirmation preview (summary, sanitized request body, planned security
+    groups, warnings) or the submitted summary (job ids, created security groups,
+    tracking workflow, post-completion EIP automation)."""
+    result=_dict(result)
+    if result.get('status')=='confirmation_required':
+        return '\n\n'.join(_creation_preview_blocks(result))
+    return '\n\n'.join(_creation_submitted_blocks(result))

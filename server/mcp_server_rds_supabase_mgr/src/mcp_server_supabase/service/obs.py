@@ -114,8 +114,45 @@ class ObsService:
                               'note':'全新私有桶，完全隔离，安全可靠',
                               'spec':self.new_bucket_spec(name,'multi_az')},
                 'storage_component_note':('storage_component={enabled:true, bucket:<桶名>, AK/SK 经本地请求文件} '
-                                          '随 create_supabase_application 一次提交，创建后不可再启用；'
+                                          '随 create_supabase_with_new_instance / create_supabase_link_exist_instance 一次提交（启用存储时创建工具自动确保桶存在并回填最终桶名），创建后不可再启用；'
                                           '后续凭据轮换用 update_supabase_storage')}
+
+    async def ensure_bucket_now(self,bucket_name,redundancy='multi_az'):
+        """Idempotent provisioning for the orchestrated creation flow: keep a bucket that
+        already exists, otherwise create it per the fixed rules; returns the final bucket
+        name (short-uuid suffix on global-name collision) so the request can be backfilled."""
+        if not isinstance(bucket_name,str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{2,62}',bucket_name):
+            raise McpToolError('MCP_INVALID_ARGS','bucket_name 必须是 3-63 位小写字母/数字/中划线，且以字母或数字开头')
+        if redundancy not in ('multi_az','single_az'):
+            raise McpToolError('MCP_INVALID_ARGS','redundancy must be multi_az or single_az')
+        try:
+            await self.koocli.obs('stat',args=['obs://'+bucket_name])
+            return {'bucket':bucket_name,'created':False,'note':'桶已存在，直接复用；建议核对归属与访问属性后再提交'}
+        except McpToolError as exc:
+            message=str(exc.message)
+            if 'NoSuchBucket' not in message and '404' not in message:
+                raise
+        name=bucket_name
+        for attempt in range(3):
+            flags=['-acl=private','-location='+self.koocli.region,'-sc=standard','-epid=0']
+            if redundancy=='multi_az':flags.append('-az=multi-az')
+            try:
+                await self.koocli.obs('mb',args=['obs://'+name],flags=flags)
+            except McpToolError as exc:
+                message=str(exc.message)
+                if attempt<2 and ('xist' in message.lower() or '已存在' in message or 'conflict' in message.lower()):
+                    name=bucket_name+'-'+uuid.uuid4().hex[:4]
+                    continue
+                raise
+            break
+        block_note=None
+        try:
+            await self.koocli.obs('put-public-access-block',args=['obs://'+name],flags=[BLOCK_PUBLIC_FLAG])
+        except McpToolError as exc:
+            block_note='阻止公共访问设置未成功：'+str(exc.message)[:100]+'——需控制台补设'
+        lead='桶已新建（私有/标准/%s/阻止公共访问）'%('多AZ' if redundancy=='multi_az' else '单AZ')
+        if block_note:lead+='；'+block_note
+        return {'bucket':name,'created':True,'note':lead}
 
     async def create_bucket(self,app_name,redundancy='multi_az',confirm=False,plan_id=None):
         """Preview or execute the bucket creation behind the plan ledger; block public access after mb."""

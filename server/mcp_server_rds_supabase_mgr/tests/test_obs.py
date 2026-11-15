@@ -166,7 +166,7 @@ class ObsServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['new_bucket']['option'],'新建桶（推荐、默认）')
         self.assertEqual(result['new_bucket']['note'],'全新私有桶，完全隔离，安全可靠')
         self.assertEqual(result['new_bucket']['spec']['bucket_name'],'supabase-my-app')
-        self.assertIn('create_supabase_application',result['storage_component_note'])
+        self.assertIn('create_supabase_with_new_instance',result['storage_component_note'])
         self.assertIn('不可再启用',result['storage_component_note'])
 
     async def test_discover_storage_defaults_and_tolerates_failure(self):

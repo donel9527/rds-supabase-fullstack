@@ -193,25 +193,11 @@ def register(server):
         return await service.creation_candidates('manageable')
 
     @server.tool()
-    @guard(risk=ToolRisk.DANGEROUS)
-    async def create_supabase_application(request_ref: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """Create a Supabase application using a protected local request alias and explicit confirmation.
-
-        Returns differ by scenario. Attaching an existing PostgreSQL instance: the application
-        creation job id and the application id. Creating a new instance: the instance is created
-        first and the application creation starts only after it succeeds - the response carries
-        the instance creation job id and instance id alongside the application job id, and the
-        application job will not exist until the instance is ready (track with
-        show_supabase_creation_progress). Prepaid instances return an order id instead of jobs.
-        """
-        return await service.create_reference(request_ref,confirm,plan_id)
-
-    @server.tool()
     @guard(risk=ToolRisk.READ)
     async def show_supabase_creation_progress(application_id: str, application_job_id: str,
                                               instance_job_id: str | None = None,
                                               instance_id: str | None = None) -> dict:
-        """Analyze the end-to-end creation progress of one application from the ids returned by create_supabase_application.
+        """Analyze the end-to-end creation progress of one application from the ids returned by the scenario creation tools.
 
         Existing-instance scenario: pass application_id and application_job_id only. New-instance
         scenario: also pass instance_job_id and instance_id - the instance task is checked first,

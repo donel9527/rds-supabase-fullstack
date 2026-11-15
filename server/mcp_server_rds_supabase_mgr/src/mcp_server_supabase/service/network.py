@@ -162,3 +162,36 @@ class Network:
             self.plans.finish(plan_id,'unknown')
             raise RecoveryError('MCP_SDK_ERROR','VPC write result unknown','submission_unknown',
                                 'Inspect the plan and VPC resource; never blindly repeat a write.',plan_id) from None
+
+    async def create_group_now(self,name,description):
+        """Create a tagged dedicated group directly (no preview/gates) for orchestrated flows."""
+        if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,64}',name):
+            raise McpToolError('MCP_INVALID_ARGS','Use a 1-64 character ASCII group name with letters, digits, underscore, dot or hyphen')
+        if description is not None:
+            if not isinstance(description,str) or len(description)>255 or '<' in description or '>' in description:
+                raise McpToolError('MCP_INVALID_ARGS','Use a description of at most 255 characters without angle brackets')
+        body={'security_group':{'name':name,
+                                'tags':[{'key':'AUTO_CREATE','value':'true'},
+                                        {'key':'USE_FOR','value':'Supabase'}]}}
+        if description is not None:body['security_group']['description']=description
+        data=await self.koocli.call('VPC','CreateSecurityGroup/v3',body)
+        group=data.get('security_group') if isinstance(data,dict) else None
+        if not isinstance(group,dict):
+            raise McpToolError('MCP_SDK_ERROR','CreateSecurityGroup/v3 returned no security_group')
+        return group
+
+    async def add_rule_now(self,group_id,source_cidr,port,direction='ingress',protocol='tcp'):
+        """Add one bounded rule directly (no preview/gates); rejects /0 like add_rule."""
+        if direction not in DIRECTIONS or protocol not in PROTOCOLS:
+            raise McpToolError('MCP_INVALID_ARGS','direction must be ingress or egress; protocol must be tcp or udp')
+        identifier(group_id)
+        try:
+            source=ipaddress.ip_network(source_cidr,strict=True)
+            if source.prefixlen==0 or type(port) is not int or not 1<=port<=65535:raise ValueError()
+        except (ValueError,TypeError):
+            raise McpToolError('MCP_INVALID_ARGS','Specify a bounded canonical CIDR and port 1-65535; world-wide rules are unsupported') from None
+        rule={'security_group_id':group_id,'direction':direction,'ethertype':'IPv4' if source.version==4 else 'IPv6',
+              'protocol':protocol,'multiport':str(port),'remote_ip_prefix':str(source),'action':'allow','priority':1}
+        data=await self.koocli.call('VPC','CreateSecurityGroupRule/v3',{'security_group_rule':rule})
+        record=data.get('security_group_rule') if isinstance(data,dict) else None
+        return record if isinstance(record,dict) else {}

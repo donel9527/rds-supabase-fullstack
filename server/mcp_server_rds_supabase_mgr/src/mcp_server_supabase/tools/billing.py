@@ -14,7 +14,7 @@ def register(server):
     async def get_supabase_order(order_id: str, limit: int = 20, marker: str | None = None) -> dict[str, Any]:
         """Inspect an RDS Supabase prepaid order: status, amounts, currency and paginated order lines.
 
-        Scenario: create_supabase_application returned order_id instead of a job (the managed
+        Scenario: the scenario creation tools returned order_id instead of a job (the managed
         PostgreSQL instance was prepaid). An unpaid order does not mean the application or
         instance has been provisioned. The RDS Supabase application itself is free during
         public beta; prepaid charges apply to the managed instance.

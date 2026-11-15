@@ -79,7 +79,7 @@ _STATUSES = {
 
 
 def _invalid(message: str) -> McpToolError:
-    return McpToolError("MCP_INVALID_ARGS", message, hint="Use the order_id returned by create_supabase_application.")
+    return McpToolError("MCP_INVALID_ARGS", message, hint="Use the order_id returned by the scenario creation tools.")
 
 
 def _validate_id(order_id: str) -> None:

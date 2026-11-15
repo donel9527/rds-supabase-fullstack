@@ -84,7 +84,7 @@ class InstanceCatalog:
         return self.operations
 
     async def discover_db_instance_for_create(self,scenario,mode=None,instance_id=None):
-        """Per-source discovery for the managed-instance step of create_supabase_application.
+        """Per-source discovery for the managed-instance step of the scenario creation tools.
         newly_instance: engine versions, instance flavors with per-AZ sale status and
         mode-filtered storage types, assembled into a recommended value for every
         managed_instance request-body field; each source fails independently.
@@ -92,7 +92,7 @@ class InstanceCatalog:
         instance's basic/configuration/network information for the attach decision.
         Security-group planning belongs to discover_network_for_create."""
         if scenario not in ('newly_instance','existed_instance'):
-            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与 create_supabase_application 的 manage_type 一致)')
+            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与创建场景工具的 manage_type 一致)')
         if scenario=='existed_instance':
             return await self._existed_instance_options(instance_id)
         if mode not in ('Single','Ha'):
@@ -184,7 +184,7 @@ class InstanceCatalog:
             return {'scenario':'existed_instance',
                     'acquisition':'候选与 list_supabase_manageable_instances 同源（可挂载到 Supabase 应用的 PG 实例）；'
                                   '从中选定一个后以 instance_id 再次调用本工具，获取其基础/配置/网络信息；'
-                                  '创建请求走 create_supabase_application(manage_type=existed_instance, '
+                                  '创建请求走 create_supabase_link_exist_instance(manage_type=existed_instance, '
                                   'existing_instance={"instance_id":..., "database_name":"root", "database_pwd":...})',
                     'candidates':rows,
                     'note':'候选存在不等于可创建成功（规格/状态仍由服务端校验）'}
@@ -223,7 +223,7 @@ class InstanceCatalog:
 
 
 class NetworkDiscovery:
-    """Network placement and the security-group plan for create_supabase_application,
+    """Network placement and the security-group plan for the scenario creation tools,
     by instance source (scenario, same values as manage_type).
 
     newly_instance: walks the VPC/subnet inventory through KooCLI (>=2 free IPs preferred,
@@ -246,7 +246,7 @@ class NetworkDiscovery:
 
     async def discover_network_for_create(self,scenario,availability_zone=None,instance_id=None,detect_access_ip=False):
         if scenario not in ('newly_instance','existed_instance'):
-            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与 create_supabase_application 的 manage_type 一致)')
+            raise McpToolError('MCP_INVALID_ARGS','scenario must be newly_instance or existed_instance (与创建场景工具的 manage_type 一致)')
         if scenario=='existed_instance':
             return await self._existed_network(instance_id,detect_access_ip)
         placement=await self._discover_placement(availability_zone)
@@ -558,6 +558,6 @@ class BasicOptionsDiscovery:
                 'excluded_scopes':['network (basic_config vpc/subnet) -> discover_network_for_create',
                                    'managed instance fields -> discover_db_instance_for_create'],
                 'probe_status':probes,
-                'note':'Top-level application basics for create_supabase_application. '
+                'note':'Top-level application basics for create_supabase_create_basic_options. '
                        'Flavor sale status is per-AZ from the Supabase flavor API; the Ha probe uses the same API - '
                        'a rejection means this environment supports Single only.'}

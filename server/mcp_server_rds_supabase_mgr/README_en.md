@@ -5,7 +5,7 @@
 ## Version
 
 0.4.0a42 (development prerelease); Python `3.10+`; MCP Python SDK `2.x`;
-42 tools.
+43 tools.
 
 ## Overview
 
@@ -205,7 +205,8 @@ alias.
 | `list_db_instance_storage_types` | Query managed-instance storage types by engine version and deployment mode | READ | [ListStorageTypes](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ListStorageTypes) |
 | `discover_db_instance_for_create` | Discovery by instance source (scenario, same as manage_type): new instances (newly_instance) - engine versions, flavors, storage, per-field recommendations; existing instances (existed_instance) - attachable candidates, and with instance_id that instance's basic/configuration/network information; read-only, nothing created or changed | READ | composite query (ListDatastores/ListFlavors/ListStorageTypes) + ListManageableInstances |
 | `discover_network_for_create` | Network and security-group discovery by instance source (scenario, same as manage_type): new instances - auto-discover a VPC/subnet with sufficient free IPs (default recommendation when none exists) plus both groups' configuration (application group: 8443 ingress with three source options + 5432 egress; database group: 5432 ingress; all CIDRs from the chosen subnet; optional current-device CIDR detection); existing instances - take VPC/subnet from the instance, leave its group untouched, same application-group rules; specification only (copy-ready apply_steps), no resource is created; response carries a chart-rendered visual | READ | [ListVpcs](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListVpcs) + [ListSubnets](https://console.huaweicloud.com/apiexplorer/#/openapi/VPC/doc?api=ListSubnets) |
-| `create_supabase_application` | Create a Supabase application with a new or existing instance; each scenario returns its own job combination | DANGEROUS | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `create_supabase_with_new_instance` | (Recommended) End-to-end creation for the new-instance scenario: automatically creates both dedicated security groups per the arrangement spec (application group supabase-app-sg: 8443 ingress with public_access_cidr three-way choice — auto-detect the current device CIDR (default) / open to all 0.0.0.0/0 (via KooCLI) / custom CIDR, plus 5432 egress to the subnet CIDR; database group supabase-db-sg: 5432 ingress from the subnet CIDR) and, when storage is enabled, ensures the OBS bucket exists (existing kept, missing created per the fixed private/standard/multi-AZ/block-public-access rules, short-uuid suffix on global-name collision), backfilling every prepared identifier into the request before one submission (no manual security_group_id, no bucket guesswork); preview/confirm two-phase; on submission echoes application_id/instance_id with the workflow ids (application_job_id/instance_job_id, order_id when prepaid), plus status tracking (show_supabase_creation_progress, roughly 20-30 minutes, instance ready first) and post-completion EIP automation guidance (create_supabase_eip idle-first -> bind_supabase_eip -> update_supabase_auth_config syncing api_external_url) | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
+| `create_supabase_link_exist_instance` | Creation for the attach-existing-instance scenario: validates manage_type=existed_instance and the attachable instance, automatically creates the application group (same rules as above) while leaving the database group untouched, injects the top-level security_group_id, then submits; preview/confirm two-phase; echoes application_id with the workflow id; status tracking and post-completion EIP automation guidance as above | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `delete_supabase_application` | Delete the application; on the user's choice also delete the managed database instance, two deletions with separate job ids | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | Delete the managed database instance - irreversible; verifies the managed binding and shared references layer by layer to prevent wrong deletion | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
 | `get_supabase_order` | Query a prepaid order's status, amounts, currency and line items | READ | [ShowCustomerOrderDetails](https://console.huaweicloud.com/apiexplorer/#/openapi/BSS/doc?api=ShowCustomerOrderDetails) |
@@ -416,14 +417,17 @@ rules:
    purchase baseline, the OBS bucket plan (reuse/new two scenarios) and the
    step-numbered creation flow.
 2. Execute step by step: network ready (create the defaults per default_create
-   when recommended) -> security groups per the security_group_plan
-   apply_steps (8443 ingress with three source options, 5432 egress) -> storage
-   ready (the obs_integration step: `discover_supabase_storage` to decide reuse
-   or new, `create_supabase_new_obs` when creating) -> the local request file
-   (root password, storage credentials, and other secrets).
-3. Preview with `create_supabase_application(request_ref, confirm=false)`,
-   show the redacted parameters to the user, then submit identical
-   parameters with `confirm=true` + `plan_id`.
+   when recommended) -> storage ready (the obs_integration step:
+   `discover_supabase_storage` to decide reuse or new, `create_supabase_new_obs`
+   when creating) -> the local request file (root password, storage
+   credentials, and other secrets).
+3. Submit with the creation tool matching the managed source (security groups
+   are auto-created and injected by the tool - no manual security_group_id):
+   `create_supabase_with_new_instance(request_ref, confirm=false)` for a new
+   instance (recommended), or
+   `create_supabase_link_exist_instance(request_ref, confirm=false)` to attach
+   an existing one. Preview, show the redacted parameters to the user, then
+   submit identical parameters with `confirm=true` + `plan_id`.
 4. Track the returned `job_id` with `show_operation_job_status` (or bounded
    `wait_operation_job_complete`) to a terminal state.
 5. Re-read `show_supabase_application`; if no public IP, bind an EIP with

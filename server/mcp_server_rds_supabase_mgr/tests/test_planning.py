@@ -109,7 +109,8 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         obs = result['step_modules']['obs_integration']
         self.assertEqual(obs['acquisition']['recommended'], 'new')
         self.assertTrue(obs['new_bucket_spec']['bucket_name'].startswith('supabase-'))
-        self.assertTrue(any(s['phase'] == 'obs_integration' for s in result['creation_flow']))
+        self.assertEqual([s['tool'] for s in result['creation_flow'] if s['phase'] == 'obs_integration'],
+                         ['discover_supabase_storage'])
         eip = result['eip_baseline']
         self.assertEqual(eip['purchase_method']['recommended']['charge_mode'], 'postPaid')
         self.assertEqual(eip['bandwidth']['recommended_size_mbps'], 300)
@@ -118,9 +119,9 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         flow = result['creation_flow']
         self.assertEqual([s['step'] for s in flow], list(range(1, len(flow) + 1)))
         self.assertEqual(flow[0]['phase'], 'network_ready')
-        self.assertEqual(len([s for s in flow if s['phase'] == 'security_groups']), 5)
+        self.assertFalse([s for s in flow if s['phase'] == 'security_groups'])  # automatic inside the creation tool
         tools_in_flow = [s['tool'] for s in flow]
-        self.assertIn('create_supabase_application', tools_in_flow)
+        self.assertIn('create_supabase_with_new_instance', tools_in_flow)
         self.assertIn('show_supabase_creation_progress', tools_in_flow)
         self.assertEqual(flow[-1]['tool'], 'show_supabase_application')
         self.assertEqual(result['decision_points'], [])
@@ -187,7 +188,8 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(m3['security_group_plan']['database_group']['action'], '不动')
         flow = result['creation_flow']
         self.assertEqual(flow[0]['phase'], 'instance_confirm')
-        self.assertEqual(len([s for s in flow if s['phase'] == 'security_groups']), 3)
+        self.assertFalse([s for s in flow if s['phase'] == 'security_groups'])  # automatic inside the creation tool
+        self.assertIn('create_supabase_link_exist_instance', [s['tool'] for s in flow])
         self.assertIn('show_supabase_creation_progress', [s['tool'] for s in flow])
 
     async def test_intents_shape_post_creation_flow(self):

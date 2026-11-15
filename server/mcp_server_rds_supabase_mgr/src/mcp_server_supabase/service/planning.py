@@ -215,29 +215,27 @@ class PlanningService:
                   action=("已选定实例 %s；确认无 action 锁后继续" % instance_id) if instance_id
                         else "排除 current_actions 非空或 status 非 ACTIVE 的实例，选定一个后把 instance_id 回填本工具",
                   note="带 action 锁（重启/升级/变更中）的实例下发任务会冲突失败")
-        for sg in sg_steps:
-            _step("security_groups", sg.get("tool"), args=sg.get("args"), returns=sg.get("returns"))
+        # Security groups (and, when enabled, the OBS bucket) are provisioned automatically
+        # by the scenario creation tool per module 3's specification - not manual steps.
         if needs_storage is True:
             _step("obs_integration", "discover_supabase_storage",
                   action="确定 OBS 获取方式：复用已有桶（私有优先）或新建（推荐、默认）",
                   note="临时凭证（SecurityToken）时须先取得长期 AK/SK 再对接")
-            _step("obs_integration", "create_supabase_new_obs",
-                  args={"app_name": "<应用名>", "redundancy": "multi_az"},
-                  note="新建场景执行；桶名自动推导、重名自动加短 uuid；阻止公共访问固定开启")
         if manage_type == "newly_instance":
             _step("request_file", "本地请求文件",
-                  action="按基线组装 create_supabase_application 请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline，security_group_id 回填）+ storage_component%s" % ("（OBS 方案：bucket=新桶名或复用桶名，AK/SK 经文件）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：创建后不可再启用）"),
+                  action="按基线组装创建请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline）+ storage_component%s；安全组与桶无需手填——创建工具自动创建并回填" % ("（bucket=复用桶名或目标桶名，AK/SK 经文件）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：创建后不可再启用）"),
                   note="敏感字段（应用密码/数据库密码/存储 AK/SK）只进文件，不进对话")
         else:
             _step("request_file", "本地请求文件",
-                  action="按基线组装：name/version/mode/flavor_ref/availability_zone + basic_config{vpc_id,subnet_id}（模块3）+ manage_type=existed_instance + existing_instance{instance_id, database_name:'root', database_pwd} + security_group_id=应用组 ID",
+                  action="按基线组装：name/version/mode/flavor_ref/availability_zone + basic_config{vpc_id,subnet_id}（模块3）+ manage_type=existed_instance + existing_instance{instance_id, database_name:'root', database_pwd}；安全组无需手填——创建工具自动创建并回填",
                   note="敏感字段只进文件，不进对话")
-        _step("create_preview", "create_supabase_application",
-              args={"request_ref": "<请求文件别名>", "confirm": False},
-              note="预览返回 plan_id（10 分钟内有效）")
-        _step("create_submit", "create_supabase_application",
-              args={"request_ref": "<请求文件别名>", "confirm": True, "plan_id": "<预览返回>"},
-              note="用户明确确认后提交一次；新建实例场景返回实例与应用双任务 ID")
+        create_tool = "create_supabase_with_new_instance" if manage_type == "newly_instance" else "create_supabase_link_exist_instance"
+        _step("create_preview", create_tool,
+              args={"request_ref": "<请求文件别名>", "public_access_cidr": "<auto/open/自定义 CIDR>", "confirm": False},
+              note="预览返回 plan_id（10 分钟内有效）；预览即解析三选一入方向网段")
+        _step("create_submit", create_tool,
+              args={"request_ref": "<请求文件别名>", "public_access_cidr": "<同预览>", "confirm": True, "plan_id": "<预览返回>"},
+              note="确认后自动执行：专用安全组建组与规则（模块3 规格）+ OBS 桶确保（启用存储时）+ 参数回填注入，一次提交；新建实例场景返回实例与应用双任务 ID")
         _step("progress", "show_supabase_creation_progress",
               args={"application_id": "<返回值>", "application_job_id": "<返回值>",
                     "instance_job_id": "<新建场景返回值，已有场景省略>",

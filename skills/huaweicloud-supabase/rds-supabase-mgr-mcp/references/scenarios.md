@@ -99,6 +99,8 @@ SKILL.md 是主文档；本文件是各场景的详细步骤、字段来源与�
 
 ### 提交与等待
 
+提交按 manage_type 二选一调用创建工具：路线 A（newly_instance）走 `create_supabase_with_new_instance`（推荐），路线 B（existed_instance）走 `create_supabase_link_exist_instance`。安全组由创建工具自动创建注入（public_access_cidr 三选一），请求文件无需手填 security_group_id；任务下发后回显工作流 ID 并跟踪，完成后再做 EIP 自动化。
+
 提交返回 202 + job_id + application_id（路线 A 另有 instance_id + instance_job_id——应用在实例创建成功后才触发创建，实例就绪前查不到应用任务）。**路线 A 有两个任务，分别确认**。等待节奏：**综合进展用 `show_supabase_creation_progress`**（路线 A 传全部四个 ID，自动按"先实例后应用"编排，返回实例创建中/应用等待/应用创建中/完成/失败五态）→ 提交后先查 1 次抓秒级失败 → 告知用户"预计 20-30 分钟"→ 每次用户回来问就再查 1 次；需要单任务细节（entity/时间戳）时才用 `show_operation_job_status`。观察预算用完（observation_exhausted）≠ 云任务失败。
 
 ### 失败处置（创建）
