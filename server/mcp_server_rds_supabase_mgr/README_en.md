@@ -4,8 +4,8 @@
 
 ## Version
 
-Current version: `0.4.0a52` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 53 tools.
+Current version: `0.4.0a61` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 56 tools.
 
 ## Overview
 
@@ -347,6 +347,31 @@ via `delete_supabase_security_group` behind the tag gate: only groups bearing
 the `AUTO_CREATE=true`/`USE_FOR=Supabase` tag pair and free of references
 may be deleted.
 
+### Scenario 5 supplement: post-deletion resource cleanup (explicit or linked)
+
+Three dedicated cleanup tools follow the application deletion, each two-phase
+with live verification before submission:
+
+- **EIP**: `delete_supabase_eip` (KooCLI EIP DeletePublicip) - reads the EIP to
+  verify identity, optionally cross-checks the address, and sweeps the full
+  application inventory to block an EIP still referenced by a live
+  application's public address; a bound EIP is rejected by the backend itself
+  (unbind first via `change_supabase_eip` with `is_bind=false`); deletion
+  stops the IP retention fee immediately.
+- **Application data directory**: `clean_supabase_obs_ws` (KooCLI embedded
+  obsutil) - the deletion scope is strictly confined to the bucket-root
+  folder named exactly the application ID (`obs://<bucket>/<application_id>/`);
+  the bucket and every other directory stay untouched (the prefix is built
+  solely from the validated bucket name and the in32-format application ID,
+  with no caller-supplied path fragment); a still-live application ID is
+  blocked (delete the application first); a missing or empty folder returns
+  `already_clean` idempotently.
+- **OBS bucket**: `delete_supabase_obs` (obsutil rm) - blocks while any live
+  application's `storage_component` still references the bucket, and blocks
+  non-empty buckets (clear each application directory with
+  `clean_supabase_obs_ws` first, review anything else manually); a missing
+  bucket returns `already_absent` idempotently.
+
 ### Scenario 6: Purchase modes
 
 The RDS Supabase application is free during public beta; charges arise only
@@ -443,6 +468,9 @@ pre-provisioned into a local request file and referenced by alias.
 | `create_supabase_link_exist_instance` | Create by attaching an instance | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `delete_supabase_application` | Delete app; instance choice required | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | Remove the managed instance alone | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
+| `delete_supabase_eip` | Delete the EIP, post-deletion cleanup | DANGEROUS | [DeletePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=DeletePublicip) (KooCLI) |
+| `clean_supabase_obs_ws` | Clear one application's OBS data directory | DANGEROUS | KooCLI `hcloud OBS rm` (prefix) |
+| `delete_supabase_obs` | Delete the OBS bucket | DANGEROUS | KooCLI `hcloud OBS rm` (bucket) |
 | `start_supabase_application` | Start a stopped application | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | Stop app; instance keeps billing | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | Restart a running application | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |

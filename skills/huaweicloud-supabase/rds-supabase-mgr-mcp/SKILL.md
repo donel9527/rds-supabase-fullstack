@@ -1,7 +1,7 @@
 ---
 name: rds-supabase-mgr-mcp
 description: |
-  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，53 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、安全组绑定修改（应用/托管实例/待挂载实例三目标，多组全量替换）、应用与托管实例启停与重启（托管实例详情查询，启停/重启目标强制解析自应用 managed_instance，不接受裸 instance_id）、应用删除与托管实例干净收尾。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则或换绑安全组；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；查询托管实例状态、启停或重启托管实例（先启实例再启应用）；删除应用并清理托管实例与安全组。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
+  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，56 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、安全组绑定修改（应用/托管实例/待挂载实例三目标，多组全量替换）、应用与托管实例启停与重启（托管实例详情查询，启停/重启目标强制解析自应用 managed_instance，不接受裸 instance_id）、应用删除与托管实例干净收尾、删除后关联资源清理（EIP 释放、OBS 桶删除、应用数据目录清理）。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则或换绑安全组；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；查询托管实例状态、启停或重启托管实例（先启实例再启应用）；删除应用并清理托管实例与安全组；应用删除后清理关联 EIP、OBS 桶或应用数据目录（按需显式使用或随删除流程联动触发）。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
 metadata:
   tags: [huawei-cloud, rds, supabase, mcp, lifecycle]
   version: "2.5.0"
@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.9.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a60`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.10.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a61`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，56 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -225,7 +225,7 @@ metadata:
 1. **删除前预检**：`show_supabase_application` 核验**无进行中操作**（**状态不作要求：正常、已停止、已移除的应用均可删除**）；记录 `public_ip`、安全组 ID、托管实例 ID、对接桶名（残留核对用）；问用户数据要不要导出（要则先导出再删）。
 2. **必问实例去留**：`delete_managed_instance` 为必选项、不能默认——`false` 仅删应用，托管实例保留并**继续计费**（停止托管实例只省 VM 费用：EIP/存储/备份照常计费，且已停止实例删除后不进回收站）；`true` 应用与实例两笔删除同时提交（返回 `job_id` + `instance_job_id` 双任务编号），实例删除不可逆、**仅按需计费可级联**。删除前服务端执行四层校验：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁（提交前触发，应用保持可读）**——包周期（包年/包月）实例拦截：包括挂载已有实例场景接入的包周期 PG，`true` 会被整体拒绝（应用未删除），改 `false` 删应用后到控制台退订实例（费用中心→退订管理）；计费模式无法核验同样失败关闭。
 3. **执行**：`delete_supabase_application(application_id, delete_managed_instance, ...)` 预览（把不可逆影响与费用后果说清楚）→ 确认 → 提交 → 双任务分别跟踪 → `list_supabase_applications` 确认应用已消失。
-4. **残留清单（这些都不会随应用消失）**：EIP 保留继续计费（控制台/KooCLI 释放是停计费唯一路径）；托管实例保留时走 `delete_supabase_managed_instance`（应用 ID + `managed_instance.id` 双标识，同样四层校验含计费模式门禁——**仅按需实例可直删，包周期实例走控制台退订**，数据不可恢复先确认导出）；安全组规则可经规则工具清理，整组下线走 `delete_supabase_security_group` 标签门（仅放行双标签且无引用的组）；OBS 桶与数据保留；本地 Key 文件与请求文件由用户/操作员自行清理；项目 MCP 配置在整项目下线时移除。
+4. **残留清单（这些都不会随应用消失）**：EIP 保留继续计费——`delete_supabase_eip`（KooCLI EIP DeletePublicip；提交前实读 EIP 校验身份、可带地址交叉核对、全量扫描应用清单拦截仍被引用者、绑定中由后端拒绝须先解绑；删除即停 IP 保有费）；OBS 数据目录与桶均保留——先 `clean_supabase_obs_ws`（仅清理桶根目录下名称等于应用 ID 的目录 `obs://<bucket>/<application_id>/`，桶与其他目录不受影响；删除前缀仅由校验后的桶名与 in32 应用 ID 构造，仍存活应用 ID 被拦截），桶确认无引用且为空后可 `delete_supabase_obs`（非空拦截防误删共享桶、仍被存活应用 storage_component 引用拦截、桶不存在返回 already_absent）；三个工具均供按需显式使用或随删除流程联动触发。托管实例保留时走 `delete_supabase_managed_instance`（应用 ID + `managed_instance.id` 双标识，同样四层校验含计费模式门禁——**仅按需实例可直删，包周期实例走控制台退订**，数据不可恢复先确认导出）；安全组规则可经规则工具清理，整组下线走 `delete_supabase_security_group` 标签门（仅放行双标签且无引用的组）；OBS 桶与数据保留；本地 Key 文件与请求文件由用户/操作员自行清理；项目 MCP 配置在整项目下线时移除。
 5. **删除后确认**：两个任务分别到终态 → 应用列表确认消失 → （级联删除时）实例确认消失 → 输出残留清单与处置建议。
 
 **验证方式**：`list_supabase_applications` 无该应用；级联删除时托管实例亦消失；残留清单如实交付。
@@ -248,7 +248,7 @@ metadata:
 
 ## 核心命令（MCP 工具）
 
-53 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
+56 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
 
 **编排与发现（READ）**
 
@@ -332,6 +332,9 @@ metadata:
 | `cancel_supabase_order` | 取消待支付订单 | DANGEROUS |
 | `delete_supabase_application` | 删应用，实例去留必选；状态不限（正常/已停止/已移除均可删），仅拦进行中操作；级联删实例仅限按需（包周期整体拒绝，改 false 后控制台退订） | DANGEROUS |
 | `delete_supabase_managed_instance` | 单独拆除托管实例（仅按需；包周期走控制台退订） | DANGEROUS |
+| `delete_supabase_eip` | 删 EIP（KooCLI DeletePublicip），应用删除后按需清理；引用中拦截、绑定中须先解绑、删除即停保有费 | DANGEROUS |
+| `clean_supabase_obs_ws` | 清理桶内应用数据目录（仅 `obs://<bucket>/<应用ID>/`，不动桶与其他目录；存活应用 ID 拦截） | DANGEROUS |
+| `delete_supabase_obs` | 删 OBS 桶（KooCLI obsutil）；引用中拦截、非空拦截（先清各应用目录）、桶不存在幂等返回 | DANGEROUS |
 
 ## 参数契约速查
 

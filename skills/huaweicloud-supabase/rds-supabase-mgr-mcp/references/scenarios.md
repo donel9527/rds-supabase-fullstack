@@ -258,7 +258,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 5. 确认消失 | `list_supabase_applications` | application_id 精确查 | 应用不在列表；级联时实例确认消失（可回 `list_supabase_manageable_instances` 交叉复核） |
 | 6. 残留处置 | 见下 | — | 输出残留清单与处置建议 |
 
-四层校验（服务端自动执行，**均在提交前触发、应用保持可读**）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**（包年/包月实例不支持 API 直删——级联与单独拆除均拦截，走控制台退订；charge_info 缺失失败关闭）。残留处置通道：EIP 释放（控制台/KooCLI，停计费唯一路径）；托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，**仅按需实例可直删、包周期走控制台退订**，数据不可恢复先确认导出）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；OBS 桶与数据、本地 Key 文件与请求文件、项目 MCP 配置按需清理。
+四层校验（服务端自动执行，**均在提交前触发、应用保持可读**）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**（包年/包月实例不支持 API 直删——级联与单独拆除均拦截，走控制台退订；charge_info 缺失失败关闭）。残留处置通道：**EIP 释放 `delete_supabase_eip`（KooCLI EIP DeletePublicip）**——提交前实读 EIP 校验身份（可带地址交叉核对）、全量扫描应用清单拦截仍被存活应用公网地址引用者、绑定中由后端拒绝（先 `change_supabase_eip` 置 is_bind=false 解绑）、删除即停 IP 保有费；**应用数据目录清理 `clean_supabase_obs_ws`（KooCLI obsutil）**——删除范围严格限定桶根目录下名称等于应用 ID 的目录 `obs://<bucket>/<application_id>/`，桶与其他任何目录不受影响（前缀仅由校验后的桶名与 in32 应用 ID 构造），仍存活应用 ID 拦截（先删应用再清目录），目录不存在或为空幂等返回 already_clean；**OBS 桶删除 `delete_supabase_obs`（KooCLI obsutil rm）**——仍被存活应用 storage_component 引用拦截、非空拦截（先用 clean_supabase_obs_ws 清各应用目录，其余对象人工核对）、桶不存在幂等返回 already_absent；三工具均供业务方按需显式使用或随删除流程联动触发。托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，**仅按需实例可直删、包周期走控制台退订**，数据不可恢复先确认导出）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；本地 Key 文件与请求文件、项目 MCP 配置按需清理。
 
 ## 排障补充
 

@@ -4,7 +4,7 @@
 
 ## 版本
 
-当前版本：`0.4.0a52`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；53 个工具。
+当前版本：`0.4.0a61`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；56 个工具。
 
 ## 概述
 
@@ -243,6 +243,23 @@ ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 四层校验（计费模式门禁同样适用：仅按需实例可直删，包周期走控制台退订）。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
 允许删除带 `AUTO_CREATE=true`/`USE_FOR=Supabase` 双标签且无引用的安全组。
 
+### 场景五补：删除后关联资源清理（按需显式或联动触发）
+
+应用删除后三类残留各有专用清理工具，均两段式提交、提交前实时校验：
+
+- **EIP**：`delete_supabase_eip`（KooCLI EIP DeletePublicip）——实读 EIP 校验身份、
+  可选地址交叉核对、全量扫描应用清单拦截仍被存活应用公网地址引用者；绑定中的
+  EIP 由后端拒绝（先 `change_supabase_eip` 置 `is_bind=false` 解绑）；删除即停
+  IP 保有费。
+- **应用数据目录**：`clean_supabase_obs_ws`（KooCLI 内嵌 obsutil）——删除范围
+  严格限定桶根目录下名称等于应用 ID 的目录 `obs://<bucket>/<application_id>/`，
+  桶与其他任何目录不受影响（前缀仅由校验后的桶名与 in32 应用 ID 构造，无任何
+  调用方路径片段）；仍存活应用的 ID 拦截（先删应用再清目录）；目录不存在或为
+  空幂等返回 `already_clean`。
+- **OBS 桶**：`delete_supabase_obs`（obsutil rm）——仍被存活应用
+  `storage_component` 引用拦截；非空拦截（先 `clean_supabase_obs_ws` 清各应用
+  目录，其余对象人工核对）；桶不存在幂等返回 `already_absent`。
+
 ### 场景六：购买方式
 
 RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买方式在创建请求
@@ -319,6 +336,9 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买�
 | `create_supabase_link_exist_instance` | 挂载已有实例创建应用 | WRITE | [CreateSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=CreateSupabaseApplication) |
 | `delete_supabase_application` | 删应用，实例去留必选 | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | 单独拆除托管实例 | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
+| `delete_supabase_eip` | 删 EIP，应用删除后按需清理 | DANGEROUS | [DeletePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=DeletePublicip)（KooCLI） |
+| `clean_supabase_obs_ws` | 清理桶内应用数据目录（仅应用 ID 目录） | DANGEROUS | KooCLI `hcloud OBS rm`（按前缀） |
+| `delete_supabase_obs` | 删 OBS 桶 | DANGEROUS | KooCLI `hcloud OBS rm`（桶级） |
 | `start_supabase_application` | 启动已停止的应用 | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | 停止应用，实例继续计费 | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | 重启运行中的应用 | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |

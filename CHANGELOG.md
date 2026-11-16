@@ -7,6 +7,33 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a61 - post-deletion resource cleanup
+  family: three DANGEROUS tools for business-driven explicit use or automatic
+  linked triggering after a Supabase application is deleted.
+  delete_supabase_eip (KooCLI EIP ShowPublicIp + DeletePublicip) reads the
+  EIP before submission to verify identity, optionally cross-checks the
+  caller-recorded address, and sweeps the full application inventory to
+  block an EIP still referenced by any live application's public address;
+  bound EIPs are rejected by the backend itself (unbind first); deletion
+  stops the IP retention fee immediately. clean_supabase_obs_ws (KooCLI
+  embedded obsutil) clears exactly one application's OBS data directory -
+  the bucket-root folder named exactly the application ID
+  (obs://<bucket>/<application_id>/): the bucket and every other directory
+  stay untouched, the deletion prefix is built solely from the validated
+  bucket name and the in32-format application ID (no caller-supplied path
+  fragment can widen the scope), a still-live application ID is blocked,
+  and a missing or empty folder returns already_clean idempotently.
+  delete_supabase_obs removes the bucket itself after every referencing
+  application is gone: live-application storage_component references are
+  blocked, non-empty buckets are blocked (clear per-application directories
+  first, review anything else manually), and a missing bucket returns
+  already_absent idempotently. All three follow the plan-ledger two-phase
+  discipline; every guard runs immediately before the destructive call.
+  Tool count 53 -> 56 (test_protocol updated); capabilities list extended.
+  Skill `rds-supabase-mgr-mcp` 2.10.0 (server requirement >= 0.4.0a61):
+  scenario-10 residual-disposal channel rewritten around the new tools,
+  command table +3 rows, acceptance cases K33-K35, README zh/en updated
+  (tool table, scenario-5 supplement). Tests: 566 passed + 168 subtests.
 - `mcp_server_rds_supabase_mgr` 0.4.0a60 - deletion relaxes its status gate
   and instance billing follows the official on-demand contract.
   delete_supabase_application no longer requires the normal status: stopped
