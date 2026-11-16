@@ -3,7 +3,7 @@ name: rds-supabase-web-build
 description: 'RDS Supabase 全栈开发编排技能：AI Agent 通过自然语言创建并托管 Web 应用网站的端到端工作流——需求澄清与设计、前端代码生成、后端声明式配置（DDL/GRANT/RLS/RPC）生成与部署、本地 L0 测试验证、前端静态资源 OBS+CDN 全托管、端到端上线与生命周期管理（更新/回滚/下线）。Use when：创建 Web 网站、搭建 AI 应用、全栈应用从零到上线、已有 RDS Supabase 应用的迭代更新与托管维护。编排管理面与数据面两台 MCP（均由工作流步骤动态安装：管理面→步骤三、数据面→步骤四）及 rds-supabase-mgr-mcp / rds-supabase-mcp / rds-supabase-usage / rds-supabase-frontend / rds-supabase-postgres-best-practices / rds-supabase-function-graph 六个专项技能。v1 后端边界为数据层；复杂业务逻辑由 function-graph 技能（云函数）承接，SSR 后端部署不支持。'
 license: MIT
 metadata:
-  version: "0.11.6"
+  version: "0.12.0"
 ---
 
 # RDS Supabase 全栈开发编排（web-build）
@@ -29,7 +29,7 @@ RDS Supabase 全栈开发的**顶层编排技能**：用户以单句自然语言
 
 双平面与双轨：
 
-- **管理面**：`mcp_server_rds_supabase_mgr`（29 工具）——RDS Supabase 实例全托管生命周期（创建/配置/安全访问/删除）；**步骤三动态启动**，不随技能安装装载
+- **管理面**：`mcp_server_rds_supabase_mgr`（53 工具）——RDS Supabase 实例全托管生命周期（创建/配置/安全访问/删除）；**步骤三动态启动**，不随技能安装装载
 - **数据面**：`mcp_server_rds_supabase`（38 工具）——init.sql 执行、结构查询、RLS/advisors；**步骤四动态安装**（实例凭据就绪后）
 - **后端轨**：产出 init.sql（DDL/GRANT/RLS/RPC/种子），运行于 RDS Supabase（PostgREST/GoTrue）
 - **前端轨**：产出静态站点（默认 React+Vite+TS + supabase-js），托管于 OBS+CDN
@@ -224,7 +224,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 
 | 平面 | MCP | 关键能力 |
 |---|---|---|
-| 管理面 | mcp_server_rds_supabase_mgr（29 工具） | 实例创建/配置（EIP/安全组/SSL）、ApiKey 交付、`update_supabase_auth_config`（回调配置）、删除；两阶段确认 + 执行账本 |
+| 管理面 | mcp_server_rds_supabase_mgr（53 工具） | 实例创建/配置（EIP/安全组/SSL）、ApiKey 交付、`update_supabase_auth_config`（回调配置）、删除；两阶段确认 + 执行账本 |
 | 数据面 | mcp_server_rds_supabase（38 工具） | `execute_sql`（单一事务，五步部署执行者）、结构查询、RLS/advisors、用户管理；只读拦截/审计脱敏 |
 
 两台 MCP **均不随技能安装装载**——场景触发技能后，由步骤三（管理面）与步骤四（数据面）在流程内自动从本仓动态安装（完整命令内联于 workflow-stages.md 对应步骤，进入时读取）。人类可读的安装指南与来源表见 [README.md](README.md) 与 [INSTALL.md](INSTALL.md)；完整路由矩阵见 references/routing-table.md。

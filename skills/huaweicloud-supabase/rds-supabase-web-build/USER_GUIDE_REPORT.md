@@ -81,7 +81,65 @@
 
 ---
 
-## 7. 边界与适用性（诚实声明）
+## 7. 技能与 MCP 清单（参与方一览）
+
+全托管链路由「**1 个顶层编排 + 6 个专项技能 + 双平面 MCP**」构成。两台 MCP **均不随技能预装**——由工作流在步骤三（管理面）与步骤四（数据面）按项目级隔离动态安装，凭据一律由项目配置（`.hwsupabase/`）注入进程。
+
+### 双平面 MCP
+
+| 平面 | 服务 | 工具数 | 职责 | 参与时机 |
+|---|---|---|---|---|
+| 管理面（控制平面） | `mcp_server_rds_supabase_mgr` | 53 | 实例创建/选定、EIP/安全组/SSL 配置、API Key **受控交付**（值只落受保护文件）、`update_supabase_auth_config` 回调配置、订单支付/取消、应用删除；两阶段确认 + 执行账本 | 步骤三动态启动；步骤八↻ 回调配置 |
+| 数据面（数据平面） | `mcp_server_rds_supabase` | 38 | `execute_sql` 单一事务（init.sql 五步部署的执行者）、结构/RLS/advisors 查询、认证用户管理、TypeScript 类型生成、存储配置；只读拦截/审计脱敏 | 步骤四动态安装（凭步骤三交付的网关 URL + 双钥） |
+
+### 技能（1 编排 + 6 专项）
+
+| 技能 | 定位 | 参与时机 | 功能说明 |
+|---|---|---|---|
+| `rds-supabase-web-build` | 顶层编排 | 全程 | 九步状态机与断点续作（`last_completed_stage`）、gate 机械核验、单步推进纪律、路由分发——只编排不复制专项细节 |
+| `rds-supabase-mgr-mcp` | 管理面技能 | 步骤三 | 实例全生命周期场景编排（创建编排/资源准备/Key 交付纪律/订单/删除）；步骤三显式遵循其场景一~七，本技能不复述不改写 |
+| `rds-supabase-mcp` | 数据面技能 | 步骤四起 | 数据面 MCP 安装指南（`references/install.md`）、init.sql 编写规范与五步部署、部署验证方法、单工具数据操作 |
+| `rds-supabase-postgres-best-practices` | SQL 质量门 | **步骤五强制门** | DDL/列类型/RLS/索引/触发器/函数/主键选型规则库——init.sql 生成前逐条对照，gate 校验对照表；修复批次同样重过 |
+| `rds-supabase-usage` | SDK 用法门 | **步骤五/六** | supabase-js / @supabase/ssr 正确用法、auth 流、RLS 客户端消费视角、REST 行为与报错速查——前端生成前必读 |
+| `rds-supabase-frontend` | 前端专项 | 步骤三 / 八 | 构建环境、OBS 静态托管（对象级公共读）+ CDN、版本记录与回退、入口域名（临时访问/正式上线两场景） |
+| `rds-supabase-function-graph` | 云函数扩展（按需） | 边界识别后 | v1 后端边界外的业务逻辑（出站 HTTP/第三方对接/定时作业）→ FunctionGraph 云函数，经 KooCLI 编排 + fgs-gate 验证 |
+
+---
+
+## 8. 端到端参与时间轴：谁在哪一步、交付什么
+
+![Skill×MCP 端到端参与时间轴](assets/skill-mcp-timeline.svg)
+
+*九列＝九步流水线（下挂各步断点标记）；九行＝参与方（按编排/管理面/数据面/质量门分组泳道）；实心条＝主线必经，虚线＝按需或回路；底部雪佛龙链＝阶段间关键交换物。*
+
+### 步骤 × 参与方 × 交付物
+
+| 步骤（断点） | 技能参与 | MCP 参与 | 交付物（出） |
+|---|---|---|---|
+| ①环境检查与配置（environment_ready） | web-build | —（接入点缺失时经管理面 discover 解析） | 项目配置 + `secrets/`（0600、排除 Git） |
+| ②需求澄清与设计（requirements_confirmed） | web-build、function-graph（边界识别） | — | 需求摘要 · BaaS 能力清单 · 设计指标 · 费用预估 |
+| ③资源准备（instance_ready） | mgr-mcp（场景编排）、frontend（托管桶） | **管理面 MCP 动态启动**：应用创建/选定 · EIP · 安全组 · 双钥交付 | 网关 URL + 双钥（deliver → secrets/）· 桶就绪 |
+| ④数据面接入（mcp_connected） | rds-supabase-mcp（安装指南） | **数据面 MCP 动态安装**：get_project_url == 网关 · list_tables | 数据面连通（SUPABASE_URL/双钥注入） |
+| ⑤后端生成部署（backend_deployed） | **best-practices 强制门**、usage（消费视角）、rds-supabase-mcp（五步部署） | 数据面：execute_sql 单事务 → NOTIFY reload → advisors/REST 复核 | init.sql + teardown.sql 批次（sha256 留痕） |
+| ⑥前端生成（frontend_built） | **usage 强制门** | — | 源码 + 构建产物（仅 anon key 进产物） |
+| ⑦本地测试验证（local_verified） | web-build（L0 用例孵化） | 数据面（修复回路：增量批次重部署） | L0 测试报告（≥5 passed、零 failed） |
+| ⑧构建与托管（hosting_published） | frontend（构建/直传/域名） | 管理面（↻ 回调配置） | 产物直传 OBS（公共读）+ 版本记录 + 入口域名 |
+| ⑨端到端上线（launched） | web-build | gate `--verify` **直连云核验**（REST 可达/anon 可见性/RLS/advisors） | 上线报告 + `app-card.md` |
+
+### 三次关键交接
+
+1. **凭据交接（③→④）**：管理面 `deliver_supabase_api_key` 把网关 URL + Anon/Service Role 双钥写入 `.hwsupabase/secrets/`（0600、排除 Git）——这是数据面 MCP 安装的唯一必需输入；webapp.json 只记 env 名，**agent 永不接触明文**。
+2. **后端即数据层（⑤）**：需求 → init.sql（DDL/GRANT/RLS/RPC/种子 + teardown.sql）→ best-practices 强制门 → `execute_sql` 单事务五步部署（预检 → 审查 → 执行 → NOTIFY `pgrst, 'reload schema'` → 确认）→ gate `--verify` 直连云核验——**后端不存在应用代码，部署物就是一份声明式 SQL**。
+3. **回调闭环（⑧↻）**：入口域名确定 → 管理面 `update_supabase_auth_config` 配 site_url/redirect_uris → 前端按最终地址**重建再发布**——auth 登录链路与实际入口始终一致，这是唯一的跨平面回路。
+
+### 两条回路
+
+- **修复回路（⑦→⑤）**：L0 失败的后端缺陷 → 增量 init.sql 批次 → 重过 best-practices 质量门 → 重新部署；同用例连续 2 次失败即中止报告，不无限循环。
+- **生命周期（launched 之后）**：更新＝增量批次重走⑤⑧⑨；回滚＝前端版本回退（frontend 契约）+ 后端向前修复；下线＝teardown.sql 一键清理 + 管理面删除 + 项目级注册回收；密钥轮换＝管理面重置 → 数据面 env 同步 → 前端重建再发布。
+
+---
+
+## 9. 边界与适用性（诚实声明）
 
 - **v1 后端边界为数据层**：纯数据变换/事务内一致性用 Postgres RPC；出站 HTTP、外部系统对接、交易通知、高安全隐私处理由 FunctionGraph 承载（`rds-supabase-function-graph` 技能）。
 - **不支持 SSR / 长驻进程 / WebSocket 服务端**：前端为静态导出形态（继承 frontend 技能边界）。

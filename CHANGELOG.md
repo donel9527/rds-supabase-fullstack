@@ -7,6 +7,19 @@ semantic versioning.
 
 ### Added
 
+- `rds-supabase-web-build` skill v0.12.0: the user-guide report gains a
+  participant catalog and an end-to-end timeline. New section 7 catalogs
+  the six specialist skills and both MCP planes (management plane 53
+  tools / data plane 38 tools) with their roles and join points; new
+  section 8 renders a swimlane timeline (assets/skill-mcp-timeline.svg)
+  mapping every participant onto the nine pipeline stages with
+  breakpoint markers, both loops (the step-7 L0 repair circuit back to
+  step 5, the step-8 callback loop) and the inter-stage artifact chain
+  (credential hand-off, init.sql batch, build artifacts, OBS upload,
+  callback, launch delivery). The layout is machine-verified
+  overlap-free against real font metrics (106 texts, zero overlaps,
+  zero spills). Stale "29 tools" counts for the management-plane MCP
+  are corrected to 53 across SKILL.md and INSTALL.md.
 - `mcp_server_rds_supabase_mgr` 0.4.0a55 - account-aware enterprise-project
   selection. `discover_db_instance_for_create` (newly-instance scenario only)
   now queries the live enterprise-project list via KooCLI
