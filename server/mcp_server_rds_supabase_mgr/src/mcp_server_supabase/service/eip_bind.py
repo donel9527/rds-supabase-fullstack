@@ -12,11 +12,12 @@ class EipBindService:
     with strict ownership validation: the instance ID must be this environment's
     Supabase application ID (in32 suffix) to prevent mistaken or stray operations."""
 
-    def __init__(self,operations=None,koocli=None,plans=None):
+    def __init__(self,operations=None,koocli=None,plans=None,ledger=None):
         """Accept injected doubles; fall back to the canonical KooCLI channel and ledger."""
         self.operations=operations
         self.koocli=koocli or KoocliClient()
         self.plans=plans or PlanStore()
+        self.ledger=ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def _ops(self):
         """Resolve the shared application-inventory reader lazily to avoid import cycles."""
@@ -65,6 +66,11 @@ class EipBindService:
         if plan_id:self.plans.claim(plan_id,digest)
         data=await self.koocli.call('RDS','AttachEip',{'instance_id':instance_id,'is_bind':True,
                                                         'public_ip':public_ip,'public_ip_id':public_ip_id})
-        return {'status':'ok','job':'eip bind','instance_id':instance_id,
+        result={'status':'ok','job':'eip bind','instance_id':instance_id,
                 'eip':{'public_ip':public_ip,'public_ip_id':public_ip_id},
                 'post_bind':'立即 update_supabase_auth_config 同步 api_external_url，并探活验证'}
+        if self.ledger is not None:
+            warning=self.ledger.bind_safe('eip',public_ip_id,instance_id,
+                                          detail={'address':public_ip,'provenance':'bind_supabase_eip（复用或既有 EIP）'})
+            if warning:result['record_warning']=warning
+        return result

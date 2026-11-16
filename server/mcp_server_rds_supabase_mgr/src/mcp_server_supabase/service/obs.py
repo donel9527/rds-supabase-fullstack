@@ -17,9 +17,10 @@ class ObsService:
     the storage_component target for a Supabase application - a private standard-storage
     bucket, multi-AZ by default, public access blocked."""
 
-    def __init__(self,koocli=None,plans=None):
+    def __init__(self,koocli=None,plans=None,ledger=None):
         self.koocli=koocli or KoocliClient()
         self.plans=plans or PlanStore()
+        self.ledger=ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def intent_digest(self,method,path,body):
         """Fingerprint a bucket intent against this KooCLI credential, mirroring Network."""
@@ -199,10 +200,16 @@ class ObsService:
                 block_note='阻止公共访问设置未成功：'+str(exc.message)[:100]+'——需控制台补设'
             self.plans.finish(plan_id,'accepted')
             lead='桶已创建（并已设置阻止公共访问）' if block_note is None else '桶已创建；'+block_note
-            return {'status':'ok','bucket':spec,
+            result={'status':'ok','bucket':spec,
                     'storage_component_hint':{'bucket':name,'ak_sk':'经本地请求文件提供'},
                     'note':lead+'；把 bucket 与持久 AK/SK 经本地请求文件写入 storage_component，'
                                 '随 create_supabase_application 提交完成对接'}
+            if self.ledger is not None:
+                warning=self.ledger.record_safe('obs_bucket',name,auto_created=True,
+                                                detail={'provenance':'create_supabase_new_obs',
+                                                        'block_public_access':block_note is None})
+                if warning:result['record_warning']=warning
+            return result
         except BaseException:
             self.plans.finish(plan_id,'unknown')
             raise

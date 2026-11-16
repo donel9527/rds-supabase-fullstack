@@ -26,9 +26,10 @@ def identifier(value):
 class Network:
     """Security-group requests run through KooCLI (hcloud); the RDS origin does not serve the VPC API."""
 
-    def __init__(self,koocli=None,plans=None):
+    def __init__(self,koocli=None,plans=None,ledger=None):
         self.koocli=koocli or KoocliClient()
         self.plans=plans or PlanStore()
+        self.ledger=ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def intent_digest(self,method,path,body):
         return fingerprint({'endpoint':'hcloud:'+self.koocli.region,'credential':self.koocli.token,
@@ -149,7 +150,11 @@ class Network:
             data=await self.koocli.call('VPC',operation,params)
             resource_id=rule_id or group_id
             if method=='DELETE':
-                pass
+                if group_id and self.ledger is not None:
+                    try:
+                        self.ledger.cleaned('security_group',group_id)
+                    except Exception:  # noqa: BLE001 - advisory persistence must not fail a finished deletion
+                        pass
             else:
                 record=data.get(result_key) if isinstance(data,dict) else None
                 if not isinstance(record,dict):raise ValueError()
@@ -162,6 +167,27 @@ class Network:
             self.plans.finish(plan_id,'unknown')
             raise RecoveryError('MCP_SDK_ERROR','VPC write result unknown','submission_unknown',
                                 'Inspect the plan and VPC resource; never blindly repeat a write.',plan_id) from None
+
+    async def verify_group_deletable(self,group_id):
+        """Guard-only check for the batch cleanup: the group exists, carries the
+        managed tags and is not on the protection list."""
+        group=await self._read_group(group_id)
+        self._assert_flow_created(group)
+        assert_not_protected(group)
+        return {'group_id':group_id}
+
+    async def delete_group_now(self,group_id):
+        """Direct tagged-group deletion for the one-click batch cleanup: the same
+        gates as delete_group without the plan ledger (the batch owns one plan for
+        all its items); marks the resource ledger when injected."""
+        await self.verify_group_deletable(group_id)
+        await self.koocli.call('VPC','DeleteSecurityGroup/v3',{'security_group_id':group_id})
+        if self.ledger is not None:
+            try:
+                self.ledger.cleaned('security_group',group_id)
+            except Exception:  # noqa: BLE001 - advisory persistence must not fail a finished deletion
+                pass
+        return {'group_id':group_id,'deleted':True}
 
     async def create_group_now(self,name,description):
         """Create a tagged dedicated group directly (no preview/gates) for orchestrated flows."""

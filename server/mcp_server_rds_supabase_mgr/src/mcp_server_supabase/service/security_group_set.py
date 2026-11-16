@@ -165,10 +165,36 @@ async def change(service, target, security_group_ids, application_id=None, insta
         if http_status not in (200, 202) or not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", job_id):
             raise ValueError()
         service.plans.finish(plan_id, "accepted", job_id)
-        return {"status": "accepted", "job_id": job_id, "job_id_source": source,
+        # Resource-ledger rebind (advisory): the new set becomes the application's
+        # binding; previously bound auto-created groups left out of the replacement
+        # become detached residuals.
+        record_warnings = []
+        if getattr(service, "ledger", None) is not None:
+            try:
+                rows = service.ledger.rows(application_id, "security_group") if application_id else []
+                current = {row["resource_id"] for row in rows}
+                for group_id in security_group_ids:
+                    warning = service.ledger.bind_safe(
+                        "security_group", group_id, application_id,
+                        detail={"role": "application" if target == "application" else target,
+                                "binding": "change_supabase_security_group"})
+                    if warning: record_warnings.append(warning)
+                if application_id:
+                    for row in rows:
+                        if row["resource_id"] not in set(security_group_ids) and row["auto_created"]:
+                            try:
+                                service.ledger.detach("security_group", row["resource_id"])
+                            except Exception:  # noqa: BLE001 - advisory persistence
+                                pass
+            except Exception as error:  # noqa: BLE001 - advisory persistence must not fail a finished change
+                record_warnings.append("资源记录写入失败（安全组换绑）：%s" % error)
+        response = {"status": "accepted", "job_id": job_id, "job_id_source": source,
                 "complete": False, "target": target, "target_id": target_id,
                 "security_group_ids": list(security_group_ids),
                 "notices": {"warnings": list(_IMPACT)}, "job_follow_up": _JOB_FOLLOW_UP,
                 "plan_id": plan_id}
+        if record_warnings:
+            response["record_warnings"] = record_warnings
+        return response
     except BaseException:
         service.plans.finish(plan_id, "unknown"); raise unknown from None

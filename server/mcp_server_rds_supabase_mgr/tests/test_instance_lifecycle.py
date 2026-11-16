@@ -150,7 +150,7 @@ class ManagedInstanceShowTests(InstanceLifecycleTestCase):
                 return decorate
 
         server = RecordingServer()
-        with patch.object(tools_operations, 'Operations', lambda: self.ops):
+        with patch.object(tools_operations, 'Operations', lambda **kwargs: self.ops):
             tools_operations.register(server)
         for name in ('show_supabase_managed_instance', 'stop_supabase_managed_instance',
                      'start_supabase_managed_instance', 'restart_supabase_managed_instance'):

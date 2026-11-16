@@ -541,3 +541,40 @@ class SubmitCreationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__=='__main__':
     unittest.main()
+
+
+class PasswordComplexityTests(unittest.IsolatedAsyncioTestCase):
+    """Advisory password warnings and the dashboard credential note ride on both
+    creation previews and the accepted response; the cloud rules stay authoritative."""
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.env=patch.dict(os.environ,{'SUPABASE_ENABLE_WRITES':'true',
+                                        'HUAWEICLOUD_MCP_READ_ONLY':'false',
+                                        'SUPABASE_STATE_FILE':str(Path(self.tmp.name)/'state.db'),
+                                        'SUPABASE_REQUESTS_FILE':str(Path(self.tmp.name)/'requests.json')})
+        self.env.start();self.addCleanup(self.env.stop)
+        self.koocli=FakeKoocli()
+        self.network=FakeNetwork(self.koocli)
+        self.flow=CreationFlowService(network=self.network,koocli=self.koocli,
+                                       plans=PlanStore(Path(self.tmp.name)/'plans.db'),
+                                       detector=lambda:'1.2.3.4/32')
+        self.requests=Path(self.tmp.name)/'requests.json'
+        self.requests.write_text(json.dumps({'new':NEW_BODY,'risky':dict(NEW_BODY,password='FixTure$ecret1')}),encoding='utf-8')
+        os.chmod(self.requests,0o600)
+
+    def push_subnets(self):
+        self.koocli.push({'subnets':[{'id':SUBNET_ID,'cidr':'192.168.0.0/24'}]})
+
+    async def test_safe_password_no_warning_but_credential_note_present(self):
+        self.push_subnets()
+        result=await self.flow.with_new_instance('new')
+        self.assertFalse(any('特殊字符' in w for w in result['warnings']))
+        self.assertEqual(result['dashboard_credential']['login_user'],'supabase')
+        self.assertIn('create.password',result['dashboard_credential']['password_source'])
+
+    async def test_unsafe_password_surfaces_transcription_warning(self):
+        self.push_subnets()
+        result=await self.flow.with_new_instance('risky')
+        self.assertTrue(any('create.password' in w and '特殊字符' in w for w in result['warnings']))
+        self.assertTrue(any('12-16 位' in w for w in result['warnings']))

@@ -1,7 +1,7 @@
 ---
 name: rds-supabase-mgr-mcp
 description: |
-  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，56 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、安全组绑定修改（应用/托管实例/待挂载实例三目标，多组全量替换）、应用与托管实例启停与重启（托管实例详情查询，启停/重启目标强制解析自应用 managed_instance，不接受裸 instance_id）、应用删除与托管实例干净收尾、删除后关联资源清理（EIP 释放、OBS 桶删除、应用数据目录清理）。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则或换绑安全组；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；查询托管实例状态、启停或重启托管实例（先启实例再启应用）；删除应用并清理托管实例与安全组；应用删除后清理关联 EIP、OBS 桶或应用数据目录（按需显式使用或随删除流程联动触发）。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
+  通过管理面 MCP（mcp-huaweicloud-rds-supabase-mgr，58 个工具）管理华为云 RDS Supabase 应用全生命周期：创建前置编排与参数基线、新建实例或挂载已有 PostgreSQL 实例创建应用、EIP 采购与绑定、SSL 证书查询与购买、OBS 存储对接、认证与登录配置（邮箱/GitHub）、API Key 查询与受控交付、包周期订单支付与取消、SSL/密码/安全组日常变更、安全组绑定修改（应用/托管实例/待挂载实例三目标，多组全量替换）、应用与托管实例启停与重启（托管实例详情查询，启停/重启目标强制解析自应用 managed_instance，不接受裸 instance_id）、应用删除与托管实例干净收尾、删除后关联资源清理（EIP 释放、OBS 桶删除、应用数据目录清理）与资源清理保留场景（残留盘点、一键清理、资源记录全流程记录）。Use when：从零创建一个能公网访问的 RDS Supabase 应用；挂载已有 PG 实例创建应用；生成创建编排与参数基线；采购并绑定 EIP 开通公网；购买或复用 SSL 证书并开启 HTTPS；对接或轮换 OBS 存储桶；配置邮箱或 GitHub 登录；查询接入信息与交付 API Key；支付或取消包周期订单；修改应用密码、重置 Key、开关 SSL、调整安全组规则或换绑安全组；启动、停止或重启应用（低峰期执行，任务跟踪至终态）；查询托管实例状态、启停或重启托管实例（先启实例再启应用）；删除应用并清理托管实例与安全组；应用删除后清理关联 EIP、OBS 桶或应用数据目录（按需显式使用或随删除流程联动触发）；下线时盘点残留并一键/分项清理（资源记录圈定范围，含高危计费提醒与安全组保留约束）。NOT for: 库内 SQL 与数据操作（路由到数据面 MCP server/mcp_server_rds_supabase）；不经本 MCP 的直接 hcloud/KooCLI 云运维（仅 0.0.0.0/0 全网入方向兜底与安装期使用）；SQL 查询、表结构变更与数据迁移本技能不做。
 metadata:
   tags: [huawei-cloud, rds, supabase, mcp, lifecycle]
   version: "2.5.0"
@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.10.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a61`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，56 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.11.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a62`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，58 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -98,10 +98,10 @@ metadata:
 1. **四问意图（必须逐个问，不许默认、不许替用户决定）**：① 数据库来源——新建实例（本场景，推荐）还是挂载已有实例（场景二）；② 大文件存储——要传图片/视频/附件则按场景五先定 OBS 方案（**强烈建议创建时当场定**：业务确认需要就当场启用，避免遗漏与流程拉长；事后可经场景五 `update_supabase_storage` 补开对接），不要则 `storage_component` 写 `{"enabled":false}` 且不能整个省略；③ 公网访问——要则创建后走场景四，不要则明确告知仅内网可达；④ HTTPS——要则先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点）/ 购买新证书（`purchase_supabase_ssl_cert`，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有证书，纯 EIP 公网 IP 无域名时证书仅支持文件验证；创建后开 SSL。
 2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、SSL 配置与公网访问（EIP）两个独立模块（公网：按需计费固定（不支持包周期）+全动态 BGP 独享带宽，**计费方式（bandwidth 按带宽/traffic 按流量）与带宽大小均由用户决策（无默认）**，基线含收费标准；SSL：证书获取三路径）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
 3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；企业项目为可选字段，仅企业项目账号需要——发现时实时查询企业项目列表（仅此场景查询）供选择，默认选中 default 项目，查询不可用或个人账号直接省略该字段；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、兜底 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
-4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
+4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；**密码生成规范**：12-16 位大小写字母+数字（云侧三类即合规，无需特殊字符；确需符号只用 `-`/`_`，禁用引号、反斜杠、空格与 `@#$%&*+=?,/：;` 等易转义难抄录字符）；写盘后**回读核对**再预览。预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
 6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交——请求文件无需手填 `security_group_id`。
-7. **跟踪**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；托管实例**固定按需计费**（无订单支付环节），实例创建成功即开始计费。
+7. **跟踪与凭据交付**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；托管实例**固定按需计费**（无订单支付环节），实例创建成功即开始计费。**Dashboard 登录**：账号固定 `supabase`；密码即本地请求文件 `create.password` 原文（创建路径不生成、不改动密码——受理响应的 `dashboard_credential` 同此说明）；引导用户打开该文件核对取用，登录失败先核对文件原文（大小写与易混字符），需要更换走 `change_supabase_application_password`（旧密码立即失效）。
 8. **验证与后续**：`show_supabase_application` 回查状态就绪；随后按需执行公网开通（场景四）、SSL（证书获取三路径，见第 1 步④）、登录配置（场景六）与接入信息交付（场景七）。
 
 **验证方式**：`show_supabase_application` 状态正常且无进行中操作；（开通公网后）访问地址探活可达；接入信息卡交付完整。
@@ -230,6 +230,17 @@ metadata:
 
 **验证方式**：`list_supabase_applications` 无该应用；级联删除时托管实例亦消失；残留清单如实交付。
 
+## 场景十一：资源清理与保留（下线场景）
+
+**触发**：用户不再需要 Supabase 完整能力（下线、彻底清理）；或应用删除后要走关联资源清理。
+
+1. **删应用**：走场景十——PG 实例去留必选必问（新建实例场景建议同步删除，避免残留）。
+2. **盘点残留**：`show_supabase_residuals(application_id)`——资源记录圈定 + 云端实时核对，四类清单（EIP/桶/应用数据目录/安全组）逐项带建议：自动创建的建议删除、复用的用户决策；**保留桶时高危提醒桶内数据持续计费、强烈建议清理应用目录**；**实例保留时数据库组不可删**。
+3. **选一键还是分项**：给出 `cleanup_supabase_residuals` 一键选项（四类开关必选布尔，单确认单计划、逐项守卫复检、被拦项跳过并说明、资源记录回写）；用户拒绝则按类别逐项确认走单项工具（delete_supabase_eip / delete_supabase_obs / clean_supabase_obs_ws / delete_supabase_security_group）。
+4. **复核**：清理后重跑 `show_supabase_residuals`；被拦与失败项按 reason 处置。
+
+**全流程保护机制（资源记录）**：创建/复用/绑定/修改每一步写入本地资源记录，清理精准圈定范围、绝不猜测；资源记录无记录（创建于机制之前的资源）如实说明并走人工核对。**详细操作流程、确认纪律与资源记录语义见服务端 README 场景七（本章不重复展开）。**
+
 ## 排障与任务跟踪
 
 **任务跟踪（全局纪律）**：所有返回 `job_id` 的操作类工具——应用与托管实例启停与重启、SSL、EIP、密码、存储、Auth、Key 重置、安全组换绑、删除等修改与更新类操作——受理后必须用 `show_operation_job_status(job_id)` 查询至终态（`wait_operation_job_complete` 可有界等待），终态后回查资源确认业务结果；**应用创建除外**——创建进度用专用的 `show_supabase_creation_progress` 跟踪（覆盖创建全阶段，实例先就绪、应用后建）。`show_operation_job_status` 返回单任务细节（entity/时间戳）。等待节奏：提交后先查一次抓秒级失败 → 告知用户预计时长 → 每次用户回来问再查，不连续刷。
@@ -248,7 +259,7 @@ metadata:
 
 ## 核心命令（MCP 工具）
 
-56 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
+58 个工具按六组列出；风险以运行时声明为准。全部写工具执行预览/确认双段，敏感字段只经 `request_ref` 别名引用。
 
 **编排与发现（READ）**
 
@@ -333,8 +344,10 @@ metadata:
 | `delete_supabase_application` | 删应用，实例去留必选；状态不限（正常/已停止/已移除均可删），仅拦进行中操作；级联删实例仅限按需（包周期整体拒绝，改 false 后控制台退订） | DANGEROUS |
 | `delete_supabase_managed_instance` | 单独拆除托管实例（仅按需；包周期走控制台退订） | DANGEROUS |
 | `delete_supabase_eip` | 删 EIP（KooCLI DeletePublicip），应用删除后按需清理；引用中拦截、绑定中须先解绑、删除即停保有费 | DANGEROUS |
-| `clean_supabase_obs_ws` | 清理桶内应用数据目录（仅 `obs://<bucket>/<应用ID>/`，不动桶与其他目录；存活应用 ID 拦截） | DANGEROUS |
+| `clean_supabase_obs_ws` | 清空并删除桶根目录下应用 ID 子文件夹（不动桶与其他目录；存活应用 ID 拦截） | DANGEROUS |
 | `delete_supabase_obs` | 删 OBS 桶（KooCLI obsutil）；引用中拦截、非空拦截（先清各应用目录）、桶不存在幂等返回 | DANGEROUS |
+| `show_supabase_residuals` | 残留盘点（资源记录圈定+实时核对，场景十一入口）；保留桶高危计费提醒、实例保留时数据库组不可删 | READ |
+| `cleanup_supabase_residuals` | 一键清理四类残留（四个必选布尔开关、单计划逐项守卫复检、被拦项跳过如实报告） | DANGEROUS |
 
 ## 参数契约速查
 

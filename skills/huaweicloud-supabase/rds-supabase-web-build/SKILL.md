@@ -3,7 +3,7 @@ name: rds-supabase-web-build
 description: 'RDS Supabase 全栈开发编排技能：AI Agent 通过自然语言创建并托管 Web 应用网站的端到端工作流——需求澄清与设计、前端代码生成、后端声明式配置（DDL/GRANT/RLS/RPC）生成与部署、本地 L0 测试验证、前端静态资源 OBS+CDN 全托管、端到端上线与生命周期管理（更新/回滚/下线）。Use when：创建 Web 网站、搭建 AI 应用、全栈应用从零到上线、已有 RDS Supabase 应用的迭代更新与托管维护。编排管理面与数据面两台 MCP（均由工作流步骤动态安装：管理面→步骤三、数据面→步骤四）及 rds-supabase-mgr-mcp / rds-supabase-mcp / rds-supabase-usage / rds-supabase-frontend / rds-supabase-postgres-best-practices / rds-supabase-function-graph 六个专项技能。v1 后端边界为数据层；复杂业务逻辑由 function-graph 技能（云函数）承接，SSR 后端部署不支持。'
 license: MIT
 metadata:
-  version: "0.12.1"
+  version: "0.12.2"
 ---
 
 # RDS Supabase 全栈开发编排（web-build）
@@ -193,7 +193,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 
 1. 三层验证（launch-checklist）：后端项 / 前端项 / 连通项（站点渲染、API 可见性、**多用户隔离抽检**、auth 回调）；抽检测试账号创建后即记入 webapp.json `test_accounts`（email/密码/用途）
 2. 上线报告（三级交付语义）→ 写 webapp.json → gate `--verify` PASS
-3. **输出「应用名片」并落盘 `.hwsupabase/app-card.md`**（launched 后最终交付物）：应用名称、功能介绍、访问地址、后端地址、**测试账号（含密码）**、数据模型与技术栈概览、使用方式（更新/回滚/下线触发语）——格式见输出格式
+3. **输出「应用名片」并落盘 `.hwsupabase/app-card.md`**（launched 后最终交付物）：应用名称、功能介绍、访问地址、后端地址、**测试账号（含密码）**、**Dashboard 登录（账号固定 supabase + 密码——新建应用取创建时本地请求文件 create.password 原文，必须展示在名片表格中）**、数据模型与技术栈概览、使用方式（更新/回滚/下线触发语）——格式见输出格式
 
 **断点续作**：会话开始先读 webapp.json → 从 `last_completed_stage` 的下一步骤重入，并**重验该步骤通过条件**（不信任历史结论）。
 
@@ -289,6 +289,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
   | 访问地址 | <stable_url>（temporary 场景仅本机生效） |
   | 后端地址 | <gateway_url>（RDS Supabase 网关） |
   | 测试账号 | A：<email> / 密码：<password>；B：<email> / 密码：<password>（验收演示账号，正式使用前改密或删除） |
+  | Dashboard 登录 | supabase / 密码：<password>（新建应用=创建请求文件 create.password 原文；已改密以最新变更记录为准） |
   | 数据模型 | <N> 张表：<表清单>；RPC <M> 个 |
   | 技术栈 | 前端 <framework> + supabase-js；后端 Supabase（PostgREST/GoTrue）；托管 OBS · <hosting_mode> |
   | 版本信息 | 后端批次 <current_batch> · 上线 <时间> |

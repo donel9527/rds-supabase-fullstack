@@ -1,6 +1,7 @@
 """Scenario-specific creation orchestration: dedicated security groups provisioned and injected, then one submitted creation."""
 import ipaddress
 import os
+import re
 from huaweicloud_mcp_core.errors import McpToolError
 from mcp_server_supabase.service.network import Network
 from mcp_server_supabase.service.plans import PlanStore, fingerprint
@@ -9,6 +10,25 @@ CIDR_CHOICES='public_access_cidr 三选一：auto（探测当前设备出口 IP�
 EIP_AUTOMATION=[{'tool':'create_supabase_eip','args':{'prefer_idle':True,'billing_method':'<用户按场景选择：bandwidth 按带宽计费 / traffic 按流量计费>','bandwidth_size_mbps':'<用户决策（bandwidth 5-1000 / traffic 5-300 峰值限速）>'}},
                 {'tool':'bind_supabase_eip','args':{'instance_id':'<application_id（in32 结尾）>','public_ip_id':'<EIP ID>','public_ip':'<EIP 地址>'}},
                 {'tool':'update_supabase_auth_config','action':'同步 api_external_url 为公网地址并探活'}]
+DASHBOARD_CREDENTIAL={'login_user':'supabase',
+                      'password_source':'本地请求文件的 create.password 字段（与实际提交值一致；创建路径不生成、不改动密码）',
+                      'note':'Dashboard 登录失败时先打开该请求文件核对密码原文（注意大小写与易混字符）；'
+                             '需要更换用 change_supabase_application_password，换新后旧密码立即失效。'}
+UNSAFE_PASSWORD_CHARS=re.compile(r'[^A-Za-z0-9_-]')
+
+
+def password_complexity_warnings(body):
+    """Advisory only (the cloud stays authoritative): passwords with symbols beyond
+    [A-Za-z0-9_-] are hard to transcribe and to type into login forms - recommend
+    the compatible recipe instead of failing the request."""
+    warnings=[]
+    fields=(('create.password',body.get('password')),
+            ('managed_instance.password',(body.get('managed_instance') or {}).get('password')))
+    for label,value in fields:
+        if isinstance(value,str) and UNSAFE_PASSWORD_CHARS.search(value):
+            warnings.append('密码 %s 含字母/数字/中划线/下划线以外的特殊字符：易引发输入法、URL/JSON 转义与人工抄录错误，'
+                            '强烈建议改为 12-16 位大小写字母+数字（云侧规则三类即可满足，无需特殊字符）；如确需符号仅用 - 或 _。'%label)
+    return warnings
 
 
 class CreationFlowService:
@@ -18,13 +38,14 @@ class CreationFlowService:
     response echoes the application/instance identifiers with tracking and EIP
     automation follow-ups."""
 
-    def __init__(self,operations=None,network=None,koocli=None,plans=None,detector=None,obs=None):
+    def __init__(self,operations=None,network=None,koocli=None,plans=None,detector=None,obs=None,ledger=None):
         self.operations=operations
         self.network=network or Network()
         self.koocli=koocli or self.network.koocli
         self.plans=plans or PlanStore()
         self.detector=detector
         self.obs=obs
+        self.ledger=ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def _obs(self):
         """Lazily construct the OBS service on the shared KooCLI channel."""
@@ -151,12 +172,52 @@ class CreationFlowService:
                 'after_completion':{'eip_automation':EIP_AUTOMATION,
                                     'note':'状态到终态且确认公网访问后执行；空闲 EIP 优先复用；新建带宽为收费项（按带宽计费、创建即计费），大小必须由用户明确给定'}}
 
-    def _response(self,result,groups,scenario,prepared_obs=None):
+    def _record_creation(self,result,scenario,groups,body,prepared_obs):
+        """Post-success resource-ledger recording (the full-flow protection mechanism):
+        the application anchor, both dedicated security groups and the ensured OBS
+        bucket. Advisory only - a ledger fault becomes a warning, never a failure."""
+        if self.ledger is None:
+            return None
+        application_id=result.get('application_id')
+        if not application_id:
+            return None
+        warnings=[]
+        managed=body.get('managed_instance') if isinstance(body.get('managed_instance'),dict) else {}
+        provenance='newly_instance' if scenario=='newly_instance' else 'linked_existing'
+        warning=self.ledger.record_safe('application',application_id,name=body.get('name'),
+                                        auto_created=True,
+                                        detail={'scenario':scenario,
+                                                'managed_instance':{'id':result.get('instance_id') or managed.get('id'),
+                                                                    'origin':provenance}})
+        if warning:warnings.append(warning)
+        warning=self.ledger.record_safe('security_group',groups.get('application_group_id'),
+                                        name='supabase-app-sg',auto_created=True,
+                                        application_id=application_id,
+                                        detail={'role':'application','rules':['ingress 8443','egress 5432']})
+        if warning:warnings.append(warning)
+        if groups.get('database_group_id'):
+            warning=self.ledger.record_safe('security_group',groups['database_group_id'],
+                                            name='supabase-db-sg',auto_created=True,
+                                            application_id=application_id,
+                                            detail={'role':'database','rules':['ingress 5432']})
+            if warning:warnings.append(warning)
+        if prepared_obs is not None:
+            warning=self.ledger.record_safe('obs_bucket',prepared_obs.get('bucket'),
+                                            auto_created=prepared_obs.get('created',True),
+                                            application_id=application_id,
+                                            detail={'ensured_by':'creation_flow','storage_enabled':True})
+            if warning:warnings.append(warning)
+        return warnings or None
+
+    def _response(self,result,groups,scenario,prepared_obs=None,body=None):
         """Echo the creation identifiers plus the prepared-resource record and workflow follow-ups."""
         echoed={k:result[k] for k in ('status','job_id','application_id','instance_id','instance_job_id','order_id')
                 if k in result}
         response={**echoed,'security_groups':groups,'workflow':self._workflow(result,scenario)}
         if prepared_obs is not None:response['obs']=prepared_obs
+        record_warnings=self._record_creation(result,scenario,groups,body,prepared_obs)
+        if record_warnings:response['record_warnings']=record_warnings
+        response['dashboard_credential']=DASHBOARD_CREDENTIAL
         return response
 
     async def with_new_instance(self,request_ref,public_access_cidr='auto',confirm=False,plan_id=None):
@@ -181,7 +242,9 @@ class CreationFlowService:
                     'obs_plan':obs_plan,
                     'warnings':['确认即创建两个专用安全组（启用存储时确保 OBS 桶）并提交应用创建',
                                 '托管 PG 实例按需计费（固定，不支持包周期）：计费项=实例规格+存储空间（必选），备份空间免费额度=存储容量 100%、超出部分按需计费，公网带宽/跨区域备份为可选计费项；按秒计费、整点小时结算，自实例创建成功时间点起计费至删除；计费规则 https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html']
-                              +((obs_plan or {}).get('warnings') or []),
+                              +((obs_plan or {}).get('warnings') or [])
+                              +password_complexity_warnings(body),
+                    'dashboard_credential':DASHBOARD_CREDENTIAL,
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')
@@ -198,7 +261,7 @@ class CreationFlowService:
         except BaseException:
             self.plans.finish(plan_id,'failed');raise
         result=await self._ops().submit_creation(body,plan_id)
-        return self._response(result,groups,'newly_instance',prepared_obs)
+        return self._response(result,groups,'newly_instance',prepared_obs,body)
 
     async def link_exist_instance(self,request_ref,public_access_cidr='auto',confirm=False,plan_id=None):
         """Attach an existing PG instance: one dedicated application security group is
@@ -224,8 +287,10 @@ class CreationFlowService:
                     'security_group_plan':self._group_plan('existed_instance',ingress_cidr,subnet_cidr),
                     'obs_plan':obs_plan,
                     'warnings':['确认即创建一个专用安全组（启用存储时确保 OBS 桶）并提交应用创建（计费开始）',
-                                '预付费（prePaid）返回订单，须 get/pay_supabase_order 支付后才建资源']
-                              +((obs_plan or {}).get('warnings') or []),
+                                '应用创建无订单支付环节（公测期应用免费）；挂载的实例在本环境外部，其计费模式不受本流程影响']
+                              +((obs_plan or {}).get('warnings') or [])
+                              +password_complexity_warnings(body),
+                    'dashboard_credential':DASHBOARD_CREDENTIAL,
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')
@@ -241,4 +306,4 @@ class CreationFlowService:
         except BaseException:
             self.plans.finish(plan_id,'failed');raise
         result=await self._ops().submit_creation(body,plan_id)
-        return self._response(result,groups,'existed_instance',prepared_obs)
+        return self._response(result,groups,'existed_instance',prepared_obs,body)

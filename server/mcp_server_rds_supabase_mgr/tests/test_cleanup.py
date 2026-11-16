@@ -10,6 +10,7 @@ EIP_ID='11111111-1111-4111-8111-111111111111'
 ADDRESS='123.60.101.251'
 APP='ad9079c304464c33a4f2fd516d4a3b16in32'
 BUCKET='supabase-demo-app'
+INSTANCE='ee36e15f94ed4432adb3ada163620d82in03'
 
 
 class FakeCleanupCli:
@@ -216,13 +217,15 @@ class CleanWorkspaceTests(CleanupTestsBase):
         self.koocli.push_obs('obs://%s/%s/:\nobs://%s/%s/logo.png 1024\nobs://%s/%s/data/x.csv 2048\nobs://%s/%s/a.bin 10'
                              %(BUCKET,APP,BUCKET,APP,BUCKET,APP,BUCKET,APP))
         self.koocli.push_obs('Succeeded number: 3, Failed number: 0')
+        self.koocli.push_obs('folder marker deleted')
         result=await self.service.clean_workspace(BUCKET,APP,True,preview['plan_id'])
         self.assertEqual(result['status'],'applied')
         self.assertEqual(result['deleted'],3)
         self.assertEqual(result['delete_failed'],0)
         self.assertEqual(result['objects_listed'],3)
-        rm=self.koocli.obs_calls[-1]
-        self.assertEqual(rm,('rm',['obs://%s/%s/'%(BUCKET,APP)],['-r','-f']))
+        rm_calls=[call for call in self.koocli.obs_calls if call[0]=='rm']
+        self.assertEqual(rm_calls[0],('rm',['obs://%s/%s/'%(BUCKET,APP)],['-r','-f']))
+        self.assertEqual(rm_calls[1],('rm',['obs://%s/%s/'%(BUCKET,APP)],['-f']))
 
     async def test_live_application_blocked_before_any_obs_call(self):
         preview=await self.service.clean_workspace(BUCKET,APP,False)
@@ -251,6 +254,7 @@ class CleanWorkspaceTests(CleanupTestsBase):
         self.koocli.push_obs('obs://%s/%s/logo.png 1024\nobs://%s/%s/data/x.csv 2048\nobs://%s/%s/a.bin 10'
                              %(BUCKET,APP,BUCKET,APP,BUCKET,APP))
         self.koocli.push_obs('Succeeded number: 2, Failed number: 1')
+        self.koocli.push_obs('folder marker deleted')
         result=await self.service.clean_workspace(BUCKET,APP,True,preview['plan_id'])
         self.assertEqual(result['status'],'partial')
         self.assertEqual(result['deleted'],2)
@@ -287,3 +291,169 @@ class ConfinementParsingTests(unittest.TestCase):
         self.assertEqual(deletion_counts('Succeeded number: 3, Failed number: 1'),(3,1))
         self.assertEqual(deletion_counts('Succeeded count: 2\nFailed count: 0'),(2,0))
         self.assertEqual(deletion_counts('nothing matched'),(None,None))
+
+
+class ResidualsAndBatchTests(CleanupTestsBase):
+    """场景七: ledger-scoped residual inventory and the one-click batch cleanup."""
+
+    APP_SG='33333333-3333-4333-8333-333333333333'
+    DB_SG='44444444-4444-4444-8444-444444444444'
+
+    def setUp(self):
+        super().setUp()
+        from mcp_server_supabase.service.ledger import ResourceLedger
+        self.ledger=ResourceLedger(Path(self.tmp.name)/'resources.sqlite3')
+        self.service.ledger=self.ledger
+
+    def seed(self,instance_retained=True):
+        self.ledger.record('application',APP,name='web-app',auto_created=True,
+                           detail={'scenario':'newly_instance',
+                                   'managed_instance':{'id':INSTANCE,'origin':'newly_instance'}})
+        self.ledger.application_deleted(APP,{'instance_retained':instance_retained,
+                                              'instance_id':INSTANCE,
+                                              'instance_cascade':not instance_retained})
+        self.ledger.record('eip',EIP_ID,name='flow-eip',auto_created=True,
+                           application_id=APP,detail={'address':ADDRESS})
+        self.ledger.record('obs_bucket',BUCKET,auto_created=True,application_id=APP,
+                           detail={'ensured_by':'creation_flow'})
+        self.ledger.record('security_group',self.APP_SG,
+                           name='supabase-app-sg',auto_created=True,application_id=APP,
+                           detail={'role':'application'})
+        self.ledger.record('security_group',self.DB_SG,
+                           name='supabase-db-sg',auto_created=True,application_id=APP,
+                           detail={'role':'database'})
+
+    def instances_page(self,exists=True):
+        rows=[{'id':INSTANCE,'name':'pg-1','status':'ACTIVE'}] if exists else []
+        return (200,{'total_count':len(rows),'instances':rows})
+
+    def inventory_fixtures(self,workspace_objects=True):
+        """One full _residual_inventory pass: EIP read + bucket stat + workspace ls
+        (only when the workspace holds objects) + instance inventory REST."""
+        self.koocli.push_api({'publicip':{'id':EIP_ID,'public_ip_address':ADDRESS,'status':'FREE'}})
+        self.koocli.push_obs('stat ok')
+        if workspace_objects:
+            self.koocli.push_obs('obs://%s/%s/logo.png 1024'%(BUCKET,APP))
+        else:
+            self.koocli.push_obs('')
+
+    def empty_sweep(self):
+        self.client.request.side_effect=[(200,self.apps_page([]))]
+
+    async def test_residuals_inventory_and_recommendations(self):
+        self.seed(instance_retained=True)
+        self.inventory_fixtures()
+        self.client.request.side_effect=[self.instances_page(exists=True)]
+        result=await self.service.residuals(APP)
+        self.assertEqual(result['application']['deleted'],True)
+        self.assertEqual(result['application']['instance_live']['exists'],True)
+        self.assertTrue(result['eip'][0]['auto_created'])
+        self.assertIn('建议删除',result['eip'][0]['recommendation'])
+        self.assertEqual(result['obs_workspaces'][0]['objects'],1)
+        self.assertIn('高危提醒',result['obs_workspaces'][0]['high_risk_billing_note'])
+        sg_db=[row for row in result['security_groups'] if row['role']=='database'][0]
+        self.assertIn('实例保留中',sg_db['blocked'])
+        self.assertEqual(result['one_click']['tool'],'cleanup_supabase_residuals')
+        self.assertIn('eip',result['categories'])
+
+    async def test_residuals_require_ledger_record(self):
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.residuals(APP)
+        self.assertEqual(ctx.exception.code,'MCP_NOT_FOUND')
+        self.assertIn('资源记录',ctx.exception.message)
+
+    async def test_residuals_require_ledger_enabled(self):
+        self.service.ledger=None
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.residuals(APP)
+        self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
+
+    async def test_cleanup_all_preview_lists_inventory_without_writes(self):
+        self.seed()
+        self.inventory_fixtures()
+        self.client.request.side_effect=[self.instances_page(exists=False)]
+        preview=await self.service.cleanup_all(APP,True,True,True,True,False)
+        self.assertEqual(preview['status'],'confirmation_required')
+        self.assertEqual(preview['flags'],{'eip':True,'obs_bucket':True,
+                                           'obs_workspace':True,'security_groups':True})
+        self.assertEqual(len(preview['warnings']),4)
+        self.assertTrue(any('高危提醒' in w for w in preview['warnings']))
+        self.assertIn('inventory',preview)
+        self.assertEqual(self.koocli.api_calls[-1][0:2],('EIP','ShowPublicIp'))   # reads only
+
+    async def test_cleanup_all_full_path_deletes_every_category(self):
+        self.seed(instance_retained=False)      # instance cascade-deleted: db group deletable
+        # instance_retained=False -> the residual inventory performs no instance REST call
+        self.inventory_fixtures()
+        preview=await self.service.cleanup_all(APP,True,True,True,True,False)
+        # submit-time fresh inventory (no REST either)
+        self.inventory_fixtures()
+        # KooCLI queues consume in call order; the three REST sweeps share one list
+        self.client.request.side_effect=[(200,self.apps_page([])) for _ in range(3)]
+        # EIP: verify read + delete
+        self.koocli.push_api({'publicip':{'id':EIP_ID,'public_ip_address':ADDRESS}})
+        self.koocli.push_api({})
+        # workspace: stat + listing, then rm with counts + folder-marker removal
+        self.koocli.push_obs('stat ok')
+        self.koocli.push_obs('obs://%s/%s/logo.png 1024'%(BUCKET,APP))
+        self.koocli.push_obs('Succeeded number: 1, Failed number: 0')
+        self.koocli.push_obs('folder marker deleted')
+        # bucket: stat + empty listing, then rm
+        self.koocli.push_obs('stat ok')
+        self.koocli.push_obs('')
+        self.koocli.push_obs('deleted')
+        # security groups: verify + delete_group_now re-verify + delete, per group
+        for group_id in (self.APP_SG,self.DB_SG):
+            for _ in range(2):
+                self.koocli.push_api({'security_group':{'id':group_id,
+                    'tags':[{'key':'AUTO_CREATE','value':'true'},
+                            {'key':'USE_FOR','value':'Supabase'}]}})
+            self.koocli.push_api({})
+        result=await self.service.cleanup_all(APP,True,True,True,True,True,preview['plan_id'])
+        self.assertEqual(result['status'],'applied')
+        for category in ('eip','obs_workspace','obs_bucket','security_groups'):
+            outcomes=[row['outcome'] for row in result['results'][category]]
+            self.assertTrue(outcomes and all(outcome=='deleted' for outcome in outcomes),category)
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
+        active={row['kind'] for row in self.ledger.rows(application_id=APP)}
+        self.assertEqual(active,set())                     # ledger marked everything cleaned
+
+    async def test_cleanup_all_blocks_db_group_when_instance_retained(self):
+        self.seed(instance_retained=True)
+        self.inventory_fixtures()
+        self.client.request.side_effect=[self.instances_page(exists=True)]
+        preview=await self.service.cleanup_all(APP,False,False,False,True,False)
+        self.inventory_fixtures()
+        self.client.request.side_effect=[self.instances_page(exists=True)]
+        for _ in range(2):                                 # app group verify + re-verify
+            self.koocli.push_api({'security_group':{'id':self.APP_SG,
+                'tags':[{'key':'AUTO_CREATE','value':'true'},
+                        {'key':'USE_FOR','value':'Supabase'}]}})
+        self.koocli.push_api({})                           # DeleteSecurityGroup/v3
+        result=await self.service.cleanup_all(APP,False,False,False,True,True,preview['plan_id'])
+        roles={row['role']:row['outcome'] for row in result['results']['security_groups']}
+        self.assertEqual(roles['application'],'deleted')
+        self.assertEqual(roles['database'],'blocked')
+        self.assertIn('实例保留中',[row['reason'] for row in result['results']['security_groups']
+                                   if row['role']=='database'][0])
+
+    async def test_cleanup_all_requires_explicit_booleans(self):
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.cleanup_all(APP,None,True,True,True)
+        self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
+
+    async def test_cleanup_all_replay_rejected(self):
+        self.seed(instance_retained=False)
+        # retained=False -> no inventory REST; eip-only flags
+        self.inventory_fixtures(workspace_objects=False)
+        preview=await self.service.cleanup_all(APP,True,False,False,False,False)
+        self.inventory_fixtures(workspace_objects=False)
+        self.koocli.push_api({'publicip':{'id':EIP_ID,'public_ip_address':ADDRESS}})
+        self.empty_sweep()
+        self.koocli.push_api({})
+        await self.service.cleanup_all(APP,True,False,False,False,True,preview['plan_id'])
+        # replay: fresh inventory runs before the claim rejects the reused plan
+        self.inventory_fixtures(workspace_objects=False)
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.cleanup_all(APP,True,False,False,False,True,preview['plan_id'])
+        self.assertEqual(ctx.exception.code,'MCP_GUARDRAIL_BLOCKED')

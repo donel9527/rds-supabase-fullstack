@@ -7,6 +7,49 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a62 - scenario 7 (resource cleanup and
+  retention) plus dashboard-credential and workspace-folder hardening.
+  Full-flow protection mechanism: every create/reuse/bind/modify step records
+  into a local SQLite resource ledger (EIP auto-created vs reused, OBS bucket
+  auto-created vs integrated, the two dedicated security groups, the
+  application-to-managed-instance mapping, the instance choice at deletion,
+  security-group rebinding with detach of replaced auto-created groups);
+  recording is advisory (faults surface as record_warnings, never fail a
+  finished cloud write) and always injected by the tool layer. New READ tool
+  show_supabase_residuals: the record-scoped, live-verified residual inventory
+  across four categories with per-item recommendations, the high-risk
+  storage-billing reminder when a bucket is retained, and the database
+  security group blocked while the managed instance is retained. New
+  DANGEROUS tool cleanup_supabase_residuals: the one-click batch cleanup with
+  four mandatory boolean category switches, one confirmation and one plan for
+  the whole set; per-item guard re-checks tolerate blocked items and
+  per-item failures never abort the other categories; cleaned items update
+  the record and every outcome is reported. clean_supabase_obs_ws now deletes
+  the application-ID folder itself, not only its contents: the bucket-root
+  directory named exactly the application ID is emptied and then the folder
+  marker removed (a missing marker is tolerated), so the folder disappears
+  entirely while the bucket and every other directory stay untouched.
+  Dashboard-login hardening after a live test could not log in: creation
+  previews warn when a password carries characters beyond
+  letters/digits/-/_ (transcription, IME and URL/JSON escaping hazards - the
+  recommended recipe is 12-16 chars of upper+lower+digits, no symbols needed
+  for the cloud rule), and every creation preview/acceptance carries a
+  dashboard_credential note stating the fixed login user (supabase), that the
+  password is exactly the local request file's create.password, and that the
+  creation path never generates or alters it; the existed-instance preview
+  also drops a stale prepaid-order warning (the creation path produces no
+  orders). User-facing wording switched from the jargon term to 资源记录
+  (local resource record) across messages, response keys (ledger_warning(s)
+  -> record_warning(s)) and docs, enforced by the skill jargon lint. Tool
+  count 56 -> 58. Skills: `rds-supabase-mgr-mcp` 2.11.0 (server >=
+  0.4.0a62; scenario 11 summary pointing at the server README scenario 7,
+  password recipe and write-back-verify discipline, credential delivery in
+  scenario 1, acceptance case K36) and `rds-supabase-web-build` 0.12.2 (the
+  app-card table now shows the dashboard login account and password for
+  newly created applications, sourced from the creation request file).
+  Tests: 588 passed + 168 subtests (new: ledger suite, residual inventory,
+  batch cleanup full/blocked/replay, folder-marker deletion, password
+  advisory and credential-note cases).
 - `mcp_server_rds_supabase_mgr` 0.4.0a61 - post-deletion resource cleanup
   family: three DANGEROUS tools for business-driven explicit use or automatic
   linked triggering after a Supabase application is deleted.

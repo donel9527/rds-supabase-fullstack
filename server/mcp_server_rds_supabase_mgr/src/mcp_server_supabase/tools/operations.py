@@ -4,11 +4,12 @@ from mcp_server_supabase.service.instance_catalog import InstanceCatalog, Networ
 from mcp_server_supabase.service.instance_lifecycle import lifecycle as managed_instance_lifecycle
 from mcp_server_supabase.service.instance_lifecycle import show as show_managed_instance
 from mcp_server_supabase.service.operations import Operations
+from mcp_server_supabase.service.ledger import ResourceLedger
 from mcp_server_supabase.service.security_group_set import change as change_security_group
 
 
 def register(server):
-    service = Operations()
+    service = Operations(ledger=ResourceLedger())
 
     @server.tool()
     @guard(risk=ToolRisk.READ)

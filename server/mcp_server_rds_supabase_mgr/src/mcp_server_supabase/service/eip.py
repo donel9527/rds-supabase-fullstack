@@ -13,9 +13,10 @@ class EipService:
     """EIP purchase via KooCLI (hcloud EIP service): idle-first selection or a new
     dedicated full-dynamic-BGP EIP. Baseline: pay-per-use recommended, bandwidth 5-1000M."""
 
-    def __init__(self,koocli=None,plans=None):
+    def __init__(self,koocli=None,plans=None,ledger=None):
         self.koocli=koocli or KoocliClient()
         self.plans=plans or PlanStore()
+        self.ledger=ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def intent_digest(self,method,path,body):
         """Fingerprint a purchase intent against this KooCLI credential, mirroring Network."""
@@ -116,8 +117,18 @@ class EipService:
                                    {'action':'create','publicip_id':view['id'],
                                     'tags':[{'key':'USAGE_FOR','value':USAGE_TAG}]})
             self.plans.finish(plan_id,'accepted')
-            return {'mode':'created','status':'created','eip':view,
+            result={'mode':'created','status':'created','eip':view,
                     'tag':'USAGE_FOR='+USAGE_TAG,'plan_id':plan_id}
+            if self.ledger is not None:
+                warning=self.ledger.record_safe('eip',view['id'],name=view.get('alias'),
+                                                auto_created=True,
+                                                detail={'address':view.get('public_ip_address'),
+                                                        'billing_method':billing_method,
+                                                        'bandwidth_size_mbps':bandwidth_size_mbps,
+                                                        'charge_mode':view.get('charge_mode'),
+                                                        'provenance':'create_supabase_eip'})
+                if warning:result['record_warning']=warning
+            return result
         except BaseException:
             self.plans.finish(plan_id,'unknown')
             raise RecoveryError('MCP_SDK_ERROR','EIP write result unknown','submission_unknown',

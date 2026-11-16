@@ -49,9 +49,10 @@ def safe(value, depth=0):
 
 
 class Operations:
-    def __init__(self, client=None, plans=None):
+    def __init__(self, client=None, plans=None, ledger=None):
         self.client = client or configured_client()
         self.plans = plans or PlanStore()
+        self.ledger = ledger   # None disables resource-ledger recording (tests / embedded use)
 
     def app(self, application_id):
         return ROOT + "/" + segment(application_id) + "/supabase"
@@ -194,6 +195,15 @@ class Operations:
         if delete_managed_instance:
             result['instance_id'] = instance_id
             result['instance_job_id'] = instance_job_id
+        if self.ledger is not None:
+            try:
+                self.ledger.application_deleted(application_id,
+                    {'delete_managed_instance': delete_managed_instance,
+                     'instance_id': instance_id,
+                     'instance_cascade': bool(delete_managed_instance),
+                     'instance_retained': not bool(delete_managed_instance)})
+            except Exception as error:  # noqa: BLE001 - advisory persistence must not fail a finished deletion
+                result['record_warning'] = '资源记录写入失败（应用删除标记）：%s——后续清理请人工核对' % error
         return result
 
     async def creation_progress(self, application_id, application_job_id,
@@ -671,7 +681,15 @@ class Operations:
         try:
             result = accepted_job(status, data)
             self.plans.finish(plan_id, "accepted", result["job_id"])
-            return {**result, **notices, "job_follow_up": _JOB_FOLLOW_UP, "plan_id": plan_id}
+            response = {**result, **notices, "job_follow_up": _JOB_FOLLOW_UP, "plan_id": plan_id}
+            if (self.ledger is not None and action == "storage" and body.get("enabled")
+                    and body.get("bucket")):
+                warning = self.ledger.bind_safe("obs_bucket", body["bucket"], application_id,
+                                               detail={"provenance": "update_supabase_storage",
+                                                       "storage_enabled": True})
+                if warning:
+                    response["record_warning"] = warning
+            return response
         except BaseException:
             self.plans.finish(plan_id, "unknown");raise unknown from None
 

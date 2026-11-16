@@ -4,7 +4,7 @@
 
 ## 版本
 
-当前版本：`0.4.0a61`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；56 个工具。
+当前版本：`0.4.0a62`（开发预发行版）；Python `3.10+`；MCP Python SDK `2.x`；58 个工具。
 
 ## 概述
 
@@ -123,6 +123,13 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 两个托管实例来源共用同一套纪律：意图先行、参数经编排固化、敏感字段只入本地
 请求文件、预览确认双段提交。创建工具自动完成资源准备（专用安全组、启用存储
 时的 OBS 桶）并将结果回填注入请求体，一次提交成功。
+
+**密码与 Dashboard 登录**：密码 8-32 位、至少三类字符（云侧规则）；**强烈建议
+12-16 位大小写字母+数字，不掺特殊字符**（确需符号只用 `-`/`_`），避免输入法、
+URL/JSON 转义与人工抄录错误——预览时若含字母/数字/`-`/`_` 以外字符会给出告警。
+创建路径**不生成、不改动密码**：Dashboard 登录账号固定 `supabase`，密码即本地
+请求文件 `create.password` 原文；受理响应携带 `dashboard_credential` 说明，登录
+失败先核对该文件原文，更换密码走 `change_supabase_application_password`。
 
 #### 新建实例场景（推荐，`create_supabase_with_new_instance`）
 
@@ -304,6 +311,37 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买�
 3. 返回 `cancellation_verified`；为 false 时继续用 `get_supabase_order` 查询，
    不盲目重复提交。已支付资源须走控制台退订流程，本工具不受理。
 
+### 场景七：资源清理与保留
+
+用户不再需要 Supabase 完整能力时的下线清理：应用删除（PG 实例去留必选——新建实例
+场景建议同步删除，避免残留）之后，对关联资源做确认式清理。**全流程保护机制（资源
+资源记录）**：本 MCP 在创建、复用、绑定、修改的每一步都把资源写入本地资源记录（EIP 的自动
+创建/复用来源、OBS 桶的自动创建/接入、应用组与数据库组两个专用安全组、应用与托管
+实例的对应关系、删除时的实例去留选择），清理与联动操作据此精准圈定范围，绝不猜测。
+
+**入口**：`show_supabase_residuals(application_id)`（READ）——资源记录圈定 + 云端实时核对，
+输出四类残留清单与逐项建议：EIP（是否仍在、地址、流程自动创建者建议删除、复用者
+用户决策）、OBS 桶（是否存在、删除建议）、应用数据目录 `obs://<bucket>/<应用ID>/`
+（对象数量；**保留桶时高危提醒：桶内数据持续计费，强烈建议清理**）、安全组（应用组
+/数据库组；**实例保留时数据库组不可删**）；附实例现状与一键清理说明。资源记录无记录时
+如实拒绝（创建于资源记录机制之前的资源请人工核对，走单项工具）。
+
+**一键清理**：`cleanup_supabase_residuals(application_id, cleanup_eip, cleanup_obs_bucket,
+cleanup_obs_workspace, cleanup_security_groups, confirm, plan_id)`（DANGEROUS）——四个
+类别开关均为必选布尔（全 True 即按清单一次清理全部；选择否则按类别逐项确认，走
+单项工具）。预览输出实时残留清单与分类警示（含保留桶时的高危计费提醒）；确认后单
+计划执行：逐项守卫复检（引用中拦截、非空桶拦截、存活应用目录拦截、标签门），被拦
+项自动跳过并如实报告（如实例保留时的数据库组），失败项不中断其他类别；成功项资源记录
+回写。执行后重跑 `show_supabase_residuals` 复核。
+
+**分类确认纪律**：EIP 与 OBS 桶必须经用户明确确认才删除，流程自动创建的建议删除
+（避免残留与持续计费）；保留桶时必须提醒清理桶内存储占用（高危：持续扣费，强烈
+建议清理应用目录）；安全组为流程自动创建的建议删除，实例保留时数据库组不可删；安全
+组换绑的全量替换语义会同步更新资源记录（被摘除的自动创建组转为未绑定残留）。
+
+**单项工具**（部分清理）：`delete_supabase_eip`、`delete_supabase_obs`、
+`clean_supabase_obs_ws`、`delete_supabase_security_group`（场景五补）。
+
 ## 可用工具
 
 全部写工具执行两阶段确认：先以预览模式返回变更内容与计划编号，经确认后才真正提交。
@@ -337,8 +375,10 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买�
 | `delete_supabase_application` | 删应用，实例去留必选 | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | 单独拆除托管实例 | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
 | `delete_supabase_eip` | 删 EIP，应用删除后按需清理 | DANGEROUS | [DeletePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=DeletePublicip)（KooCLI） |
-| `clean_supabase_obs_ws` | 清理桶内应用数据目录（仅应用 ID 目录） | DANGEROUS | KooCLI `hcloud OBS rm`（按前缀） |
+| `clean_supabase_obs_ws` | 清空并删除桶根目录下应用 ID 子文件夹（不动桶与其他目录） | DANGEROUS | KooCLI `hcloud OBS rm`（文件夹级，清空并删除） |
 | `delete_supabase_obs` | 删 OBS 桶 | DANGEROUS | KooCLI `hcloud OBS rm`（桶级） |
+| `show_supabase_residuals` | 残留清单（资源记录+实时核对，场景七入口） | READ | 资源记录 + EIP/OBS/VPC/RDS 只读 |
+| `cleanup_supabase_residuals` | 一键清理四类残留（必选布尔开关） | DANGEROUS | 资源记录 + EIP/OBS/VPC 删除 |
 | `start_supabase_application` | 启动已停止的应用 | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | 停止应用，实例继续计费 | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | 重启运行中的应用 | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |

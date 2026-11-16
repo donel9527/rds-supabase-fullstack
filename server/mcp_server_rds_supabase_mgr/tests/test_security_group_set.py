@@ -155,7 +155,7 @@ class ArgumentCrossValidationTests(SecurityGroupSetTestCase):
                 return decorate
 
         server = RecordingServer()
-        with patch.object(tools_operations, 'Operations', lambda: self.ops):
+        with patch.object(tools_operations, 'Operations', lambda **kwargs: self.ops):
             tools_operations.register(server)
         self.assertIn('change_supabase_security_group', server.functions)
         self.client.request.side_effect = [(200, detail())]

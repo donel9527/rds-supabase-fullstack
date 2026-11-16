@@ -1,8 +1,9 @@
 from huaweicloud_mcp_core.security import ToolRisk,guard
 from mcp_server_supabase.service.network import Network
+from mcp_server_supabase.service.ledger import ResourceLedger
 
 def register(server):
-    service=Network()
+    service=Network(ledger=ResourceLedger())
 
     @server.tool()
     @guard(risk=ToolRisk.READ)

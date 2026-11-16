@@ -4,8 +4,8 @@
 
 ## Version
 
-Current version: `0.4.0a61` (development prerelease); Python `3.10+`;
-MCP Python SDK `2.x`; 56 tools.
+Current version: `0.4.0a62` (development prerelease); Python `3.10+`;
+MCP Python SDK `2.x`; 58 tools.
 
 ## Overview
 
@@ -163,6 +163,18 @@ is a step-numbered creation flow plus a post-creation action list, to be
 followed 1:1 during creation.
 
 ### Scenario 2: Full application creation flow
+
+**Passwords and dashboard login**: the password follows the cloud rule (8-32
+characters, at least three classes); the strong recommendation is 12-16
+characters of upper + lower case letters and digits with **no special
+characters** (use only `-`/`_` if a symbol is required), avoiding IME,
+URL/JSON escaping and transcription problems - the preview warns when a
+password carries characters beyond letters/digits/`-`/`_`. The creation path
+never generates or alters the password: the dashboard login user is fixed
+`supabase` and the password is exactly the local request file's
+`create.password`; the accepted response carries a `dashboard_credential`
+note - on login failure verify the file first, and change the password via
+`change_supabase_application_password`.
 
 Both managed-instance sources share one discipline: intents first, parameters
 consolidated through the arrangement, sensitive fields only in the local
@@ -435,6 +447,57 @@ from the managed instance. The billing mode is fixed to on-demand in
    go through the console unsubscription workflow, which this tool does not
    handle.
 
+### Scenario 7: Resource cleanup and retention
+
+Decommissioning when the full Supabase capability is no longer needed: after the
+application deletion (the PG-instance choice stays mandatory - the
+create-with-new-instance scenario recommends deleting the instance together to
+avoid residuals), the associated resources are cleaned up behind explicit
+confirmation. **Full-flow protection mechanism (resource ledger)**: every
+create/reuse/bind/modify step this MCP performs is recorded in a local resource
+ledger (EIP auto-created vs reused, OBS bucket auto-created vs integrated, the
+two dedicated security groups, the application-to-managed-instance mapping, and
+the instance choice at deletion) so cleanup and linked operations are scoped
+precisely - never guessed.
+
+**Entry**: `show_supabase_residuals(application_id)` (READ) - ledger-scoped,
+live-verified residual inventory across the four categories with per-item
+recommendations: EIP (existence, address, auto-created ones recommended for
+deletion, reused ones left to the user), OBS bucket (existence, deletion
+recommendation), the application data directory `obs://<bucket>/<appid>/`
+(object count; **high-risk reminder when the bucket is retained: stored data
+bills continuously - cleanup strongly recommended**), security groups
+(application vs database role; **the database group is undeletable while the
+instance is retained**); plus the managed-instance state and the one-click
+description. A missing ledger record is refused honestly (resources created
+before the mechanism need manual review via the single-item tools).
+
+**One-click cleanup**: `cleanup_supabase_residuals(application_id, cleanup_eip,
+cleanup_obs_bucket, cleanup_obs_workspace, cleanup_security_groups, confirm,
+plan_id)` (DANGEROUS) - the four category switches are mandatory booleans (all
+True cleans everything the inventory listed; declining means per-category
+confirmation through the single-item tools). The preview carries the live
+residual inventory and per-category warnings (including the high-risk
+storage-billing reminder for retained buckets); one confirmation, one plan:
+per-item guard re-checks (live references, non-empty buckets, live application
+directories, the tag gate), blocked items skipped with honest reasons (e.g. the
+database group while the instance is retained), failures never abort the other
+categories; the ledger is updated for every cleaned item. Re-run
+`show_supabase_residuals` afterwards to verify.
+
+**Confirmation discipline**: EIP and OBS buckets are deleted only behind the
+user's explicit confirmation, with auto-created ones recommended for deletion
+(avoiding residuals and continuous billing); a retained bucket must surface the
+storage-occupancy reminder (high risk: continuous billing - strongly
+recommended to clear the application directory); auto-created security groups
+are recommended for deletion, the database group blocked while the instance is
+retained; security-group rebinding keeps the ledger in sync (removed
+auto-created groups become unbound residuals).
+
+**Single-item tools** (partial cleanup): `delete_supabase_eip`,
+`delete_supabase_obs`, `clean_supabase_obs_ws`,
+`delete_supabase_security_group` (scenario 5 supplement).
+
 ## Available tools
 
 Every write tool runs a two-phase confirmation: a preview returns the changes
@@ -469,8 +532,10 @@ pre-provisioned into a local request file and referenced by alias.
 | `delete_supabase_application` | Delete app; instance choice required | DANGEROUS | [DeleteSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteSupabaseApplication) |
 | `delete_supabase_managed_instance` | Remove the managed instance alone | DANGEROUS | [DeleteInstance](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=DeleteInstance) |
 | `delete_supabase_eip` | Delete the EIP, post-deletion cleanup | DANGEROUS | [DeletePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=DeletePublicip) (KooCLI) |
-| `clean_supabase_obs_ws` | Clear one application's OBS data directory | DANGEROUS | KooCLI `hcloud OBS rm` (prefix) |
+| `clean_supabase_obs_ws` | Empty and delete the application-ID folder at the bucket root | DANGEROUS | KooCLI `hcloud OBS rm` (folder-level, emptied then removed) |
 | `delete_supabase_obs` | Delete the OBS bucket | DANGEROUS | KooCLI `hcloud OBS rm` (bucket) |
+| `show_supabase_residuals` | Residual inventory (ledger + live checks, scenario 7 entry) | READ | ledger + EIP/OBS/VPC/RDS reads |
+| `cleanup_supabase_residuals` | One-click cleanup of four residual categories (mandatory booleans) | DANGEROUS | ledger + EIP/OBS/VPC deletions |
 | `start_supabase_application` | Start a stopped application | DANGEROUS | [StartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StartSupabaseApplication) |
 | `stop_supabase_application` | Stop app; instance keeps billing | DANGEROUS | [StopSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=StopSupabaseApplication) |
 | `restart_supabase_application` | Restart a running application | DANGEROUS | [RestartSupabaseApplication](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=RestartSupabaseApplication) |
