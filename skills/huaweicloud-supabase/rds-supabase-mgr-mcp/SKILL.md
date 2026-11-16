@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.5.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a52`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.6.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a55`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -97,7 +97,7 @@ metadata:
 
 1. **四问意图（必须逐个问，不许默认、不许替用户决定）**：① 数据库来源——新建实例（本场景，推荐）还是挂载已有实例（场景二）；② 大文件存储——要传图片/视频/附件则按场景五先定 OBS 方案（**存储创建后不可再启用**，此问必须在创建前问清），不要则 `storage_component` 写 `{"enabled":false}` 且不能整个省略；③ 公网访问——要则创建后走场景四，不要则明确告知仅内网可达；④ HTTPS——要则先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点）/ 购买新证书（`purchase_supabase_ssl_cert`，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有证书，纯 EIP 公网 IP 无域名时证书仅支持文件验证；创建后开 SSL。
 2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、SSL 配置与公网访问（EIP）两个独立模块（公网：按需+全动态 BGP 独享带宽 5-1000M、推荐 300M；SSL：证书获取三路径）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
-3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、兜底 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
+3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；企业项目为可选字段，仅企业项目账号需要——发现时实时查询企业项目列表（仅此场景查询）供选择，默认选中 default 项目，查询不可用或个人账号直接省略该字段；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、兜底 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
 4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
 6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交——请求文件无需手填 `security_group_id`。
@@ -124,7 +124,7 @@ metadata:
 **触发**：用户说“先别创建，先出方案/参数清单/预算基线”，或任何创建动作前的参数固化。`plan_supabase_creation_arrangement` 仅做规划，不创建任何资源。
 
 1. 输入：`manage_type`（newly_instance/existed_instance，不确定则作为决策点呈现两种来源）、`az_code`、`mode`、`instance_id`（已有实例定位）、`detect_access_ip`，以及三态意图参数 `needs_storage`/`needs_public_access`/`needs_ssl`/`needs_email_login`/`needs_github_login`（省略=保持开放决策点，true=规划该分支，false=规划排除）。
-2. 输出内容：托管来源两决策（推荐且默认新建实例；已有实例输出分页 20/页候选并标注 action 锁）→ 三大必选模块实时固化——Supabase 基本信息（来自 `discover_supabase_create_basic_options`，应用规格按规格类型分组展示全部可售）、托管实例（来自 `discover_db_instance_for_create`；应用规格与实例规格分开单独询问，实例规格按 group_type 十大类分组展示、默认推荐与应用同规格，磁盘类型展示中文名与实时兼容规格类型）、网络控制（来自 `discover_network_for_create`）——OBS 关键可选模块（`needs_storage` 明确答复后输出复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（`needs_ssl`/`needs_public_access` 明确答复后输出：SSL 给证书获取三路径——复用/购买推荐/导入自有，公网给 EIP 购买基线）→ 步骤编号 `creation_flow` → 创建后动作（公网开通与 `api_external_url` 同步、SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`、登录配置、接入信息交付）→ `decision_points` 与秘密边界。
+2. 输出内容：托管来源两决策（推荐且默认新建实例；已有实例输出分页 20/页候选并标注 action 锁）→ 三大必选模块实时固化——Supabase 基本信息（来自 `discover_supabase_create_basic_options`，应用规格按规格类型分组展示全部可售）、托管实例（来自 `discover_db_instance_for_create`；应用规格与实例规格分开单独询问，实例规格按 group_type 十大类分组展示、默认推荐与应用同规格，磁盘类型展示中文名与实时兼容规格类型；企业项目仅企业项目账号选择——实时列表默认 default 项目，个人账号基线整体省略该字段）、网络控制（来自 `discover_network_for_create`）——OBS 关键可选模块（`needs_storage` 明确答复后输出复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（`needs_ssl`/`needs_public_access` 明确答复后输出：SSL 给证书获取三路径——复用/购买推荐/导入自有，公网给 EIP 购买基线）→ 步骤编号 `creation_flow` → 创建后动作（公网开通与 `api_external_url` 同步、SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`、登录配置、接入信息交付）→ `decision_points` 与秘密边界。
 3. 决策点未答全时照 `decision_points` 继续追问，不替用户做业务决定。
 4. 发现与编排响应附 visual 图表化输出（表格/流程图），直接展示给用户查阅。
 
@@ -340,6 +340,7 @@ metadata:
 | `charge_info.period_type` | 字符串 `month`（1-9 个月）/`year`（1-3 年）；按需仅携带 `charge_mode` |
 | `basic_config.time_zone` | 整段 `UTC-12:00`~`UTC+12:00`（25 个值，不支持半点与时区名），推荐 `UTC+08:00`（中国北京） |
 | `规格选择` | 应用与实例规格分开单独询问；实例按 group_type 十类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型（ESSD=极速型SSD、CLOUDSSD=SSD云盘、ULTRAHIGH=SSD、LOCALSSD=本地SSD） |
+| `enterprise_project_id` | 可选，仅企业项目账号填写：发现/编排实时返回企业项目列表（默认选中 default 项目）供选择；个人账号省略该字段，省略时归属由服务端决定 |
 | 存储启用 | `needs_storage` 创建时决定，创建后不可再启用；不用存储也须写 `{"enabled":false}`，不能整个省略 |
 | SSL 证书 | 开 SSL 须证书 ID，三路径获取：复用（`list_ssl_certificates`）/购买（`purchase_supabase_ssl_cert` 推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 证书仅文件验证 |
 | 应用名称 | 4-64 字符（中文按 3 字节计），字母或中文开头 |

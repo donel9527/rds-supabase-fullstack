@@ -38,7 +38,7 @@ NEWLY_INSTANCE = {'scenario': 'newly_instance', 'mode': 'Single',
                       'charge_info': {'recommended': {'charge_mode': 'postPaid'}},
                       'availability_zone': {'values': ['cn-east-3a', 'cn-east-3b']},
                       'port': {'recommended': 5432},
-                      'enterprise_project_id': {'recommended': '0'}},
+                      'enterprise_project_id': {'recommended': 'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}},
                   'discovery_status': {'engine_versions': 'ok', 'flavors': 'ok', 'storage_types': 'ok'},
                   'top_level_reminder': ['r1', 'r2', 'r3', 'r4']}
 
@@ -125,6 +125,7 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(m2['baseline']['datastore']['version'], '18')
         self.assertEqual(m2['baseline']['port'], 5432)
         self.assertEqual(m2['baseline']['security_group_id'], '<建组后回填（模块3 apply_steps）>')
+        self.assertEqual(m2['baseline']['enterprise_project_id'], 'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6')
         m3 = result['step_modules']['network_control']
         self.assertEqual(m3['placement']['vpc_id'], 'v1')
         self.assertEqual(m3['security_group_plan']['plan_type'], 'specification')
@@ -153,6 +154,16 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('create_supabase_eip', post_tools)
         self.assertIn('bind_supabase_eip', post_tools)
         self.assertIn('bind_supabase_eip', result['step_modules']['public_access']['bind'])
+
+    async def test_newly_arrangement_without_eps_omits_the_baseline_field(self):
+        no_eps = copy.deepcopy(NEWLY_INSTANCE)
+        no_eps['managed_instance_field_options'].pop('enterprise_project_id', None)
+        result = await self.make(newly=no_eps).arrangement('newly_instance', az_code='cn-east-3a', mode='Single',
+                                                           needs_storage=False, needs_public_access=False,
+                                                           needs_ssl=False, needs_email_login=False, needs_github_login=False)
+        self.assertEqual(result['status'], 'arrangement_baseline')
+        baseline = result['step_modules']['managed_instance']['baseline']
+        self.assertNotIn('enterprise_project_id', baseline)   # personal accounts: field omitted entirely
 
     async def test_default_recommendation_adds_network_creation_step(self):
         service = self.make(network_newly=NETWORK_NEWLY_DEFAULT)

@@ -54,7 +54,7 @@ class ObsService:
                 'redundancy':'多AZ存储（multi-az，默认）' if redundancy=='multi_az' else '单AZ存储（single_az）',
                 'block_public_access':'开启（默认开启，固定不可修改）',
                 'region':self.koocli.region+'（与环境当前项目保持一致，自动推导）',
-                'enterprise_project':'default（默认企业项目，epid=0）',
+                'enterprise_project':'default（默认企业项目）',
                 'storage_component_hint':{'bucket':bucket_name,'ak_sk':'经本地请求文件提供'}}
 
     async def list_buckets(self):

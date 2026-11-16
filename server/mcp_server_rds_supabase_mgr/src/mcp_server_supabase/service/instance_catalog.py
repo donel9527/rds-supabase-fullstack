@@ -16,6 +16,38 @@ STORAGE_TYPE_LABELS={'ULTRAHIGH':('SSD',''),'LOCALSSD':('本地SSD',''),'CLOUDSS
 
 STORAGE_SKIPPED='skipped - engine version unavailable'
 
+EPS_REGION='cn-north-4'   # EPS is a global service with a narrow KooCLI region list
+EPS_NOTE_OK='企业项目账号：从可用的企业项目列表选择归属，默认选中 default 项目；仅新建实例场景需要填写'
+EPS_NOTE_UNAVAILABLE='企业项目列表查询不可用（个人账号、未启用企业项目或全局服务权限缺失）：本字段可省略，省略时归属由服务端决定'
+EPS_NOTE_EMPTY='未查到可用的企业项目：本字段可省略，省略时归属由服务端决定'
+
+
+async def _eps_field(eps_koocli):
+    """Conditional enterprise-project selector for the newly-instance scenario only.
+    EPS-enabled accounts get the live project list (default = the project named
+    "default", whatever its real ID); any query failure degrades to an omittable
+    field - the request then omits it and the backend assigns placement."""
+    data=await eps_koocli.call('EPS','ListEnterpriseProject')
+    rows=None
+    if isinstance(data,dict):
+        for key in ('enterprise_projects','items','data'):
+            if isinstance(data.get(key),list):rows=data[key];break
+    projects=[]
+    for row in rows if isinstance(rows,list) else []:
+        if not isinstance(row,dict):continue
+        pid,name=row.get('id'),row.get('name')
+        if not pid or not name:continue
+        status=row.get('status')
+        if status not in (None,1,'1',True):continue   # 1=启用；停用项目不可写入新资源
+        projects.append({'id':str(pid),'name':str(name),'description':row.get('description') or ''})
+    if not projects:
+        return {'recommended':None,'note':EPS_NOTE_EMPTY}
+    default_id=next((project['id'] for project in projects if project['name'].lower()=='default'),None)
+    return {'values':[project['id'] for project in projects],
+            'projects':projects,
+            'recommended':default_id,
+            'note':EPS_NOTE_OK}
+
 
 def _error_text(error):
     message=getattr(error,'message',None) or str(error) or error.__class__.__name__
@@ -94,8 +126,9 @@ async def _find_manageable(ops,instance_id):
 class InstanceCatalog:
     """Read-only RDS engine-level catalogs; the Supabase origin does not serve them, so they run through KooCLI."""
 
-    def __init__(self,koocli=None,operations=None):
+    def __init__(self,koocli=None,eps_koocli=None,operations=None):
         self.koocli=koocli or KoocliClient()
+        self.eps_koocli=eps_koocli or KoocliClient(region=EPS_REGION)
         self.operations=operations
 
     async def list_engine_versions(self):
@@ -161,15 +194,20 @@ class InstanceCatalog:
         # The remaining sources run concurrently; a single failure degrades only its own section.
         # Network placement and the security-group plan belong to discover_network_for_create
         # (same scenario values as manage_type); this tool no longer touches either.
-        flavors_result,storage_result=await asyncio.gather(
+        flavors_result,storage_result,eps_result=await asyncio.gather(
             self.list_flavors(),
             self.list_storage_types(highest,storage_mode) if highest is not None else _skipped_probe(),
+            _eps_field(self.eps_koocli),
             return_exceptions=True)
         flavor_rows,flavor_error=self._rows_of(flavors_result,'data')
         if storage_result is None:
             storage_rows,storage_error=[],STORAGE_SKIPPED
         else:
             storage_rows,storage_error=self._rows_of(storage_result,'data')
+        if isinstance(eps_result,BaseException):
+            eps_field,eps_error={'recommended':None,'note':EPS_NOTE_UNAVAILABLE},_error_text(eps_result)
+        else:
+            eps_field,eps_error=eps_result,None
         saleable=[]
         saleable_rows=[]
         normal_azs=set()
@@ -219,7 +257,7 @@ class InstanceCatalog:
                                              'RDS for SQL Server 时区对照表（China Standard Time = UTC+08:00，北京/重庆/香港/乌鲁木齐）；'
                                              '默认推荐中国北京（UTC+08:00）'},
             'port':{'recommended':5432,'note':'默认端口，可省略'},
-            'enterprise_project_id':{'recommended':'0','note':'默认项目；多企业项目时让用户确认'},
+            'enterprise_project_id':eps_field,
             'password':{'note':'8-32 位三类字符，用户经本地请求文件提供，工具不生成'},
             'security_group_id':{'values':[],'recommended':None,
                                  'note':'新建专用数据库组，不推荐既有组、不复用共享组；'
@@ -236,7 +274,8 @@ class InstanceCatalog:
                                       '网络与安全组：调 discover_network_for_create（scenario 与 manage_type 一致）选定网络，并按其 security_group_plan 建组配规则'],
                 'discovery_status':{'engine_versions':status(version_error),
                                     'flavors':status(flavor_error),
-                                    'storage_types':status(storage_error)}}
+                                    'storage_types':status(storage_error),
+                                    'enterprise_projects':status(eps_error)}}
 
     async def _existed_instance_options(self,instance_id):
         rows=await _manageable_rows(self._ops())

@@ -25,7 +25,8 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         from mcp_server_supabase.service.instance_catalog import InstanceCatalog
         self.koocli=FakeKoocli()
-        self.catalog=InstanceCatalog(self.koocli)
+        self.eps_koocli=FakeKoocli()
+        self.catalog=InstanceCatalog(self.koocli,self.eps_koocli)
 
     async def test_engine_versions_happy_path(self):
         rows=[{'id':'ds-15','name':'15'},{'id':'ds-17','name':'17'}]
@@ -116,9 +117,17 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         result=await self.catalog.list_flavors()
         self.assertEqual(result['data'],[{'spec_code':'rds.pg.s1.xlarge','nested':{'size':100}}])
 
-    def _push_sources(self,versions=('15','17'),flavors=None,storage=None,vpcs=None,subnets=None,groups=None):
+    def _push_sources(self,versions=('15','17'),flavors=None,storage=None,vpcs=None,subnets=None,groups=None,eps='default'):
         """Push the six probe results in the implementation's call order:
-        Datastores, Flavors, StorageTypes, Vpcs, Subnets, SecurityGroups."""
+        Datastores, Flavors, StorageTypes, Vpcs, Subnets, SecurityGroups.
+        eps: 'default' (default project plus one business project), None (empty
+        list), an Exception (query failure) or a raw response payload."""
+        if eps=='default':
+            eps={'enterprise_projects':[{'id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6','name':'taurus-dev','description':'开发项目','status':1},
+                                        {'id':'a9832d3a-8e3a-4d8f-9c2b-1f2e3d4c5b6a','name':'default','description':'默认企业项目','status':1}]}
+        elif eps is None:
+            eps={'enterprise_projects':[]}
+        self.eps_koocli.push(eps)
         if flavors is None:
             flavors=[{'spec_code':'rds.pg.n1.medium.2','vcpus':'2','ram':4,'group_type':'general','instance_mode':'single',
                       'az_status':{'cn-east-3a':'normal','cn-east-3b':'sellout'}},
@@ -198,14 +207,20 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('整段',tz['note'])
         self.assertIn('中国北京',tz['note'])
         self.assertIn('对照表',tz['note'])
-        self.assertEqual(options['enterprise_project_id'],{'recommended':'0','note':'默认项目；多企业项目时让用户确认'})
+        self.assertEqual(options['enterprise_project_id'],
+                         {'values':['cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6','a9832d3a-8e3a-4d8f-9c2b-1f2e3d4c5b6a'],
+                          'projects':[{'id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6','name':'taurus-dev','description':'开发项目'},
+                                      {'id':'a9832d3a-8e3a-4d8f-9c2b-1f2e3d4c5b6a','name':'default','description':'默认企业项目'}],
+                          'recommended':'a9832d3a-8e3a-4d8f-9c2b-1f2e3d4c5b6a',
+                          'note':'企业项目账号：从可用的企业项目列表选择归属，默认选中 default 项目；仅新建实例场景需要填写'})
+        self.assertEqual(self.eps_koocli.calls,[('EPS','ListEnterpriseProject',None)])
         self.assertEqual(options['password'],{'note':'8-32 位三类字符，用户经本地请求文件提供，工具不生成'})
         self.assertEqual(options['configuration_id'],{'note':'参数模板 ID，可选，默认不传；取值范围为 ListConfigurations 返回的参数模板 id'})
         self.assertEqual(options['security_group_id']['values'],[])
         self.assertIsNone(options['security_group_id']['recommended'])
         self.assertIn('新建专用数据库组',options['security_group_id']['note'])
         self.assertNotIn('network',result)  # network scope moved to discover_available_network_for_create
-        self.assertEqual(set(result['discovery_status']),{'engine_versions','flavors','storage_types'})
+        self.assertEqual(set(result['discovery_status']),{'engine_versions','flavors','storage_types','enterprise_projects'})
         self.assertTrue(all(value=='ok' for value in result['discovery_status'].values()))
         self.assertEqual(result['top_level_reminder'][:3],
                          ['availability_zone 必须与顶层一致（服务端强制校验）',
@@ -213,6 +228,33 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
                           '本工具只服务新建实例场景；托管已有实例用 list_supabase_manageable_instances'])
         self.assertEqual(result['scenario'],'newly_instance')
         self.assertNotIn('security_group_plan',result)
+
+    async def test_eps_query_failure_degrades_to_omittable_field(self):
+        self._push_sources(eps=McpToolError('MCP_CLI_ERROR','EPS.0004 Permission error.'))
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        options=result['managed_instance_field_options']
+        self.assertEqual(options['enterprise_project_id'],
+                         {'recommended':None,
+                          'note':'企业项目列表查询不可用（个人账号、未启用企业项目或全局服务权限缺失）：本字段可省略，省略时归属由服务端决定'})
+        self.assertTrue(result['discovery_status']['enterprise_projects'].startswith('error: '))
+
+    async def test_eps_empty_list_is_omittable(self):
+        self._push_sources(eps=None)
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        options=result['managed_instance_field_options']
+        self.assertEqual(options['enterprise_project_id'],
+                         {'recommended':None,'note':'未查到可用的企业项目：本字段可省略，省略时归属由服务端决定'})
+        self.assertEqual(result['discovery_status']['enterprise_projects'],'ok')
+
+    async def test_eps_filters_disabled_projects_and_recommends_default_by_name(self):
+        self._push_sources(eps={'enterprise_projects':[{'id':'ep-on','name':'live','status':1},
+                                                       {'id':'ep-off','name':'frozen','status':2},
+                                                       {'id':'ep-other','name':'other'}]})
+        result=await self.catalog.discover_db_instance_for_create('newly_instance','Single')
+        field=result['managed_instance_field_options']['enterprise_project_id']
+        self.assertEqual(field['values'],['ep-on','ep-other'])
+        self.assertEqual([project['name'] for project in field['projects']],['live','other'])
+        self.assertIsNone(field['recommended'])   # no project named default in the list
         self.assertIn('discover_network_for_create',result['top_level_reminder'][-1])
 
     async def test_discover_db_instance_for_create_ha_mode_shapes_storage_query(self):
@@ -297,7 +339,7 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         # no probe, no section here - this tool covers instance fields only.
         self.assertNotIn('network',result)
         self.assertNotIn('security_group_plan',result)
-        self.assertEqual(set(result['discovery_status']),{'engine_versions','flavors','storage_types'})
+        self.assertEqual(set(result['discovery_status']),{'engine_versions','flavors','storage_types','enterprise_projects'})
         sg=result['managed_instance_field_options']['security_group_id']
         self.assertEqual(sg['values'],[])
         self.assertIsNone(sg['recommended'])

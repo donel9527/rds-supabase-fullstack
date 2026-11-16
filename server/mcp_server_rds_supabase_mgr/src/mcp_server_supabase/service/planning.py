@@ -201,7 +201,6 @@ class PlanningService:
                                             "ha": {"mode": mode or "Single", "replication_mode": "async"},
                                             "availability_zone": az_code or (az_values[0] if az_values else None),
                                             "port": _rec("port") or 5432,
-                                            "enterprise_project_id": _rec("enterprise_project_id") or "0",
                                             "security_group_id": "<建组后回填（模块3 apply_steps）>"},
                                "flavor_interaction": "实例规格与应用规格分开单独询问：按 group_type 分大类展示全部规格，默认推荐与 Supabase 应用相同的规格（同规格类型且同 vCPU/内存）",
                                "volume_interaction": "磁盘类型明确展示（中文名+官方说明+实时兼容规格类型）供用户选择，默认推荐与所选规格兼容的类型",
@@ -212,6 +211,12 @@ class PlanningService:
                 module_instance["baseline"]["flavor_match"] = flavor_match
             if volume_basis is not None:
                 module_instance["baseline"]["volume"]["type_basis"] = volume_basis
+            # Enterprise-project placement is account-aware: only EPS-enabled accounts
+            # (live list from the discovery step) get a baseline value - the default is
+            # the project named "default" from that list; personal accounts omit it.
+            eps_project = _rec("enterprise_project_id")
+            if eps_project:
+                module_instance["baseline"]["enterprise_project_id"] = eps_project
         elif not instance_id:
             listing = await self._catalog_service().discover_db_instance_for_create("existed_instance")
             rows = listing.get("candidates") or []

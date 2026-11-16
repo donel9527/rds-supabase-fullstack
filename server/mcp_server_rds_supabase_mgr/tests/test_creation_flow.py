@@ -29,7 +29,7 @@ NEW_BODY={'name':'flow-app','basic_config':{'region':'cn-east-3','vpc_id':VPC_ID
                               'flavor_ref':'rds.pg.n1.medium.2','volume':{'type':'ESSD','size':40},
                               'availability_zone':'cn-east-3a',
                               'security_group_id':'99999999-9999-4999-8999-999999999999',
-                              'password':'Fixture-Secret1','enterprise_project_id':'0'},
+                              'password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'},
           'security_group_id':'88888888-8888-4888-8888-888888888888'}
 
 EXIST_BODY={'name':'flow-app','basic_config':{'region':'cn-east-3','vpc_id':VPC_ID,'subnet_id':SUBNET_ID},

@@ -100,7 +100,7 @@ class ObsServiceTests(unittest.IsolatedAsyncioTestCase):
             'redundancy':'多AZ存储（multi-az，默认）',
             'block_public_access':'开启（默认开启，固定不可修改）',
             'region':'cn-east-3（与环境当前项目保持一致，自动推导）',
-            'enterprise_project':'default（默认企业项目，epid=0）',
+            'enterprise_project':'default（默认企业项目）',
             'storage_component_hint':{'bucket':'supabase-x','ak_sk':'经本地请求文件提供'}})
         self.assertEqual(self.service.new_bucket_spec('supabase-x','single_az')['redundancy'],'单AZ存储（single_az）')
 

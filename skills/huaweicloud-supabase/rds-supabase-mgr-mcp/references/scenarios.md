@@ -63,13 +63,13 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 真实可用的创建请求示例（新建实例；选主备或包周期时把 mode/ha/charge_info 换成对应值）：
 
 ```json
-{"name":"rds-supabase-5a55","basic_config":{"region":"cn-east-3","vpc_id":"<VPC ID>","subnet_id":"<子网 ID>","time_zone":"UTC+08:00"},"storage_component":{"enabled":false},"version":"1.0.0","mode":"Single","flavor_ref":"rds.supabase.n1.large.2","availability_zone":"cn-east-3a","password":"<本地生成的密码>","manage_type":"newly_instance","managed_instance":{"datastore":{"type":"PostgreSQL","version":"17.11.260901"},"ha":{"mode":"Single","replication_mode":"async"},"charge_info":{"charge_mode":"postPaid"},"flavor_ref":"rds.pg.n1.medium.2","volume":{"type":"ESSD","size":40},"availability_zone":"cn-east-3a","password":"<本地生成的密码>","port":5432,"enterprise_project_id":"0"},"security_group_id":"<应用安全组 ID，可省略由创建工具自动创建注入>"}
+{"name":"rds-supabase-5a55","basic_config":{"region":"cn-east-3","vpc_id":"<VPC ID>","subnet_id":"<子网 ID>","time_zone":"UTC+08:00"},"storage_component":{"enabled":false},"version":"1.0.0","mode":"Single","flavor_ref":"rds.supabase.n1.large.2","availability_zone":"cn-east-3a","password":"<本地生成的密码>","manage_type":"newly_instance","managed_instance":{"datastore":{"type":"PostgreSQL","version":"17.11.260901"},"ha":{"mode":"Single","replication_mode":"async"},"charge_info":{"charge_mode":"postPaid"},"flavor_ref":"rds.pg.n1.medium.2","volume":{"type":"ESSD","size":40},"availability_zone":"cn-east-3a","password":"<本地生成的密码>","port":5432},"security_group_id":"<应用安全组 ID，可省略由创建工具自动创建注入>"}
 ```
 
 密码规则（应用密码与数据库密码同规则）：8-32 位，至少包含大写字母、小写字母、数字、特殊字符（`~!@#$%^*-_+=?,`）中的三种；本地生成时只从这些字符里取，生成后直接入文件。
 
 - **公共必填**：name（4-64 字符，中文按 3 字节计，字母或中文开头）、basic_config{region, vpc_id, subnet_id, 可选 time_zone}、version（应用版本，取当前最高）、mode（Single/Ha，与用户确认）、flavor_ref（应用规格，形如 `rds.supabase.n1.large.2`）、availability_zone（Single 一个 AZ；Ha 两个不同 AZ，此处为主 AZ）、password（默认用户 supabase 的密码，兼 Dashboard 管理员登录密码）、storage_component、manage_type。
-- **managed_instance 追加**：datastore{type=PostgreSQL, version=引擎版本}、ha{mode 与顶层一致，replication_mode: async/sync}、charge_info（按需 `{"charge_mode":"postPaid"}`；包周期 `{"charge_mode":"prePaid","period_type":"month"/"year","period_num":1-9 或 1-3}`——period_type 是字符串不是数字）、flavor_ref（数据库规格，形如 `rds.pg.n1.medium.2`，与应用规格是两回事）、volume{type: 按 `list_db_instance_storage_types` 实时结果选择, size: 40-40000 GB}、availability_zone（与顶层主 AZ 一致）、password（规则同上，可与应用密码同值）、security_group_id（可省略，创建工具自动建组注入）、port（固定 5432，传或省略均可）、enterprise_project_id（默认 default 项目 "0"；多企业项目时让用户选）、可选 configuration_id（参数模板 ID，取值来源 ListConfigurations，默认不传）。
+- **managed_instance 追加**：datastore{type=PostgreSQL, version=引擎版本}、ha{mode 与顶层一致，replication_mode: async/sync}、charge_info（按需 `{"charge_mode":"postPaid"}`；包周期 `{"charge_mode":"prePaid","period_type":"month"/"year","period_num":1-9 或 1-3}`——period_type 是字符串不是数字）、flavor_ref（数据库规格，形如 `rds.pg.n1.medium.2`，与应用规格是两回事）、volume{type: 按 `list_db_instance_storage_types` 实时结果选择, size: 40-40000 GB}、availability_zone（与顶层主 AZ 一致）、password（规则同上，可与应用密码同值）、security_group_id（可省略，创建工具自动建组注入）、port（固定 5432，传或省略均可）、可选 enterprise_project_id（**仅企业项目账号需要**：取值来自 `discover_db_instance_for_create` 实时返回的企业项目列表，默认选中 default 项目；个人账号省略不填，省略时归属由服务端决定）、可选 configuration_id（参数模板 ID，取值来源 ListConfigurations，默认不传）。
 - 不支持 tags 与未知字段——如实告知，不静默丢弃用户要求。主备/包周期是否可用以所选环境实际为准：后端拒绝时报错附 error_code/error_msg，如实转述。
 
 ### 预览前逐项核对清单
@@ -95,7 +95,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 15 | managed availability_zone | 与顶层主 AZ 一致 | cn-east-3a |
 | 16 | managed password | 规则同应用密码，可同值 | （已配置） |
 | 17 | port | 5432 或省略 | 5432 |
-| 18 | enterprise_project_id | 默认 default 项目 | "0" |
+| 18 | enterprise_project_id | 可选——仅企业项目账号填写；个人账号省略 | （企业项目账号：列表实时选择，默认 default 项目；个人账号：留空） |
 
 ### 提交与等待
 

@@ -45,8 +45,11 @@ def validate_creation(body):
         elif body['manage_type']=='newly_instance':
             if body.get('existing_instance') is not None:raise ValueError('manage_type newly_instance must not carry existing_instance')
             managed=body['managed_instance']
-            required_pg=('datastore','charge_info','flavor_ref','volume','availability_zone','security_group_id','password','enterprise_project_id')
-            fields(managed,required_pg+('ha','configuration_id','port','data_vip','tags'),required_pg)
+            # enterprise_project_id stays optional: EPS-enabled accounts pick a live
+            # project from the discovery list; personal accounts omit the field and
+            # the backend assigns placement.
+            required_pg=('datastore','charge_info','flavor_ref','volume','availability_zone','security_group_id','password')
+            fields(managed,required_pg+('ha','enterprise_project_id','configuration_id','port','data_vip','tags'),required_pg)
             fields(managed['datastore'],('type','version'),('type','version'))
             if managed['datastore']['type']!='PostgreSQL':raise ValueError('managed_instance.datastore.type must be PostgreSQL')
             text(managed['datastore']['version'],64)
@@ -75,7 +78,8 @@ def validate_creation(body):
             if type(managed['volume']['size']) is not int or not 40<=managed['volume']['size']<=40000:raise ValueError('volume.size must be an integer in 40-40000 (GB)')
             if managed['availability_zone']!=az:raise ValueError('managed_instance.availability_zone must equal the top-level availability_zone')
             text(managed['flavor_ref'],128);password_rule(managed['password'],'managed_instance.password')
-            segment(managed['enterprise_project_id']);identifier(managed['security_group_id'])
+            if 'enterprise_project_id' in managed:segment(managed['enterprise_project_id'])
+            identifier(managed['security_group_id'])
             if 'configuration_id' in managed:segment(managed['configuration_id'])
             if 'port' in managed and (type(managed['port']) is not int or not 2100<=managed['port']<=9500):raise ValueError('port must be an integer in 2100-9500 (use 5432 or omit it for the default)')
             if 'data_vip' in managed:ipaddress.IPv4Address(managed['data_vip'])

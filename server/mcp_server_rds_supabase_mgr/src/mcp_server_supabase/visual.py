@@ -169,6 +169,18 @@ def _volume_options_block(volume):
     return block('磁盘类型',table(['值','中文名','说明','兼容规格类型'],rows))
 
 
+def _eps_options_block(option):
+    """Enterprise-project catalog rendered only for EPS-enabled accounts (newly-instance)."""
+    projects=_list(_dict(option).get('projects'))
+    if not projects:return None
+    rows=[]
+    for project in projects:
+        project=_dict(project)
+        rows.append([project.get('id'),project.get('name'),_clip(project.get('description'),50)])
+    return block('可用的企业项目（enterprise_project_id，默认选中 default 项目）',
+                 table(['ID','名称','说明'],rows))
+
+
 def _flavor_match_text(match):
     """The app-to-instance flavor match as one summary line."""
     match=_dict(match)
@@ -282,6 +294,8 @@ def _db_instance_blocks(result):
     if groups_block is not None:blocks.append(groups_block)
     volume_block=_volume_options_block(fields.get('volume.type'))
     if volume_block is not None:blocks.append(volume_block)
+    eps_block=_eps_options_block(fields.get('enterprise_project_id'))
+    if eps_block is not None:blocks.append(eps_block)
     reminder=_list(result.get('top_level_reminder'))
     if reminder:
         blocks.append(block('提醒',[str(item) for item in reminder]))

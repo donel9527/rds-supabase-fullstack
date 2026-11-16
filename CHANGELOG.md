@@ -7,6 +7,18 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a55 - account-aware enterprise-project
+  selection. `discover_db_instance_for_create` (newly-instance scenario only)
+  now queries the live enterprise-project list via KooCLI
+  `EPS ListEnterpriseProject` (pinned to the global-service region cn-north-4):
+  EPS-enabled accounts pick from the returned projects - the default is the
+  project named "default", whatever its real ID - while query failures or empty
+  lists degrade to an omittable field instead of blocking the flow.
+  `managed_instance.enterprise_project_id` is no longer required by the creation
+  contract: personal accounts omit it entirely and the backend assigns
+  enterprise-project placement. The hard-coded "0" default is gone from
+  baselines, fixtures, new-bucket specs and docs; the arrangement baseline
+  carries the field only when the discovery step actually returned one.
 - `mcp_server_rds_supabase_mgr` 0.4.0a54 - `npx skills add` becomes the
   primary skill-installation channel, verified end to end: the Vercel
   open-source skills CLI (npm `skills`, 75+ agents including OpenCode

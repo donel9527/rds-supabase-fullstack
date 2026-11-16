@@ -10,7 +10,7 @@ from mcp_server_supabase.service.plans import PlanStore
 # with a rule-compliant fixture value; every other field verbatim from the
 # captured request: ha object, ESSD volume, explicit port 5432, application
 # version 1.0.0, parameter-template id, both security groups).
-REAL_NEW_PG={'name':'rds-supabase-5a55','basic_config':{'region':'cn-east-3','vpc_id':'fff3b97c-8821-44e5-b16e-788a745292f0','subnet_id':'bba70694-b1aa-47a6-b6d1-cfc9563e0ec2','time_zone':'UTC+08:00'},'storage_component':{'enabled':False},'version':'1.0.0','mode':'Single','flavor_ref':'rds.supabase.n1.large.2','availability_zone':'cn-east-3a','password':'Fixture-Secret1','manage_type':'newly_instance','managed_instance':{'datastore':{'type':'PostgreSQL','version':'17.11.260901'},'ha':{'mode':'Single','replication_mode':'async'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'rds.pg.n1.medium.2','volume':{'type':'ESSD','size':40},'availability_zone':'cn-east-3a','security_group_id':'b558b952-7bba-456c-9137-9d8d161ae58b','password':'Fixture-Secret1','port':5432,'enterprise_project_id':'0','configuration_id':'95611c6a-8ede-47e8-88d6-3f0f1adc5b59'},'security_group_id':'7d4fd664-b212-4a54-a5f5-735eacc6cd54'}
+REAL_NEW_PG={'name':'rds-supabase-5a55','basic_config':{'region':'cn-east-3','vpc_id':'fff3b97c-8821-44e5-b16e-788a745292f0','subnet_id':'bba70694-b1aa-47a6-b6d1-cfc9563e0ec2','time_zone':'UTC+08:00'},'storage_component':{'enabled':False},'version':'1.0.0','mode':'Single','flavor_ref':'rds.supabase.n1.large.2','availability_zone':'cn-east-3a','password':'Fixture-Secret1','manage_type':'newly_instance','managed_instance':{'datastore':{'type':'PostgreSQL','version':'17.11.260901'},'ha':{'mode':'Single','replication_mode':'async'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'rds.pg.n1.medium.2','volume':{'type':'ESSD','size':40},'availability_zone':'cn-east-3a','security_group_id':'b558b952-7bba-456c-9137-9d8d161ae58b','password':'Fixture-Secret1','port':5432,'enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6','configuration_id':'95611c6a-8ede-47e8-88d6-3f0f1adc5b59'},'security_group_id':'7d4fd664-b212-4a54-a5f5-735eacc6cd54'}
 
 
 def message(error):
@@ -105,7 +105,7 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('root',message(ctx.exception))
     async def test_new_pg_validates_branch_and_billing(self):
         del self.body['existing_instance'];self.body['manage_type']='newly_instance'
-        self.body['managed_instance']={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'0'}
+        self.body['managed_instance']={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}
         self.save();preview=await self.ops.create_reference('create');self.assertNotIn('Fixture-Secret1',str(preview))
         self.body['managed_instance']['charge_info']={'charge_mode':'prePaid'}
         self.save()
@@ -114,6 +114,14 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         self.body['managed_instance']['charge_info']={'charge_mode':'prePaid','period_type':'month','period_num':6}
         self.save()
         await self.ops.create_reference('create')
+    async def test_new_pg_without_enterprise_project_is_accepted(self):
+        del self.body['existing_instance'];self.body['manage_type']='newly_instance'
+        # Personal accounts omit managed_instance.enterprise_project_id entirely -
+        # the backend assigns enterprise-project placement for the created instance.
+        self.body['managed_instance']={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1'}
+        self.save();preview=await self.ops.create_reference('create')
+        self.assertNotIn('Fixture-Secret1',str(preview))
+        self.assertEqual(preview['status'],'confirmation_required')
     async def test_prepaid_order_flow_and_unexpected_shapes(self):
         self.file.write_text(json.dumps({'create':REAL_NEW_PG}))
         preview=await self.ops.create_reference('create')
@@ -130,7 +138,7 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.ops.plans.inspect(order_preview['plan_id'])['state'],'accepted')
     async def test_volume_type_follows_environment_selection(self):
         del self.body['existing_instance'];self.body['manage_type']='newly_instance'
-        base={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'0'}
+        base={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}
         for vol in ({'type':'ESSD','size':80},{'type':'GPSSD','size':40}):
             body=copy.deepcopy(self.body);body['managed_instance']=copy.deepcopy(base);body['managed_instance']['volume']=vol;self.file.write_text(json.dumps({'create':body}))
             await self.ops.create_reference('create')
