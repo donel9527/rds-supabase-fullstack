@@ -110,13 +110,13 @@ class ObsServiceTests(unittest.IsolatedAsyncioTestCase):
         self.koocli.push('Public status of bucket "beta-bucket": not public')
         self.koocli.push(McpToolError('MCP_CLI_ERROR','status probe failed'))
         result=await self.service.list_buckets()
-        self.assertEqual([b['name'] for b in result['data']],['alpha-bucket','beta-bucket','gamma-bucket'])
+        self.assertEqual([b['name'] for b in result['data']],['beta-bucket','gamma-bucket','alpha-bucket'])   # 私有桶优先排序，Public 殿后
         self.assertEqual(result['data'][0]['location'],'cn-east-3')
-        self.assertEqual(result['data'][2]['location'],'cn-north-4')
-        self.assertEqual([b['public_status'] for b in result['data']],['Public','Private','未知'])
-        self.assertIsNotNone(result['data'][0]['risk_note'])
+        self.assertEqual(result['data'][1]['location'],'cn-north-4')
+        self.assertEqual([b['public_status'] for b in result['data']],['Private','未知','Public'])
+        self.assertIsNone(result['data'][0]['risk_note'])
         self.assertIsNone(result['data'][1]['risk_note'])
-        self.assertIsNone(result['data'][2]['risk_note'])
+        self.assertIsNotNone(result['data'][2]['risk_note'])
         self.assertTrue(result['read_test']['passed'])
         self.assertEqual(result['note'],PROBE_NOTE)
         self.assertEqual([c[0] for c in self.koocli.calls],
@@ -161,13 +161,13 @@ class ObsServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['credential']['detail'],'环境凭证为长期 AK/SK，可直接复用')
         self.assertEqual(result['reuse']['option'],'复用已有桶')
         self.assertEqual(result['reuse']['note'],'私有桶优先；公共桶提示风险尽量不用；无可复用桶则转新建')
-        self.assertEqual([b['name'] for b in result['reuse']['buckets']],['alpha-bucket','beta-bucket','gamma-bucket'])
+        self.assertEqual([b['name'] for b in result['reuse']['buckets']],['beta-bucket','gamma-bucket','alpha-bucket'])
         self.assertTrue(result['reuse']['read_test']['passed'])
         self.assertEqual(result['new_bucket']['option'],'新建桶（推荐、默认）')
         self.assertEqual(result['new_bucket']['note'],'全新私有桶，完全隔离，安全可靠')
         self.assertEqual(result['new_bucket']['spec']['bucket_name'],'supabase-my-app')
         self.assertIn('create_supabase_with_new_instance',result['storage_component_note'])
-        self.assertIn('不可再启用',result['storage_component_note'])
+        self.assertIn('补开对接',result['storage_component_note'])
 
     async def test_discover_storage_defaults_and_tolerates_failure(self):
         self.koocli.push(McpToolError('MCP_CLI_ERROR','ls denied'))
@@ -184,7 +184,7 @@ class ObsServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['spec']['bucket_name'],'supabase-my-app')
         self.assertEqual(result['spec']['redundancy'],'多AZ存储（multi-az，默认）')
         self.assertEqual(result['warnings'],['新桶立即产生少量存储计费',
-                                             '桶创建后仅在创建请求携带 storage_component 时完成挂载（创建后不可再启用）'])
+                                             '推荐在创建请求携带 storage_component 时一次挂载成型；未启用的应用事后可经 update_supabase_storage 补开对接（桶名+AK/SK 全量凭据）'])
         self.assertTrue(result['plan_id'])
         self.assertEqual(self.koocli.calls,[])
 

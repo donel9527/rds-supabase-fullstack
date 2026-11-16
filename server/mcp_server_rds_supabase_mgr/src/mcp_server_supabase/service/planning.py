@@ -125,7 +125,7 @@ class PlanningService:
                                           "availability_zone": az_code,
                                           "storage_component": ({"enabled": True, "note": "桶名与持久 AK/SK 经本地请求文件"} if needs_storage is True
                                                                 else ({"enabled": False} if needs_storage is False
-                                                                      else "决策点：创建后不可再启用，创建前必须确认")),
+                                                                      else "决策点：强烈建议创建时当场确认——业务确认需要文件存储就当场启用，避免遗漏与流程拉长；事后可经场景五补开对接")),
                                           "password": "经本地请求文件提供（8-32 位三类字符，dashboard 登录用户 supabase）"},
                              "flavor_interaction": "应用规格单独询问：展示全部可售规格（按规格类型分组、含 vCPU/内存），供用户选择或自定义输入；推荐通用型 2U4G",
                              "probe_status": result.get("probe_status")}
@@ -345,7 +345,7 @@ class PlanningService:
                   note="临时凭证（SecurityToken）时须先取得长期 AK/SK 再对接")
         if manage_type == "newly_instance":
             _step("request_file", "本地请求文件",
-                  action="按基线组装创建请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline）+ storage_component%s；安全组与桶无需手填——创建工具自动创建并回填" % ("（bucket=复用桶名或目标桶名，AK/SK 经文件）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：创建后不可再启用）"),
+                  action="按基线组装创建请求体：name/version/mode/flavor_ref/availability_zone（顶层与实例一致）+ basic_config{vpc_id,subnet_id} + managed_instance（模块2 baseline）+ storage_component%s；安全组与桶无需手填——创建工具自动创建并回填" % ("（bucket=复用桶名或目标桶名，AK/SK 经文件）" if needs_storage is True else "（enabled:false）" if needs_storage is False else "（决策点：强烈建议创建时当场确认；事后可经场景五补开对接）"),
                   note="敏感字段（应用密码/数据库密码/存储 AK/SK）只进文件，不进对话")
         else:
             _step("request_file", "本地请求文件",
@@ -405,7 +405,7 @@ class PlanningService:
 
         decision_points = []
         if az_code is None: decision_points.append("az_code：可售 AZ 待选（list_supabase_flavors_with_azs）")
-        if needs_storage is None: decision_points.append("needs_storage：是否存在大文件存储场景（图片/视频/大文件）——创建后不可再启用，创建前必须确认")
+        if needs_storage is None: decision_points.append("needs_storage：是否存在大文件存储场景（图片/视频/大文件）——强烈建议创建时当场确认（业务需要就当场启用，避免遗漏与流程拉长；事后可经场景五补开对接）")
         if needs_public_access is None: decision_points.append("needs_public_access：公网访问（建议启用）")
         if needs_ssl is None: decision_points.append("needs_ssl：https（证书可经 MCP 购买或复用已有）")
 

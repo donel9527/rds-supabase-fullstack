@@ -34,7 +34,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 问题 | 答案的后果 |
 |---|---|
 | 数据库来源？新建还是用已有 PG？ | 新建实例（newly_instance，本场景，推荐）/ 挂载已有实例（existed_instance，见场景二） |
-| 要传文件吗？（图片、视频、附件都算） | 要 → **创建前**按场景五定 OBS 方案（复用或新建也问用户）；桶名+AK/SK 进 `storage_component`——**存储创建后不可再启用**。不要 → `storage_component` 写 `{"enabled":false}`（三字段全空），不能整个省略 |
+| 要传文件吗？（图片、视频、附件都算） | 要 → **创建前**按场景五定 OBS 方案（复用或新建也问用户）；桶名+AK/SK 进 `storage_component`——**强烈建议创建时当场启用**（事后可经场景五补开对接，但避免遗漏与流程拉长）。不要 → `storage_component` 写 `{"enabled":false}`（三字段全空），不能整个省略 |
 | 要从公网访问吗？ | 要 → 创建后走场景四（EIP+安全组+`api_external_url` 同步）；不要 → 明确告知用户只能内网访问 |
 | 要 HTTPS 吗？ | 要 → 先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点，`cert_id` 直接用于 `change_supabase_ssl`）/ 购买新证书（`purchase_supabase_ssl_cert` 两段式，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有 SCM 证书；纯 EIP 公网 IP 无域名时证书仅支持文件验证。创建后切 SSL；不要 → 走 http |
 
@@ -161,7 +161,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 3. 创建对接 | 创建工具自动处理 | storage_component{enabled, bucket_name, ak, sk} | 创建工具确保桶存在（已有复用、缺失新建）并回填最终桶名；凭据必须持久 AK/SK |
 | 4. 变更轮换 | `update_supabase_storage` | 请求文件别名 | 首次或换 AK 给全（桶名+AK+SK）；AK 未变换桶名可只带原 AK 省 SK；禁用三字段全空 |
 
-临时凭证检测：环境使用 SecurityToken 临时凭证时，发现工具明确提示不可作 `storage_component` 凭据，引导经本地请求文件提供持久 AK/SK——避免凭证过期后应用无法访问 OBS。存储启用在创建时决定，创建时未启用的事后无法补开——这是意图四问必须在创建前问清存储的原因。
+临时凭证检测：环境使用 SecurityToken 临时凭证时，发现工具明确提示不可作 `storage_component` 凭据，引导经本地请求文件提供持久 AK/SK——避免凭证过期后应用无法访问 OBS。存储对接强烈建议创建时一次成型（业务确认需要就当场启用）——这是意图四问在创建前问清存储的原因；未启用的应用事后可经场景五 `update_supabase_storage` 补开对接（首次须全量凭据：桶名+AK/SK）。
 
 ## 场景六：认证、登录与增强
 

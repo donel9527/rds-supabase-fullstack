@@ -106,8 +106,10 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
   出方向、数据库组 5432 入方向，网段均为所选子网 CIDR，来自
   `discover_network_for_create`。
 - **OBS 桶存储对接（关键可选）**：是否大文件存储场景（图片/视频/大文件）须经用户
-  明确答复——创建后不可再启用；确认启用时输出复用/新建两选择、新桶完整规格与
-  临时凭证提示，随创建请求一次提交。
+  明确答复——强烈建议创建时当场启用（避免遗漏与流程拉长；未启用的应用事后可经
+  `update_supabase_storage` 补开对接，首次须全量凭据 桶名+AK/SK）；确认启用时输出
+  复用/新建两选择（现有桶列表**私有桶优先**）、新桶完整规格与临时凭证提示，随创建
+  请求一次提交。
 
 编排同时输出两个意图独立模块：**公网访问（EIP）** 给出购买基线（按需购买、全动态 BGP
 独享带宽 5-1000M、推荐 300M）与绑定、`api_external_url` 同步步骤；**SSL 配置** 给出
@@ -124,8 +126,8 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 
 #### 新建实例场景（推荐，`create_supabase_with_new_instance`）
 
-1. 意图确认：托管来源取新建实例；是否大文件存储（创建后不可再启用）、是否
-   公网访问、是否 HTTPS。
+1. 意图确认：托管来源取新建实例；是否大文件存储（强烈建议创建时当场定，事后可经
+   `update_supabase_storage` 补开对接）、是否公网访问、是否 HTTPS。
 2. 编排基线（场景一）固化必选模块参数与 OBS 对接方案（若启用存储）；`az_code` 触发实时发现，无 VPC 时采纳
    默认推荐并按 `default_create` 建网。
 3. 组装本地请求文件：全部参数与敏感字段（应用密码、数据库密码、存储 AK/SK）

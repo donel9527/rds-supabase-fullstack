@@ -130,18 +130,18 @@
 
    规则：宿主仅有用户级机制 → **停止并报告，不注册**（宁缺毋溢出）；配置含凭据 → 该文件列入 `.gitignore`、0600，凭据由用户从 secrets/ 复制填入（agent 不经手明文）；**严禁 `uv tool install`/`pip install` 装入用户级/系统级环境**——`uvx` 为一次性缓存运行（共享构建缓存非安装非注册，不落命令行入口），本地克隆 `.venv` 只落仓内目录；**注册后核验落位**：确认条目存在于项目级配置且未触碰任何用户级/系统级位置 → 客户端重载 → 连接验证 → 写 webapp.json `mcp` 段（`registration_scope`/`config_paths.mgr`，契约见 project-state.md）
 3. **实例接入方式——交互式勾选（强制，禁止跳过）**：以选择清单形式向用户呈现「使用已有 Supabase 应用 / 新建 Supabase 应用」，**未获用户显式选择不得推进，不得代为默认**（步骤二费用预估在先，本步骤执行用户已确认的方案）：
-   - **使用已有**：`list_supabase_applications` → 列表展示（application_id/名称/状态/规格）供用户勾选 → `show_supabase_application` 核验（normal/running、无进行中任务、网关可达）→ **随即执行第 4 项（凭据获取）**：网关 URL 与两类密钥为步骤四数据面 MCP 动态安装的必需输入，不得遗漏
+   - **使用已有**：`list_supabase_applications` → 列表展示（application_id/名称/状态/规格）供用户勾选 → `show_supabase_application` 核验（normal/running、无进行中任务、网关可达）→ **步骤二能力清单含 `storage` 的，核验时必须同时读取该应用的存储对接状态**（详情中的存储组件字段）——**未对接 OBS → 立即触发第 6 项自动对接流程**（识别即接入：本步骤内完成，不留待事后）→ **随即执行第 4 项（凭据获取）**：网关 URL 与两类密钥为步骤四数据面 MCP 动态安装的必需输入，不得遗漏
    - **新建**：**创建的编排、资源准备（网络/安全组/OBS 桶）、流程与约束全部遵循 `rds-supabase-mgr-mcp` 技能，本文件不复述**——场景三编排基线（`plan_supabase_creation_arrangement`，四项意图逐项问明，本工作流默认 Single）→ 场景一 `create_supabase_with_new_instance`（推荐）或场景二 `create_supabase_link_exist_instance`（安全组与 OBS 桶自动准备回填、一次提交）→ `show_supabase_creation_progress` 跟踪 → `show_supabase_application` 核验；公网走其场景四，SSL 见其日常变更章；创建完成后**同样必须执行第 4 项**（凭据获取）
 4. **凭据获取（两条路径都必经——缺失任一项则步骤四无法安装，流水线中断）**：网关 URL + Anon Key + Service Role Key（**两类密钥均须获取**），经管理面 ApiKey 交付工具 deliver 到受保护本地文件——**项目内路径**：`SUPABASE_REQUESTS_FILE=<项目>/.hwsupabase/requests.json` 注册，交付落盘 `.hwsupabase/secrets/`（0600、排除 Git，不写入全局变量与个人级配置）；webapp.json 只记 env 名 + `instance.source`（`created`/`selected`）
 5. **OBS 桶接入方式——交互式勾选（强制，禁止跳过）**：以选择清单形式向用户呈现「使用已有 OBS 桶 / 新建 OBS 桶」，**未获用户显式选择不得推进，不得代为默认**（frontend 技能引导，凭据与 Region 均为步骤一所核对）：
    - **使用已有**：列出租户桶 → **候选过滤：仅保留满足静态托管要求的公开读桶**——匿名 GetObject 未获授权的非公开桶一律剔除，**不得出现在候选列表中**；候选展示（桶名/区域/存储类别）供用户勾选 → 核验选中桶区域与项目 Region 一致、具备静态网站托管能力
    - **新建**：**桶名默认与应用名称保持一致**——应用名称英文化：转小写，非 ASCII 与非法字符映射为连字符、连续连字符压缩为单个、去除首尾连字符、长度裁剪至 3–63；**名称冲突（同名桶已存在）→ 追加短 uuid 后缀**（连字符连接，形如 `my-webapp-3f2a1b9c`；再次冲突则重新生成后缀并复核唯一性）；最终桶名经用户确认后由 frontend 技能创建——**创建前展示桶配置卡**（存储类别**多 AZ 优先**，区域不支持时降级单 AZ 并说明；**阻止公网访问必须关闭**——该开关开启则匿名读被拒、静态托管不可用；**桶策略固定公共读**：仅匿名 GetObject，不可改为其他），经用户确认后创建，**创建后回读核验三项实际生效**
    - 域名条件核对；**证书仅当实例 SSL 开启（前端 HTTPS 入口）时必需**——SSL 未开启则前端以 HTTP 发布、无需证书；不齐备项于步骤八前补齐
-6. **Storage 存储对接（仅当步骤二能力清单含 `storage`——无后端文件存储诉求则本项整体跳过，不创建任何后端桶；**步骤三不无条件创建后端 OBS 桶**，创建仅发生在「存储诉求存在 且 所选实例尚未对接」时）**：
+6. **Storage 存储对接（仅当步骤二能力清单含 `storage`——无后端文件存储诉求则本项整体跳过，不创建任何后端桶；**步骤三不无条件创建后端 OBS 桶**，创建仅发生在「存储诉求存在 且 所选实例尚未对接」时）**：**识别即接入（强制纪律）——存储诉求一经确认，对接在本步骤内必须当场完成，禁止挂起待办、禁止推迟到上线后（"可后补"是兜底能力，不是拖延理由）**：
    - **对接状态先行判定（承接第 3 项应用接入方式的勾选结果，不另行选择、不改变该二选一流程）**：
-     - 勾选「使用已有 Supabase 应用」→ 先经管理面确认该应用的 Storage 对接状态（应用详情/查询工具；无直接查询途径时向用户呈现并经确认）：**已对接 OBS → 复用既有对接**（记录既有桶信息，**不新建桶、不重复对接**，`storage.source=existing`）；**未对接 → 不可事后补开**（存储仅可在创建时启用——约束见 `rds-supabase-mgr-mcp` 技能场景五），如实告知并引导用户决策：改走「新建应用」并在创建意图中确认存储，或放弃本能力
+     - 勾选「使用已有 Supabase 应用」→ 接续第 3 项的存储对接状态探测结果（`show_supabase_application` 详情；无直接查询途径时向用户呈现并经确认）：**已对接 OBS → 复用既有对接**（记录既有桶信息，**不新建桶、不重复对接**，`storage.source=existing`）；**未对接 → 立即触发对接**：按 `rds-supabase-mgr-mcp` 技能场景五——现有桶列表**私有桶优先**/新建桶两选择经用户勾选，`update_supabase_storage` 首次须全量凭据（桶名+AK/SK 经本地请求文件）两段式提交 → 跟踪 → 回查；同时告知新建应用时在创建意图中一次成型为推荐路径（避免事后流程拉长）
      - 勾选「新建实例」→ 实例创建完成后进入下方桶准备流程
-   - **桶准备流程（仅当可在创建时启用存储时；获取方式、私有桶规格与工具全部遵循 `rds-supabase-mgr-mcp` 技能场景五——`discover_supabase_storage` / `create_supabase_new_obs`，新建应用时由创建工具自动确保桶并回填；已有应用未对接则不可事后补开，如实告知并引导用户决策）：**
+   - **桶准备流程（获取方式、私有桶规格与工具全部遵循 `rds-supabase-mgr-mcp` 技能场景五——`discover_supabase_storage` / `create_supabase_new_obs`，新建应用时由创建工具自动确保桶并回填；已有应用未对接则当场经场景五补开：两选择经用户勾选 + `update_supabase_storage` 全量凭据两段式提交）：**
      - 桶策略与私有规格的评估、选择与创建细节**一律以 `rds-supabase-mgr-mcp` 技能场景五为准**（`discover_supabase_storage` 私有优先、公共桶标注风险；`create_supabase_new_obs` 固定私有规格），本文件不复述
      - **本工作流唯一专项约束：禁止复用前端托管桶**（`obs.bucket_name`——公开读桶复用即权限越界与隐私暴露）
    - 凭据轮换与对接核验经管理面 `update_supabase_storage`（凭据经 request_ref、两阶段确认——纪律见 `rds-supabase-mgr-mcp` 技能关键约束章）

@@ -7,6 +7,25 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a56 - storage integration after
+  creation is supported, not forbidden - and it is proactive. The
+  "cannot be enabled after creation" claim is corrected everywhere it
+  appeared (arrangement decision points, storage-option notes,
+  new-bucket warnings, README/README_en, both skill guides and the
+  web-build workflow stages), and the new discipline is
+  integrate-on-identification: the moment a file-storage need is
+  recognized, the integration flow runs immediately (existing-bucket
+  list with private buckets first, or a new bucket, then
+  `update_supabase_storage` with full credentials) - "can integrate
+  later" is a fallback, never a reason to defer. In rds-supabase-web-build,
+  when an existing Supabase application is selected and the requirement
+  phase flagged storage, the agent must proactively probe that
+  application's storage integration state (the storage component in
+  `show_supabase_application`) and trigger the automatic OBS integration
+  flow on the spot when it is absent. The guidance stays a strong
+  recommendation to enable storage at creation time when the business
+  scenario confirms it, to avoid omissions and longer flows. Skill
+  `rds-supabase-mgr-mcp` 2.6.1, `rds-supabase-web-build` 0.12.1.
 - Skill install guides: the ZIP channel now lands the download directly
   in the workspace project root and never asks the user for a download
   directory - real-world testing showed agents prompting for one, so

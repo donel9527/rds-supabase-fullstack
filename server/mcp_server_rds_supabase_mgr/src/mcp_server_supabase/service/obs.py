@@ -85,7 +85,11 @@ class ObsService:
             status=await self._public_status(bucket['name'],bucket['location']) if index<10 else '未知'
             data.append({'name':bucket['name'],'location':bucket['location'],'public_status':status,
                          'risk_note':'Public 桶有匿名公开风险，尽量不用' if status=='Public' else None})
-        return {'data':data,'read_test':{'passed':True,'detail':'ls 成功，读取到 '+str(len(buckets))+' 个桶'},
+        # Private buckets first (security): reuse candidates surface private storage
+        # before anything anonymously readable; original order kept within groups.
+        order={bucket['name']:index for index,bucket in enumerate(buckets)}
+        data.sort(key=lambda row:(row['public_status']=='Public',order.get(row['name'],0)))
+        return {'data':data,'read_test':{'passed':True,'detail':'ls 成功，读取到 '+str(len(buckets))+' 个桶（私有桶优先排序）'},
                 'note':PROBE_NOTE}
 
     async def _public_status(self,name,location=None):
@@ -114,8 +118,9 @@ class ObsService:
                               'note':'全新私有桶，完全隔离，安全可靠',
                               'spec':self.new_bucket_spec(name,'multi_az')},
                 'storage_component_note':('storage_component={enabled:true, bucket:<桶名>, AK/SK 经本地请求文件} '
-                                          '随 create_supabase_with_new_instance / create_supabase_link_exist_instance 一次提交（启用存储时创建工具自动确保桶存在并回填最终桶名），创建后不可再启用；'
-                                          '后续凭据轮换用 update_supabase_storage')}
+                                          '随 create_supabase_with_new_instance / create_supabase_link_exist_instance 一次提交（启用存储时创建工具自动确保桶存在并回填最终桶名）。'
+                                          '强烈建议业务确认需要文件存储就在创建时当场启用，避免遗漏与流程拉长；'
+                                          '创建时未启用的，事后可经 update_supabase_storage 补开对接（首次须全量凭据：桶名+AK+SK），凭据轮换同经该工具')}
 
     async def ensure_bucket_now(self,bucket_name,redundancy='multi_az'):
         """Idempotent provisioning for the orchestrated creation flow: keep a bucket that
@@ -167,7 +172,7 @@ class ObsService:
         if not confirm:
             return {'status':'confirmation_required','execution':'not_executed','spec':spec,
                     'warnings':['新桶立即产生少量存储计费',
-                                '桶创建后仅在创建请求携带 storage_component 时完成挂载（创建后不可再启用）'],
+                                '推荐在创建请求携带 storage_component 时一次挂载成型；未启用的应用事后可经 update_supabase_storage 补开对接（桶名+AK/SK 全量凭据）'],
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')

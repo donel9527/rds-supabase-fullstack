@@ -143,9 +143,13 @@ one key optional module:
   `discover_network_for_create`.
 - **OBS bucket storage integration (key optional)**: whether large-file
   storage applies (images, videos, large files) must be answered explicitly —
-  it cannot be enabled after creation; once confirmed, the module carries the
-  reuse/new choice, the complete new-bucket specification, and the temporary-
-  credential notice, submitted once with the creation request.
+  enabling it at creation time is strongly recommended (avoids omissions and
+  longer flows; apps created without it can integrate storage afterwards via
+  `update_supabase_storage`, which requires the full credentials - bucket
+  name plus AK/SK - on first integration). Once confirmed, the module carries
+  the reuse/new choice (existing-bucket list with **private buckets first**),
+  the complete new-bucket specification, and the temporary-credential notice,
+  submitted once with the creation request.
 
 The arrangement also emits two independent intent modules: **public access (EIP)**
 carries the purchase baseline (pay-per-use, dedicated full-dynamic BGP bandwidth
@@ -170,8 +174,9 @@ identifier into the request before one successful submission.
 #### New-instance scenario (recommended, `create_supabase_with_new_instance`)
 
 1. Confirm the intents: managed-instance source is a new instance; large-file
-   storage or not (cannot be enabled after creation), public access or not,
-   HTTPS or not.
+   storage or not (decide at creation time whenever possible; storage can be
+   integrated afterwards via `update_supabase_storage`), public access or
+   not, HTTPS or not.
 2. Produce the arrangement baseline (Scenario 1); `az_code` triggers live
    discovery, and with no VPC the default recommendation applies with the
    network created per `default_create`.
