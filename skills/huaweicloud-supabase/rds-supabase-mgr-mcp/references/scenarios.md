@@ -29,13 +29,13 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 场景一：从零创建（新建实例）
 
-### 意图四问（进入配置前必须问完，不许默认、不许替用户决定）
+### 意图四问（进入配置前必须问完，不得默认、不得替用户决定）
 
 | 问题 | 答案的后果 |
 |---|---|
 | 数据库来源？新建还是用已有 PG？ | 新建实例（newly_instance，本场景，推荐）/ 挂载已有实例（existed_instance，见场景二） |
 | 要传文件吗？（图片、视频、附件都算） | 要 → **创建前**按场景五定 OBS 方案（复用或新建也问用户）；桶名+AK/SK 进 `storage_component`——**强烈建议创建时当场启用**（事后可经场景五补开对接，但避免遗漏与流程拉长）。不要 → `storage_component` 写 `{"enabled":false}`（三字段全空），不能整个省略 |
-| 要从公网访问吗？ | 要 → 创建后走场景四（EIP+安全组+`api_external_url` 同步）；不要 → 明确告知用户只能内网访问 |
+| 要从公网访问吗？ | 要 → 创建后按场景四处理（EIP+安全组+`api_external_url` 同步）；不要 → 明确告知用户只能内网访问 |
 | 要 HTTPS 吗？ | 要 → 先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点，`cert_id` 直接用于 `change_supabase_ssl`）/ 购买新证书（`purchase_supabase_ssl_cert` 两段式，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有 SCM 证书；纯 EIP 公网 IP 无域名时证书仅支持文件验证。创建后切 SSL；不要 → 走 http |
 
 答全后喂给 `plan_supabase_creation_arrangement(manage_type, az_code, ...)`。部署模式是否支持 Ha 不猜：`list_supabase_flavors_with_azs(az_code, mode="Ha")` 成功 → Single/Ha 都可选；被拒 → 该环境仅 Single，如实告知。
@@ -106,10 +106,10 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 失败 | 工具行为 | 处置 |
 |---|---|---|
 | 请求文件不安全/别名缺失 | MCP_INVALID_ARGS（区分"别名不存在"与"注册表不可用"） | 补别名或修权限（0600）/路径；禁止用 Shell 代填秘密 |
-| 结构校验不过 | MCP_INVALID_ARGS（点名具体字段） | 按点名字段修正；不删用户要求后静默重试 |
+| 结构校验不过 | MCP_INVALID_ARGS（指明具体字段） | 按指明字段修正；不删用户要求后静默重试 |
 | 预览超 10 分钟/参数变 | MCP_GUARDRAIL_BLOCKED | 重新预览确认 |
 | 同意图有未完成执行 | MCP_GUARDRAIL_BLOCKED | 查记录核对，不新建计划绕过 |
-| 响应含 order_id（防御性：固定按需后正常不出现；如出现按订单闭环处理） | status=order_created，计划记 accepted | 走场景九订单闭环：核对→授权→支付→按正常节奏查任务；放弃则取消 |
+| 响应含 order_id（防御性：固定按需后正常不出现；如出现按订单流程处理） | status=order_created，计划记 accepted | 按场景九订单流程处理：核对→授权→支付→按正常节奏查任务；放弃则取消 |
 | 提交中断 | submission_unknown + plan_id | `show_operation_job_status` 查任务、回查资源；禁止重放 |
 | 后端明确拒绝（4xx） | MCP_INVALID_ARGS 等，报错附后端 error_code/error_msg；计划标 failed | 如实转述；修正参数后重新预览再提交（failed 不阻塞重试，与结果不明不同） |
 | 写开关未开/只读拦截 | MCP_READ_ONLY | 操作员同时核对两个变量并重启 |
@@ -144,7 +144,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
-| 1. 采购 | `create_supabase_eip` | prefer_idle=true、billing_method=<bandwidth/traffic 用户按场景选>、bandwidth_size_mbps=<用户决策：bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按需新建（**计费方式与大小先问用户并展示收费标准再执行**——bandwidth 带宽费=峰值×时长不限流量[官方示例 6Mbps≈0.565 元/小时]、traffic 流量费按出云 GB[官方示例 0.64 元/GB，单 EIP 峰值上限 300Mbps]，另含 IP 保有费[未绑定时官方示例 0.02 元/小时]；全动态 BGP+独享+自动打标 USAGE_FOR） |
+| 1. 采购 | `create_supabase_eip` | prefer_idle=true、billing_method=<bandwidth/traffic 用户按场景选>、bandwidth_size_mbps=<用户决策：bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按需新建（**计费方式与大小先问用户并展示收费标准再执行**——bandwidth 带宽费=峰值×时长不限流量[官方示例 6Mbps≈0.565 元/小时]、traffic 流量费按出云 GB[官方示例 0.64 元/GB，单 EIP 峰值上限 300Mbps]，另含 IP 保有费[未绑定时官方示例 0.02 元/小时]；全动态 BGP+独享+自动添加 USAGE_FOR 标签） |
 | 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
 | 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
 | 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |
@@ -188,13 +188,13 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 场景八：日常变更
 
-见 SKILL.md 速查表。变更后统一节奏：`show_operation_job_status` 查询任务至终态 → 回查资源 → 涉登录/存储的业务验证；所有返回 job_id 的操作类工具受理后必须跟踪至终态（应用创建除外，走专用 `show_supabase_creation_progress`）。Key 重置后新值是新记录，不用旧 key_id 取值，走场景七重新交付。
+见 SKILL.md 速查表。变更后统一节奏：`show_operation_job_status` 查询任务至终态 → 回查资源 → 涉登录/存储的业务验证；所有返回 job_id 的操作类工具受理后必须跟踪至终态（应用创建除外，使用专用 `show_supabase_creation_progress`）。Key 重置后新值是新记录，不用旧 key_id 取值，按场景七重新交付。
 
 ### 应用启停与重启
 
 | 操作 | 工具 | 校验点 |
 |---|---|---|
-| 启动应用 | `start_supabase_application` | 操作前 `show_supabase_application` 核对状态与 `current_actions`（状态护栏：start 仅停止态且无进行中操作）；启动不自动拉起托管实例，实例状态异常可能启动失败；异步返回 job_id，跟踪至终态后回查应用状态 |
+| 启动应用 | `start_supabase_application` | 操作前 `show_supabase_application` 核对状态与 `current_actions`（状态护栏：start 仅停止态且无进行中操作）；启动应用不会自动启动托管实例，实例状态异常可能启动失败；异步返回 job_id，跟踪至终态后回查应用状态 |
 | 停止应用 | `stop_supabase_application` | 操作前同上核对（状态护栏：stop 仅运行态 normal 且无进行中操作）；不停托管实例、实例继续计费，停止期间应用功能不可用；建议低峰执行；异步 job 跟踪至终态 |
 | 重启应用 | `restart_supabase_application` | 操作前同上核对（状态护栏：restart 仅运行态 normal 且无进行中操作，已停止应用须先启动）；重启内部组件、短暂服务中断并释放内存缓存；建议低峰执行；异步 job 跟踪至终态 |
 
@@ -206,7 +206,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 |---|---|---|
 | 查托管实例 | `show_supabase_managed_instance` | application_id；返回引擎/版本/instance_status（normal=正常、shutdown=已停止等）/规格/磁盘/可用区/进行中动作，附关键计费与十五天自动启动说明 |
 | 停止托管实例 | `stop_supabase_managed_instance` | 操作前 `show_supabase_managed_instance` 核对 instance_status 与进行中动作（状态护栏：stop 仅 normal 且无进行中操作）；仅超高IO/SSD云盘/极速型SSD 的按需实例可停（专属云不支持）；VM 停止计费、EIP/存储/备份继续计费；默认停止十五天，十五天内未开启将于可维护时段自动启动；已停止实例删除不进回收站；停止主实例同时停止只读实例；停止期间应用功能不可用；异步 job 跟踪 |
-| 启动托管实例 | `start_supabase_managed_instance` | 操作前核对 instance_status（状态护栏：start 仅 shutdown 可开启）；启动主实例同时启动只读实例；可能因资源不足开启失败；**顺序建议：先启实例再启应用**（启动应用不会自动拉起实例）；异步 job 跟踪 |
+| 启动托管实例 | `start_supabase_managed_instance` | 操作前核对 instance_status（状态护栏：start 仅 shutdown 可开启）；启动主实例同时启动只读实例；可能因资源不足开启失败；**顺序建议：先启实例再启应用**（启动应用不会自动启动实例）；异步 job 跟踪 |
 | 重启托管实例 | `restart_supabase_managed_instance` | 操作前核对 instance_status、冻结状态与进行中动作（状态护栏：restart 仅 normal、未冻结且无进行中操作；创建/扩容/变更规格/备份/恢复/修改端口期间不能重启）；重启期间实例不可用、应用功能受影响；建议低峰执行；异步 job 跟踪 |
 
 ### 安全组绑定修改
@@ -224,7 +224,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 - **多组全量替换**：`security_group_ids` 为非空安全组 UUID 清单，所给清单即最终清单——须保留的既有组必须一并列入，未列入的既有组被摘除；预览回读当前安全组并在 impact 明示替换语义与 8443/5432 失联风险（摘掉承载 8443 入方向或 5432 出方向的组，应用即不可访问）。
 - **官方状态约束**：实例在创建、数据库升级、变更规格、创建用户、删除用户状态下不能设置；替换期间连接可能短暂中断。被拒如实转述，待任务终态后重新预览。
 - **跟踪**：受理返回 workflowId，经 `show_operation_job_status` 查询至终态后回查目标绑定的安全组。
-- **分工边界**：本工具换“绑哪些组”；组内规则的增删仍走 `add_supabase_security_group_rule` / `delete_supabase_security_group_rule`。
+- **分工边界**：本工具换“绑哪些组”；组内规则的增删仍使用 `add_supabase_security_group_rule` / `delete_supabase_security_group_rule`。
 
 ### 应用密码修改
 
@@ -258,7 +258,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 5. 确认消失 | `list_supabase_applications` | application_id 精确查 | 应用不在列表；级联时实例确认消失（可回 `list_supabase_manageable_instances` 交叉复核） |
 | 6. 残留处置 | 见下 | — | 输出残留清单与处置建议 |
 
-四层校验（服务端自动执行，**均在提交前触发、应用保持可读**）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**（包年/包月实例不支持 API 直删——级联与单独拆除均拦截，走控制台退订；charge_info 缺失失败关闭）。残留处置通道：**EIP 释放 `delete_supabase_eip`（KooCLI EIP DeletePublicip）**——提交前实读 EIP 校验身份（可带地址交叉核对）、全量扫描应用清单拦截仍被存活应用公网地址引用者、绑定中由后端拒绝（先 `change_supabase_eip` 置 is_bind=false 解绑）、删除即停 IP 保有费；**应用数据目录清理 `clean_supabase_obs_ws`（KooCLI obsutil）**——删除对象是桶根目录下名称等于应用 ID 的子文件夹：清空内容并删除文件夹本身，桶与其他任何目录不受影响（应用 ID 强制 in32 规范格式），仍存活应用 ID 拦截（先删应用再清目录），目录不存在或为空幂等返回 already_clean；**OBS 桶删除 `delete_supabase_obs`（KooCLI obsutil rm）**——仍被存活应用 storage_component 引用拦截、非空拦截（先用 clean_supabase_obs_ws 清各应用目录，其余对象人工核对）、桶不存在幂等返回 already_absent；三工具均供业务方按需显式使用或随删除流程联动触发。托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，**仅按需实例可直删、包周期走控制台退订**，数据不可恢复先确认导出）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；本地 Key 文件与请求文件、项目 MCP 配置按需清理。
+四层校验（服务端自动执行，**均在提交前触发、应用保持可读**）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**（包年/包月实例不支持 API 直删——级联与单独拆除均拦截，须控制台退订；charge_info 缺失失败关闭）。残留处置通道：**EIP 释放 `delete_supabase_eip`（KooCLI EIP DeletePublicip）**——提交前实读 EIP 校验身份（可带地址交叉核对）、全量扫描应用清单拦截仍被存活应用公网地址引用者、绑定中由后端拒绝（先 `change_supabase_eip` 置 is_bind=false 解绑）、删除即停 IP 保有费；**应用数据目录清理 `clean_supabase_obs_ws`（KooCLI obsutil）**——删除对象是桶根目录下名称等于应用 ID 的子文件夹：清空内容并删除文件夹本身，桶与其他任何目录不受影响（应用 ID 强制 in32 规范格式），仍存活应用 ID 拦截（先删应用再清目录），目录不存在或为空幂等返回 already_clean；**OBS 桶删除 `delete_supabase_obs`（KooCLI obsutil rm）**——仍被存活应用 storage_component 引用拦截、非空拦截（先用 clean_supabase_obs_ws 清各应用目录，其余对象人工核对）、桶不存在幂等返回 already_absent；三工具均供业务方按需显式使用或随删除流程联动触发。托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，**仅按需实例可直删、包周期须控制台退订**，数据不可恢复先确认导出）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；本地 Key 文件与请求文件、项目 MCP 配置按需清理。
 
 ## 场景十一：资源清理与保留
 
@@ -274,7 +274,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 排障补充
 
-- **KooCLI 协同**：安全组 VPC 六个工具（查列表/详情、建组、增删规则、删组）内置 KooCLI（hcloud）能力，开箱即用；原生 RDS 入口不代理 VPC API。换绑安全组走 `change_supabase_security_group`（RDS SetSecurityGroup，不经 KooCLI）。二进制定位：`HCLOUD_BIN` → 固定安装目录 → PATH，每次调用重新定位。凭据注入：AK/SK 环境变量同时存在时按命令注入，否则回落 hcloud profile；REST Token 模式须本机 `hcloud configure init`。区域取 `HUAWEICLOUD_REGION`；子项目账号在 profile 配 `--cli-project-id`。VPC 后端 error_code/error_msg/request_id 原样透传。
+- **KooCLI 协同**：安全组 VPC 六个工具（查列表/详情、建组、增删规则、删组）内置 KooCLI（hcloud）能力，开箱即用；原生 RDS 入口不代理 VPC API。换绑安全组使用 `change_supabase_security_group`（RDS SetSecurityGroup，不经 KooCLI）。二进制定位：`HCLOUD_BIN` → 固定安装目录 → PATH，每次调用重新定位。凭据注入：AK/SK 环境变量同时存在时按命令注入，否则回落 hcloud profile；REST Token 模式须本机 `hcloud configure init`。区域取 `HUAWEICLOUD_REGION`；子项目账号在 profile 配 `--cli-project-id`。VPC 后端 error_code/error_msg/request_id 原样透传。
 - **诊断 CLI**（克隆方式）：`uv run python -m mcp_server_supabase.diagnostics check`（配置与依赖）/ `offline`（stdio 自检）/ `discover`（从凭据发现项目与候选入口，`--probe` 追加只读探测）/ `readonly --allow-cloud-read`（授权环境真实只读检查）。诊断不提交云写操作，摘要不含资源值与凭据。
 - **模式配错症状**：只填 AK/SK 不设 `SUPABASE_TRANSPORT=sdk_core`，服务端按 REST 模式启动并完全忽略 AK/SK，每次调用报 MCP_PERMISSION_DENIED；REST 模式缺 `HUAWEICLOUD_AUTH_TOKEN` 同样报错。
 - **术语表**：plan_id——预览凭证，10 分钟有效、单次使用；request_ref——本地请求文件里含秘密配置的别名；job_id——云端异步任务编号；本地执行记录——每笔写操作在本机留下的结果记录（成功/失败/结果不明），出问题时核对用，永不删除；受理——服务端收到请求，不代表做完。

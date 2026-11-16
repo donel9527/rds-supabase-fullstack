@@ -385,7 +385,7 @@ class CleanupService:
         app = self.ledger.get('application', application_id)
         if not app:
             raise McpToolError('MCP_NOT_FOUND', '该应用无本地资源记录（可能创建于资源记录机制启用前或非本环境创建）——拒绝猜测清理范围',
-                               hint='人工核对残留后走单项工具：delete_supabase_eip / delete_supabase_obs / clean_supabase_obs_ws / delete_supabase_security_group。')
+                               hint='人工核对残留后使用单项工具：delete_supabase_eip / delete_supabase_obs / clean_supabase_obs_ws / delete_supabase_security_group。')
         deletion = app['detail'].get('deletion') or {}
         managed = app['detail'].get('managed_instance') or {}
         instance_id = managed.get('id')
@@ -472,7 +472,7 @@ class CleanupService:
                 'categories': categories,
                 'one_click': {'tool': 'cleanup_supabase_residuals',
                               'description': '一键清理所选类别的全部关联资源：单次确认、逐项守卫复检、'
-                                             '被拦项跳过并如实报告、资源记录回写；选择否则按类别逐项走单项工具。'},
+                                             '被拦项跳过并如实报告、资源记录回写；选择否则按类别逐项使用单项工具。'},
                 'notes': ['资源记录圈定范围、云端实时核对；资源记录无记录的资源不在本清单内（人工核对）。',
                           'EIP 与桶必须经用户明确确认后才删除；流程自动创建的建议删除避免残留。',
                           '保留桶时必须提醒：桶内数据持续计费，强烈建议清理应用数据目录。']}
@@ -510,7 +510,7 @@ class CleanupService:
             if type(value) is not bool:
                 raise McpToolError('MCP_INVALID_ARGS',
                                    'cleanup_eip / cleanup_obs_bucket / cleanup_obs_workspace / cleanup_security_groups 四项均为必选布尔：True 清理该类、False 保留该类',
-                                   hint='问用户要清理哪些类别；一键全清则四项全 True；部分清理走单项工具更合适。')
+                                   hint='问用户要清理哪些类别；一键全清则四项全 True；部分清理使用单项工具更合适。')
         self._require_ledger()
         flags = {'eip': cleanup_eip, 'obs_bucket': cleanup_obs_bucket,
                  'obs_workspace': cleanup_obs_workspace, 'security_groups': cleanup_security_groups}
@@ -585,4 +585,4 @@ class CleanupService:
                 'application_id': application_id, 'flags': flags, 'results': results,
                 'plan_id': plan_id,
                 'follow_up': '重跑 show_supabase_residuals 复核残留清单（资源记录已按结果回写）；'
-                             '被拦与失败项按 reason 核对处置后可走单项工具。'}
+                             '被拦与失败项按 reason 核对处置后可使用单项工具。'}

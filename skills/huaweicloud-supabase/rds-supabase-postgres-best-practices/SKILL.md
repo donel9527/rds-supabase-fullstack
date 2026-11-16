@@ -3,7 +3,7 @@ name: rds-supabase-postgres-best-practices
 description: 'Postgres 最佳实践规则库（华为云 RDS Supabase 部署）。编写或修改任何存入 Postgres 数据库的内容之前加载：建表与改表（列类型选择）、schema 设计、RLS 策略、索引、触发器、数据库函数、主键与 UUID 选型、批量导入、数据恢复。诊断场景同样加载：慢查询、高 CPU、超时、EXPLAIN 执行计划、连接耗尽、连接池、锁等待、死锁、表膨胀、N+1 查询、OFFSET 深分页、upsert、外键索引缺失、JSONB 查询慢、全文检索、定时任务（pg_cron）、跨用户或跨租户数据可见。华为云 RDS 部署专属：JWT claims 身份判定（request.jwt.claims）、参数模板（ALTER SYSTEM 无权限）、身份辅助函数、PostgREST 暴露面。单列变更与单条查询同样适用。'
 license: MIT
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   author: fitz-liujian
   derived-from: "supabase/agent-skills@c9be0e9 (MIT)"
 ---

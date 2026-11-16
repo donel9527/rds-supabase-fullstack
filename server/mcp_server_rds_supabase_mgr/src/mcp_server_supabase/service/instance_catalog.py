@@ -281,7 +281,7 @@ class InstanceCatalog:
             return {'scenario':'existed_instance',
                     'acquisition':'候选与 list_supabase_manageable_instances 同源（可挂载到 Supabase 应用的 PG 实例）；'
                                   '从中选定一个后以 instance_id 再次调用本工具，获取其基础/配置/网络信息；'
-                                  '创建请求走 create_supabase_link_exist_instance(manage_type=existed_instance, '
+                                  '创建请求使用 create_supabase_link_exist_instance(manage_type=existed_instance, '
                                   'existing_instance={"instance_id":..., "database_name":"root", "database_pwd":...})',
                     'candidates':rows,
                     'note':'候选存在不等于可创建成功（规格/状态仍由服务端校验）'}
@@ -412,7 +412,7 @@ class NetworkDiscovery:
              'returns':'security_group_id'},
             {'tool':'add_supabase_security_group_rule',
              'args':{'group_id':'<新应用组的 security_group_id>','direction':'ingress','protocol':'tcp','port':8443,
-                     'source_cidr':'<三选一：默认 0.0.0.0/0（走 KooCLI）/ 当前设备网段 / 自定义>'}},
+                     'source_cidr':'<三选一：默认 0.0.0.0/0（经 KooCLI）/ 当前设备网段 / 自定义>'}},
             {'tool':'add_supabase_security_group_rule',
              'args':{'group_id':'<新应用组的 security_group_id>','direction':'egress','protocol':'tcp','port':5432,
                      'source_cidr':subnet_cidr}},
@@ -428,7 +428,7 @@ class NetworkDiscovery:
             ]
         return {'plan_type':'specification',
                 'declaration':'本工具不创建任何资源；以下为安全组配置规格、选项与推荐，真实创建时严格遵循'
-                              '（create_supabase_security_group / add_supabase_security_group_rule，全 0 网段走 KooCLI）',
+                              '（create_supabase_security_group / add_supabase_security_group_rule，全 0 网段经 KooCLI）',
                 'application_group':application_group,'database_group':database_group,
                 'apply_steps':apply_steps,
                 'note':'规则中的网段均为所选 VPC 子网 CIDR（%s）；应用组入方向来源三选一：默认全 0 / 当前设备网段 / 自定义'%subnet_cidr}

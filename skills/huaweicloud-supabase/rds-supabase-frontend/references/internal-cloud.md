@@ -1,6 +1,6 @@
 # 内部云 OBS
 
-从本机 OBS 配置的 endpoint 或已有 console URL 识别 `.ulanqab.huawei.com`；区域从该端点和发布记录推导，不套用公有云区域表。只读取 endpoint，不打印 AK/SK。配置冲突时先对账。
+从本机 OBS 配置的 endpoint 或已有 console URL 识别 `.ulanqab.huawei.com`；区域从该端点和发布记录推导，不套用公有云区域表。只读取 endpoint，不打印 AK/SK。配置冲突时先逐项核对。
 
 使用 `hcloud obs`，复用 `~/.obsutilconfig`，先看本机 `hcloud obs help` 确认支持的参数。内部云路径不运行需要公网下载服务列表的 KooCLI API 命令，也不做公网/代理连通性排查；内部区域对应的 `.myhuaweicloud.com` NXDOMAIN 不作为故障重试。
 

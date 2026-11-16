@@ -41,7 +41,7 @@ def register(server):
                                          cleanup_security_groups: bool,
                                          confirm: bool = False,
                                          plan_id: str | None = None) -> dict:
-        """一键清理一个应用的关联资源（场景七）：四个类别开关均为必选布尔（全 True 即按残留清单一次清理全部，False 保留该类）。单次确认、单计划；执行时逐项守卫复检（引用中拦截、非空桶拦截、存活应用目录拦截、实例保留时数据库组自动跳过并说明），被拦与失败项如实逐项报告不中断其他类别；成功项资源记录回写。部分清理走单项工具更合适。"""
+        """一键清理一个应用的关联资源（场景七）：四个类别开关均为必选布尔（全 True 即按残留清单一次清理全部，False 保留该类）。单次确认、单计划；执行时逐项守卫复检（引用中拦截、非空桶拦截、存活应用目录拦截、实例保留时数据库组自动跳过并说明），被拦与失败项如实逐项报告不中断其他类别；成功项资源记录回写。部分清理使用单项工具更合适。"""
         return await service.cleanup_all(application_id, cleanup_eip, cleanup_obs_bucket,
                                          cleanup_obs_workspace, cleanup_security_groups,
                                          confirm, plan_id)

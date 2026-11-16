@@ -48,7 +48,7 @@ hcloud configure set --cli-profile="$FRONTEND_PROFILE" --cli-mode=SSO \
 hcloud configure sso --cli-profile="$FRONTEND_PROFILE"
 ```
 
-账号和权限集已明确时，可配置 `--cli-sso-account-name` 和 `--cli-sso-permission-set-name`；否则按官方交互选择已授权目标。登录、MFA 或门户授权交由用户完成，不索取密码、验证码或会话令牌。登录过期时续登相同 profile，成功后恢复只读预检。没有门户或权限分配时明确缺少的条件，不宣称普通控制台账号可直接 SSO 登录。
+账号和权限集已明确时，可配置 `--cli-sso-account-name` 和 `--cli-sso-permission-set-name`；否则按官方交互选择已授权目标。登录、MFA 或门户授权交由用户完成，不索取密码、验证码或会话令牌。登录过期时续登相同 profile，成功后恢复只读预检。没有门户或权限分配时明确缺少的条件，不宣称普通控制台用户可直接 SSO 登录。
 
 ## 只读预检与错误诊断
 

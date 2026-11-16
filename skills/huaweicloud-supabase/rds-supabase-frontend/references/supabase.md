@@ -23,7 +23,7 @@ HTTP 调试入口仅用于页面连通测试，不输入真实登录凭证或处
 
 ## 浏览器连接
 
-优先 Publishable Key，现有华为云应用只提供 Anon Key 时兼容其实际能力，不强制迁移密钥体系。SDK 复用项目版本，客户端配置例如：
+优先 Publishable Key，现有华为云应用只提供 Anon Key 时兼容其现有能力，不强制迁移密钥体系。SDK 复用项目版本，客户端配置例如：
 
 ```ts
 import { createClient } from '@supabase/supabase-js'

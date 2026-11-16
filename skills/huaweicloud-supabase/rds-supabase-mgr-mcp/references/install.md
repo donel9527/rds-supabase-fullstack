@@ -114,7 +114,7 @@ opencode 项目 `opencode.json` 等价写法（V2 结构：服务器条目位于
 }
 ```
 
-**Token 模式的限制**：安全组工具走 KooCLI 通道、只认 AK/SK（或本机 hcloud profile）；项目自动发现同样依赖 AK/SK。Token 模式下这两项都会报凭据缺失——要么本机执行一次 `hcloud configure init` 配好 profile 并显式配置 `HUAWEICLOUD_PROJECT_ID`，要么改用模板一的 AK/SK 模式（推荐，配置最简）。
+**Token 模式的限制**：安全组工具经 KooCLI 通道、只认 AK/SK（或本机 hcloud profile）；项目自动发现同样依赖 AK/SK。Token 模式下这两项都会报凭据缺失——要么本机执行一次 `hcloud configure init` 配好 profile 并显式配置 `HUAWEICLOUD_PROJECT_ID`，要么改用模板一的 AK/SK 模式（推荐，配置最简）。
 
 **模式选错的症状（记住这个坑）**：只填 AK/SK 不设 `SUPABASE_TRANSPORT=sdk_core`，服务端按 REST 模式启动并**完全忽略 AK/SK**，每次调用报 `MCP_PERMISSION_DENIED`。反过来，REST 模式没配 `HUAWEICLOUD_AUTH_TOKEN` 也是这个错。
 
@@ -133,7 +133,7 @@ opencode 项目 `opencode.json` 等价写法（V2 结构：服务器条目位于
 | opencode | 保存 `opencode.json` 后新服务器**自动连接**；未自动连上时在 `/mcps` 面板选中该服务器连接。等价 CLI：`opencode mcp add rds-supabase-mgr --env K=V -- uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirectory=server/mcp_server_rds_supabase_mgr" mcp-huaweicloud-rds-supabase-mgr`（注意 `--env` 的值会留在命令行历史里，写凭据建议直接编辑配置文件） | `opencode mcp list` 或 `/mcps` 显示 connected |
 | Claude Code | 保存 `.mcp.json` 后会话内弹出项目服务器**批准提示**（安全机制，每个项目服务器一次），用户批准即连接；提示未弹出时在 `/mcp` 面板找到该服务器批准/连接 | `/mcp` 面板显示 connected 与工具数量 |
 | CodeArts | MCP 配置在设置页「MCP工具 → 配置MCP」打开的 `mcp_settings.json` 中编辑（`mcpServers` 结构与 `.mcp.json` 相同，uvx 条目直接复用模板一；服务器名称 ≤64 字符），**保存即启动**（等待"工具启动完成"）；「MCP工具 → 已安装」页签可启用/停用/重启。官方明示：**编辑既有条目后 IDE 缓存可能不自动刷新，须在该页签点一次重启该 MCP** | 「MCP工具 → 已安装」页签显示该服务器且已启用 |
-| OfficeAce | 写入项目级 MCP 配置后，在宿主自身的 MCP 管理入口启用/刷新（无公开文档，Agent 在该宿主内按其设置界面操作）；确无会话内机制时按一次性 reload 兜底，如实告知用户——配置已就位，不算安装失败 | 宿主 MCP 管理界面显示已启用 |
+| OfficeAce | 写入项目级 MCP 配置后，在宿主自身的 MCP 管理入口启用/刷新（无公开文档，Agent 在该宿主内按其设置界面操作）；确无会话内机制时以一次性 reload 作为后备方案，如实告知用户——配置已就位，不算安装失败 | 宿主 MCP 管理界面显示已启用 |
 | Cursor / Trae / 其他 | 按宿主自身的 MCP 配置刷新机制使能；宿主确实只认重启时，如实告知用户执行一次宿主 reload——配置已就位，属一次性动作，不算安装失败 | 宿主 MCP 面板 |
 
 使能问题的判定顺序：工具列表里没有这个服务器 → 先按上表使能；服务器在但调用报错 → 回下节环境变量核对；进程起不来 → 看宿主 MCP 日志里 uvx 的 stderr（首次启动要拉依赖，稍候属正常）。
@@ -169,7 +169,7 @@ uv run --directory "$TMP/rds-supabase-fullstack-main/server/mcp_server_rds_supab
 
 规则：下载物一律落唯一临时目录（`mktemp -d`），不污染项目目录和家目录；MCP 运行期间保留、停止后清理。ZIP 归档属本仓官方源，**不违反来源锁定，但 PyPI/第三方源仍然禁止**。浏览器手动下载同一 URL 也落临时目录。
 
-## 七、装完怎么验证（三层）
+## 七、安装后如何验证（三层）
 
 先确认工具已在本会话可见——列表里调不到这个服务器的工具，是**会话没使能**（回第四节"会话内使能"处理），不是安装失败。然后过三层：
 

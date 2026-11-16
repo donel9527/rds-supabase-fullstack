@@ -28,7 +28,7 @@
 
 > 我的 Next.js 应用用 supabase-js 登录后 getSession 拿不到用户，帮我排查。
 
-> REST API 查询返回 42501 permission denied，数据确实存在，怎么处理？
+> REST API 查询返回 42501 permission denied，数据确实存在，如何处理？
 
 > 帮我把现有的表加上 RLS 策略，前端用户只能看到自己的数据。
 

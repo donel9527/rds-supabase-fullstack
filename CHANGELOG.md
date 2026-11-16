@@ -7,6 +7,26 @@ semantic versioning.
 
 ### Added
 
+- Repo-wide wording rectification across all skills and the mgr server
+  (`mcp_server_rds_supabase_mgr` 0.4.0a63). Full-scan audit of every skill's
+  SKILL.md, references, INSTALL.md, README, showcase and rendered SVG plus
+  the server's user-facing strings, removing jargon, colloquial connectors
+  and command-tone phrasing in favor of plain formal Chinese:
+  账本 -> 执行记录; 落盘 -> 写入/保存; 兜底 -> 例外/后备/保障(按语境);
+  打标 -> 添加标签; 拉起 -> 启动; 干净收尾 -> 彻底收尾; 话术 -> 提示;
+  硬试/硬删 -> 强行重试/强行删除; 顺带 -> 同时; 不许 -> 不得;
+  点名 -> 指明; 怎么 -> 如何; 走场景X/走单项/走KooCLI -> 按场景X处理/
+  使用单项工具/经KooCLI; 一句话安装 -> 单命令安装; 其实际/真的 ->
+  其现有/实际; 对账(config sense) -> 逐项核对. Business-vocabulary usage kept
+  (e.g. 对账/补单 as e-commerce timing-job examples). Stale tool counts fixed
+  (53 -> 58 in seven places incl. the timeline SVG and showcase). Enforcement
+  made permanent: the mgr skill lint blacklist extends to the new banned terms
+  (plus 一句话 for its own tree) and scripts/validate_skills.py now fails on
+  the core jargon list across every skill's markdown. Skill versions:
+  `rds-supabase-mgr-mcp` 2.12.0 (server >= 0.4.0a63), `rds-supabase-mcp`
+  2.7.1, `rds-supabase-web-build` 0.12.3, `rds-supabase-frontend` 0.2.5,
+  `rds-supabase-usage` 0.2.4, `rds-supabase-function-graph` 0.1.2,
+  `rds-supabase-postgres-best-practices` 0.3.1.
 - `mcp_server_rds_supabase_mgr` 0.4.0a62 - scenario 7 (resource cleanup and
   retention) plus dashboard-credential and workspace-folder hardening.
   Full-flow protection mechanism: every create/reuse/bind/modify step records

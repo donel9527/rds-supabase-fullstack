@@ -37,10 +37,11 @@ SCENARIOS = [
     "场景七：查询接入信息与密钥交付",
     "场景八：日常变更速查",
     "场景九：包周期订单支付与取消",
-    "场景十：删除应用与干净收尾",
+    "场景十：删除应用与彻底收尾",
     "排障与任务跟踪",
 ]
-JARGON_BLACKLIST = ("台账", "账本", "码道", "未决", "对账")
+JARGON_BLACKLIST = ("台账", "账本", "码道", "未决", "对账", "落盘", "兜底", "打标", "拉起",
+                    "硬试", "硬删", "话术", "顺带", "不许", "干净收尾", "闭环", "一句话")
 EXPECTED_REFERENCES = {"scenarios.md", "acceptance.md", "local-requests.md", "install.md"}
 VERSION_RE = re.compile(r"mcp_server_supabase\s*≥\s*(\d+)\.(\d+)\.(\d+)(?:a(\d+))?")
 PYPROJECT_RE = re.compile(r'^version\s*=\s*"(\d+)\.(\d+)\.(\d+)(?:a(\d+))?"', re.MULTILINE)

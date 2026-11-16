@@ -51,7 +51,7 @@
 | rds_endpoint | string | RDS 接入点（discover 解析或用户指定，**写回本段**） |
 | obs_endpoint | string/null | OBS 接入点——步骤一推导并**连接测试通过**后写回（DNS 解析 + HTTP 探测；无法推导或测试不通 → 用户输入后复测通过才写回）；未就绪为 `null` |
 | project_id | string | `HUAWEICLOUD_PROJECT_ID`（写回本段） |
-| credential_source | string | `project_secrets`（A：项目内 secrets/，含 D 用户输入落盘）/ `project_devkit_file`（B：项目内 devkit 文件）/ `external_confirmed`（C：系统/用户级凭证配置经显示与用户确认后采用）——gate 校验枚举；多项目共用一台机器时，各项目独立记录，互不可见 |
+| credential_source | string | `project_secrets`（A：项目内 secrets/，含 D 用户输入后写入）/ `project_devkit_file`（B：项目内 devkit 文件）/ `external_confirmed`（C：系统/用户级凭证配置经显示与用户确认后采用）——gate 校验枚举；多项目共用一台机器时，各项目独立记录，互不可见 |
 
 ### project
 
@@ -123,7 +123,7 @@
 | project_dir | string | 前端项目目录（相对项目根） |
 | framework | string | 如 `react-vite-ts` |
 | hosting_mode | string/null | 步骤八 托管场景选择后必填：`temporary`（临时访问——原型/测试验证，免购域名免备案）或 `production`（正式上线——购买域名/备案/CDN 商用链路）；hosting_published 起 gate 校验枚举 |
-| objects_acl | string/null | 托管对象 ACL——步骤八上传后必填且**固定 `public-read`**：静态资源对象（HTML/CSS/JS/图片/字体等）上传时显式 `-acl=public-read`（OBS 默认上传对象为**私有**，私有对象经入口/CDN 匿名访问 403——不得依赖桶策略单点兜底）；上传后 stat 抽验；hosting_published 起 gate 校验 |
+| objects_acl | string/null | 托管对象 ACL——步骤八上传后必填且**固定 `public-read`**：静态资源对象（HTML/CSS/JS/图片/字体等）上传时显式 `-acl=public-read`（OBS 默认上传对象为**私有**，私有对象经入口/CDN 匿名访问 403——不得依赖桶策略单点唯一保障）；上传后 stat 抽验；hosting_published 起 gate 校验 |
 
 ### test_accounts
 

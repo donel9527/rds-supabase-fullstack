@@ -30,7 +30,7 @@
 | 入口协议一致性 | stable_url 协议 vs `instance.ssl_enabled` | 一致：true→HTTPS / false→HTTP（gate 机器核验 + 浏览器实证——HTTPS 页面调用 HTTP 网关属混合内容，被浏览器拦截） |
 | 前端 → Supabase API | 站点内执行一次数据查询或登录流 | 返回数据可见性正确（匿名/登录态按 RLS 预期受限；空集/子集即正确表现） |
 | 多用户隔离抽检 | 两个测试账号（经数据面 MCP 用户管理创建）在站点内互访对方数据行 | 均不可见（RLS 行级隔离实证；空集即通过） |
-| auth 回调 | 走一次登录/登出 | 回调跳转正确（步骤八↻ 已配置 site_url / redirect_uris） |
+| auth 回调 | 实际执行一次登录/登出 | 回调跳转正确（步骤八↻ 已配置 site_url / redirect_uris） |
 
 ## 上线报告格式
 
@@ -46,7 +46,7 @@
 三级交付语义：本地已验证 / 环境已准备 / 线上验收通过
 ```
 
-## 应用名片（launched 后输出 + 落盘 .hwsupabase/app-card.md）
+## 应用名片（launched 后输出并写入 .hwsupabase/app-card.md）
 
 最终交付物，面向用户直观展示应用全貌与使用方式。字段来源：webapp.json（project / instance / backend / frontend / test_accounts）与 frontend record（stable_url）。测试账号**含密码**（验收演示账号，正式使用前改密或删除）。完整格式见 SKILL.md 输出格式「应用名片」。
 

@@ -4,7 +4,7 @@ description: '华为云 RDS Supabase 管理技能：管理部署在华为云 RDS
 license: MIT
 metadata:
   tags: [huawei-cloud, rds, supabase, postgresql, mcp, database, baas]
-  version: "2.7.0"
+  version: "2.7.1"
 ---
 
 # 华为云 RDS Supabase 管理
@@ -13,7 +13,7 @@ metadata:
 
 华为云 RDS Supabase 是运行在华为云 RDS PostgreSQL 之上的自建 Supabase 平台。Supabase 提供后端即服务（BaaS）能力：Kong 网关统一入口，PostgREST 将数据库表发布为 REST API，GoTrue 负责用户认证，Storage 与 Realtime 开箱即用，应用端无需自建后端服务。
 
-在 Web 全栈开发流程中，本技能承担后端环节，按两个阶段展开。**实例接入**：RDS Supabase 实例由流程动态创建或选定，实例就绪后配置信息（网关 URL 与 API Key）方可获得，此时按 references/install.md 一句话完成 MCP 服务器的动态安装。**后端开发**：Web 应用的后端代码以 init.sql 迁移脚本（DDL、GRANT 等初始化 SQL）形式组织，经 `execute_sql` 部署为数据库层的定义与配置（表结构、授权、行级安全策略、函数），前端经 REST API 直接消费。
+在 Web 全栈开发流程中，本技能承担后端环节，按两个阶段展开。**实例接入**：RDS Supabase 实例由流程动态创建或选定，实例就绪后配置信息（网关 URL 与 API Key）方可获得，此时按 references/install.md 以单条命令完成 MCP 服务器的动态安装。**后端开发**：Web 应用的后端代码以 init.sql 迁移脚本（DDL、GRANT 等初始化 SQL）形式组织，经 `execute_sql` 部署为数据库层的定义与配置（表结构、授权、行级安全策略、函数），前端经 REST API 直接消费。
 
 自建 Supabase 不提供云平台控制台，日常管理缺少工具支持。本 MCP 服务器（`mcp-server-huaweicloud-rds-supabase`）基于 HenkDz/selfhosted-supabase-mcp 改进，将数据库结构查询、SQL 执行、用户管理、存储配置、安全检查等管理能力封装为 MCP 工具，供 AI 助手调用。相对原版本的主要整改：
 
@@ -50,7 +50,7 @@ metadata:
 | 任务 | 归属 |
 |---|---|
 | 实例开通、续费、规格变更、备份策略 | 云平台控制台（本 MCP 不涉及） |
-| MCP 服务器动态安装与配置（实例创建/选定后） | references/install.md（一句话动态安装）；references/mcp-installation-guide.md（完整指南） |
+| MCP 服务器动态安装与配置（实例创建/选定后） | references/install.md（单命令动态安装）；references/mcp-installation-guide.md（完整指南） |
 | `public.migrations` 表 | 平台内部对象：不读、不写、不依赖 |
 
 ## 前置条件

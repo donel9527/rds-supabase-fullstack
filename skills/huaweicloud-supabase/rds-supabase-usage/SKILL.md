@@ -3,7 +3,7 @@ name: rds-supabase-usage
 description: '华为云 RDS Supabase 平台开发技能（自建 Supabase 栈：Kong 网关、PostgREST、GoTrue 认证、Storage、Realtime、pgvector）。Use when：使用 supabase-js / @supabase/ssr 客户端库或 Next.js、React、SvelteKit、Astro、Remix 集成；认证问题（login、logout、sessions、JWT、cookies、getSession、getUser、RLS）；schema 变更与 init.sql 部署；REST/Data API 行为异常（permission denied、schema cache、42501、超时、表不可见）；Postgres 错误与性能问题（慢查询、索引、连接、锁）；Storage 故障、Realtime 断连；向量检索；服务端计算与定时任务。不适用于：MCP 服务器安装配置与实例管理、SQL 与 schema 质量规则库。'
 license: MIT
 metadata:
-  version: "0.2.3"
+  version: "0.2.4"
   author: fitz-liujian
   derived-from: "supabase/agent-skills@c9be0e9 (MIT)"
 ---

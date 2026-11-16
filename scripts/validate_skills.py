@@ -44,6 +44,10 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 SECTION_RE = re.compile(r"^## \d+\. .+\((\w+)\)\s*$", re.MULTILINE)
 TRIGGER_MARKERS = ("use when", "load this skill", "triggers:", "触发", "之前加载", "何时")
 FORBIDDEN_FILES = {"INSTALLATION_GUIDE.md", "QUICK_REFERENCE.md"}
+# Repo-wide wording standard: jargon that must never appear in any skill text.
+# Rendered prose belongs to the user - use plain, formal Chinese instead
+# (资源记录 / 执行记录 / 提示 / 写入·保存 / 添加标签 / 启动 / 强行重试·强行删除 / 彻底收尾).
+BANNED_TERMS = ("台账", "账本", "话术", "落盘", "打标", "拉起", "硬试", "硬删", "干净收尾")
 
 
 def parse_frontmatter(text: str) -> dict:
@@ -96,6 +100,14 @@ def main() -> int:
 
     changelog = REPO_ROOT / "CHANGELOG.md"
     changelog_text = changelog.read_text(encoding="utf-8") if changelog.exists() else ""
+
+    # Wording standard applies to every skill's rendered text (markdown only;
+    # lint scripts and test fixtures are code and carry the terms deliberately).
+    for md in sorted(SKILLS_DIR.rglob("*.md")):
+        body = md.read_text(encoding="utf-8")
+        for term in BANNED_TERMS:
+            if term in body:
+                errors.append(f"{md.relative_to(REPO_ROOT)}: banned jargon term {term!r}")
 
     for skill_md in sorted(SKILLS_DIR.rglob("SKILL.md")):
         skill_dir = skill_md.parent

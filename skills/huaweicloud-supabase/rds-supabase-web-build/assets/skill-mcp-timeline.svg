@@ -85,7 +85,7 @@
   <text x="560" y="258" text-anchor="middle" font-size="9" fill="#92400E">实例·安全组 · Key 交付</text>
   <rect x="6" y="270" width="168" height="42" fill="#FFFFFF" stroke="#E2E8F0"/>
   <text x="90" y="287" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1E293B">管理面 MCP</text>
-  <text x="90" y="300" text-anchor="middle" font-size="8.5" fill="#64748B">控制平面 · 53 工具</text>
+  <text x="90" y="300" text-anchor="middle" font-size="8.5" fill="#64748B">控制平面 · 58 工具</text>
   <rect x="488" y="275" width="144" height="32" rx="6" fill="#FEF3C7" stroke="#B45309" stroke-width="1.5"/>
   <text x="560" y="288" text-anchor="middle" font-size="9.5" font-weight="700" fill="#78350F">应用创建/选定 · EIP</text>
   <text x="560" y="300" text-anchor="middle" font-size="9" fill="#92400E">安全组 · 双钥受控交付</text>
@@ -198,5 +198,5 @@
   <text x="1463" y="656" text-anchor="middle" font-size="9" fill="#4338CA">上线报告 + app-card.md</text>
 
   <text x="6" y="694" font-size="9.5" fill="#475569">· 两台 MCP 均不随技能预装：管理面于步骤三、数据面于步骤四由工作流按项目级隔离动态安装（uvx git 模板 / ZIP 逃生通道），凭据一律由项目配置注入进程，不入全局环境。</text>
-  <text x="6" y="710" font-size="9.5" fill="#475569">· 虚线＝按需或回路：步骤七失败修复回步骤五重过质量门（同用例连续 2 次失败中止）；步骤八域名确定后回调闭环重建前端。全部断点由 webapp-gate.py 机械核验，云上事实不采信 agent 自报。</text>
+  <text x="6" y="710" font-size="9.5" fill="#475569">· 虚线＝按需或回路：步骤七失败修复回步骤五重过质量门（同用例连续 2 次失败中止）；步骤八域名确定后回调联动重建前端。全部断点由 webapp-gate.py 机械核验，云上事实不采信 agent 自报。</text>
 </svg>

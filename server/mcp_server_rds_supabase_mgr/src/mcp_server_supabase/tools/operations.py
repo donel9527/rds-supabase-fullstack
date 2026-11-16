@@ -84,7 +84,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def start_supabase_application(application_id: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """启动一个已停止的 RDS Supabase 应用，两段式提交。仅停止态应用可启动，且不自动拉起托管实例。异步任务，受理后须以 job_id 跟踪至终态。"""
+        """启动一个已停止的 RDS Supabase 应用，两段式提交。仅停止态应用可启动，且不会自动启动托管实例。异步任务，受理后须以 job_id 跟踪至终态。"""
         return await service.lifecycle(application_id, "start", confirm, plan_id)
 
     @server.tool()

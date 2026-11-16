@@ -3,7 +3,7 @@ name: rds-supabase-function-graph
 description: 'RDS Supabase FunctionGraph 云函数技能：为 Web 应用生成、部署、安全验证并运维承载于华为云 FunctionGraph 的自定义服务端业务代码（交易通知、对接外部系统、复杂领域逻辑、高安全隐私处理）。前端经共享版 APIG 触发器以 Supabase GoTrue JWT 调用函数，函数内完成验签、CORS、幂等与错误契约；全流程经 KooCLI 原子命令编排并受 fgs-gate 机械核验。Use when：需要 Postgres RPC 之外的出站 HTTP/Webhook、密钥不进前端的服务端处理、外部 I/O 定时作业（对账/补单/汇总推送），或为已上线的 RDS Supabase 应用追加、更新、回滚、下线云函数。'
 license: Proprietary
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
 ---
 
 # RDS Supabase FunctionGraph 云函数技能

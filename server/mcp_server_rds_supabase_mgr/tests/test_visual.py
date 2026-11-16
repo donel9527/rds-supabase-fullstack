@@ -176,7 +176,7 @@ def arrangement_fixture():
                 {'step':2,'phase':'security_groups','tool':'create_supabase_security_group',
                  'args':{'name':'supabase-app-sg'},'returns':'security_group_id'}],
             'post_creation_flow':[
-                {'tool':'console/KooCLI','action':'按 eip_baseline 购买 EIP 并打标'},
+                {'tool':'console/KooCLI','action':'按 eip_baseline 购买 EIP 并添加标签'},
                 {'tool':'change_supabase_eip','args':{'application_id':'<id>','is_bind':True,'public_ip_id':'<EIP ID>'}},
                 {'decision':'needs_email_login 是否启用邮箱登录'}],
             'decision_points':['az_code：可售 AZ 待选（list_supabase_flavors_with_azs）']}
@@ -442,7 +442,7 @@ class RenderArrangementTests(unittest.TestCase):
         self.assertIn('2. create_supabase_security_group [security_groups]',out)
         self.assertIn('"name": "supabase-app-sg"',out)
         self.assertIn('【创建后动作】',out)
-        self.assertIn('- console/KooCLI：按 eip_baseline 购买 EIP 并打标',out)
+        self.assertIn('- console/KooCLI：按 eip_baseline 购买 EIP 并添加标签',out)
         self.assertIn('"application_id": "<id>"',out)
         self.assertIn('- 待决策：needs_email_login 是否启用邮箱登录',out)
         self.assertIn('【待决策】',out)
@@ -607,7 +607,7 @@ def storage_options_fixture():
                                   'block_public_access':True,'region':'cn-east-3','enterprise_project':'0',
                                   'storage_component_hint':{
                                       'bucket':'supabase-storage-1115',
-                                      'ak_sk':'经本地请求文件提供，不落盘不回显'}}},
+                                      'ak_sk':'经本地请求文件提供，不另存副本、不回显'}}},
             'storage_component_note':'桶名即 spec.bucket_name；AK/SK 经本地请求文件提供'}
 
 
@@ -617,7 +617,7 @@ def storage_created_fixture():
                     'redundancy':'多AZ','block_public_access':True,'region':'cn-east-3',
                     'enterprise_project':'0'},
             'storage_component_hint':{'bucket':'supabase-storage-1115',
-                                      'ak_sk':'AKSK 经本地请求文件提供，不落盘不回显'},
+                                      'ak_sk':'AKSK 经本地请求文件提供，不另存副本、不回显'},
             'note':'桶 supabase-storage-1115 已创建并完成 storage_component 对接',
             'warnings':[]}
 
@@ -735,7 +735,7 @@ class RenderStorageTests(unittest.TestCase):
         self.assertIn('supabase-storage-1115',out)
         self.assertIn('STANDARD',out)
         self.assertIn('多AZ',out)
-        self.assertIn('经本地请求文件提供，不落盘不回显',out)
+        self.assertIn('经本地请求文件提供，不另存副本、不回显',out)
         self.assertIn('挂载',out)
         self.assertIn('【storage_component 对应】',out)
         self.assertIn('桶名即 spec.bucket_name；AK/SK 经本地请求文件提供',out)
@@ -772,7 +772,7 @@ class RenderStorageTests(unittest.TestCase):
         self.assertIn('STANDARD',out)
         self.assertIn('【状态】',out)
         self.assertIn('已创建：桶 supabase-storage-1115 已创建并完成 storage_component 对接',out)
-        self.assertIn('AKSK 经本地请求文件提供，不落盘不回显',out)
+        self.assertIn('AKSK 经本地请求文件提供，不另存副本、不回显',out)
         self.assertIn('挂载',out)
         self.assertNotIn('【注意】',out)
 
@@ -1016,7 +1016,7 @@ def creation_submitted_fixture():
                                  'args':{'charge_mode':'postPaid','bandwidth_size_mbps':300}},
                                 {'tool':'bind_supabase_eip',
                                  'args':{'application_id':'app-1','public_ip_id':'<EIP ID>'}},
-                                {'tool':'console/KooCLI','action':'为已绑定的 EIP 打标 supabase-managed'}],
+                                {'tool':'console/KooCLI','action':'为已绑定的 EIP 添加 USAGE_FOR 标签 supabase-managed'}],
                             'note':'绑定成功后 update_supabase_auth_config 同步 api_external_url'}},
             'plan_id':'plan-123'}
 
@@ -1082,7 +1082,7 @@ class RenderCreationFlowTests(unittest.TestCase):
         self.assertIn('"charge_mode": "postPaid"',out)
         self.assertIn('2. bind_supabase_eip',out)
         self.assertIn('3. console/KooCLI',out)
-        self.assertIn('为已绑定的 EIP 打标 supabase-managed',out)
+        self.assertIn('为已绑定的 EIP 添加 USAGE_FOR 标签 supabase-managed',out)
         self.assertIn('绑定成功后 update_supabase_auth_config 同步 api_external_url',out)
 
     def test_submitted_existed_database_untouched(self):

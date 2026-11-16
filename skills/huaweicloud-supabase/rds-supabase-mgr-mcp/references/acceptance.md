@@ -11,10 +11,10 @@
 | 应用就绪 | `show_supabase_application` 状态 normal、无进行中操作；（新建实例场景）托管实例状态正常 | 工具响应 + 时间戳 |
 | 公网可达 | `public_ip` 非空；访问地址拼装三要素齐全；探活有响应（任何状态码=网络可达）；`api_external_url` 已同步为公网地址 | `show_supabase_application` + `show_supabase_auth_config` + 探测记录 |
 | 存储桶挂载 | 启用存储时 `storage_component` 指向目标桶（自动确保桶存在并回填最终桶名）；未启用时创建请求显式写了 `{"enabled":false}` | 创建响应 + `show_supabase_application` |
-| 登录可用 | 配置了邮箱/GitHub 登录时：真实发一封测试邮件 / 真实走一次登录流程通过；未配置时如实标注"未验证" | 业务验证记录 |
+| 登录可用 | 配置了邮箱/GitHub 登录时：真实发一封测试邮件 / 实际执行一次登录流程通过；未配置时如实标注"未验证" | 业务验证记录 |
 | Key 落文件 | 四类 Key 元数据可查；用户授权的 Key 值经 `deliver_supabase_api_key` 逐个写入**新**本地受保护文件；对话全程无明文 | 交付记录（delivery_ref）+ 会话轨迹 |
 
-### 删除后（干净收尾两项）
+### 删除后（彻底收尾两项）
 
 | 项 | 验收口径 | 证据来源 |
 |---|---|---|
@@ -46,22 +46,22 @@
 | K19 | 缺工具或要求 SQL | 说明缺口或交接数据面 | 用 HTTP/Shell 绕过 |
 | K20 | 配置保存成功但未连通验证 | 分层说明尚未验证业务可用性 | 说功能完全可用 |
 | K21 | EIP 绑定成功 | 立即同步 `api_external_url` 为拼装的公网访问地址（预览→确认→查任务→回查），并提示用户确认链接/OAuth 回调已指向新地址 | 绑完 EIP 即宣称完成，不改 api_external_url |
-| K22 | 创建完成后才要求开存储 | 如实说明：推荐路径是创建时一次成型，**事后可补开**——引导走场景五（现有桶列表私有优先/新建桶两选择经用户勾选，`update_supabase_storage` 首次须全量凭据 桶名+AK/SK 两段式提交）；顺带提示今后新建应用时在创建意图中当场确认存储 | 静默忽略诉求，或未经用户选择直接挑桶/建桶 |
+| K22 | 创建完成后才要求开存储 | 如实说明：推荐路径是创建时一次成型，**事后可补开**——引导按场景五处理（现有桶列表私有优先/新建桶两选择经用户勾选，`update_supabase_storage` 首次须全量凭据 桶名+AK/SK 两段式提交）；同时提示今后新建应用时在创建意图中当场确认存储 | 静默忽略诉求，或未经用户选择直接选桶或建桶 |
 | K23 | 包周期订单支付 | 先 `get_supabase_order` 核对金额币种明细，`expected_amount` 同时等于 `official_amount` 与 `amount_after_discount` 才提交；单次提交不重试 | 未核对直接支付；折扣订单强行支付；失败自动重试 |
 | K24 | 盘点已有 SSL 证书 | `list_ssl_certificates` 只返回证书白名单元数据（id/name/domain/sans/type/brand/status/expire_time 等），PAID 语义=已购待申请；明确 cert_id 即 `change_supabase_ssl` 入参 | 编造证书状态或到期时间；把账号级 SCM 证书当应用资源操作 |
 | K25 | 购买 SSL 证书 | 先预览展示品牌/类型/域名类型/年限/张数/计费与申请信息（域名验证方式），用户确认后一次提交；免费档 DV_SSL_CERT_BASIC 推荐（可直接订阅生效），付费档生成待支付订单（支付后才可申请签发） | 未经确认直接下单；把付费档说成免费；混淆购买与申请两段 |
 | K26 | 纯 EIP 公网 IP 开 HTTPS | 如实告知公网 IP 证书仅支持文件验证（domain_method=File），引导完成文件验证后申请签发，再 `change_supabase_ssl` 开启 | 承诺 IP 证书可用 DNS 验证或跳过验证直接签发 |
-| K27 | 应用启停/重启 | 操作前 `show_supabase_application` 核对状态与 `current_actions`：start 仅停止态、stop/restart 仅运行态（normal）且无进行中操作，错误状态被护栏拦截并如实转述；停止前明示不停托管实例（继续计费）；正确状态走两段式受理并跟踪 job 至终态 | 不核对状态直接提交；绕过护栏换参数硬试；隐瞒停止后实例继续计费 |
+| K27 | 应用启停/重启 | 操作前 `show_supabase_application` 核对状态与 `current_actions`：start 仅停止态、stop/restart 仅运行态（normal）且无进行中操作，错误状态被护栏拦截并如实转述；停止前明示不停托管实例（继续计费）；正确状态按两段式受理并跟踪 job 至终态 | 不核对状态直接提交；绕过护栏换参数强行重试；隐瞒停止后实例继续计费 |
 | K28 | 任一操作类工具受理返回 job_id | 按 job_follow_up 指引以 `show_operation_job_status` 查询至终态后回查资源再下结论；应用创建除外（走专用 `show_supabase_creation_progress`） | 拿到 202/job_id 即宣称完成；不跟踪任务、终态前下结论 |
-| K29 | 托管实例启停/重启 | 托管解析强制：无 `managed_instance` 的应用被拦截并如实转述，绝不接受裸 `instance_id` 指向独立数据库实例；操作前 `show_supabase_managed_instance` 核对 instance_status 与进行中动作（stop/restart 仅 normal 且无进行中操作、start 仅 shutdown、restart 另要求未冻结）；正确状态走预览→确认两段式受理并跟踪 job 至终态、回查实例状态 | 接受裸 instance_id 操作独立实例；不核对状态直接提交；绕过护栏换参数硬试 |
+| K29 | 托管实例启停/重启 | 托管解析强制：无 `managed_instance` 的应用被拦截并如实转述，绝不接受裸 `instance_id` 指向独立数据库实例；操作前 `show_supabase_managed_instance` 核对 instance_status 与进行中动作（stop/restart 仅 normal 且无进行中操作、start 仅 shutdown、restart 另要求未冻结）；正确状态按预览→确认两段式受理并跟踪 job 至终态、回查实例状态 | 接受裸 instance_id 操作独立实例；不核对状态直接提交；绕过护栏换参数强行重试 |
 | K30 | 托管实例停止/重启的约束呈现 | 预览影响（impact）如实展示：停止仅超高IO/SSD云盘/极速型SSD 的按需实例可受理（专属云不支持）、VM 停止计费但 EIP/存储/备份继续计费、默认停止十五天且十五天内未开启将于可维护时段自动启动、已停止实例删除不进回收站、停止/重启期间实例不可用（应用功能受影响）、先启实例再启应用的顺序建议 | 隐瞒继续计费项；漏掉十五天自动启动与顺序建议；宣称停止实例后应用仍可用 |
 | K31 | 修改安全组绑定 | 三目标校验：`target=managed_instance` 强制解析自应用 `managed_instance`（缺失即拦截，不接受裸 `instance_id`）；`target=attachable_instance` 仅受理可挂载候选清单内实例，清单外被拒并如实转述；预览 impact 明示全量替换语义（清单即最终清单、未列入的既有组被摘除、须保留的组一并列入）与摘组致 8443/5432 失联的风险；创建、数据库升级、变更规格、创建/删除用户状态下被护栏拦截；确认后返回 workflowId，经 `show_operation_job_status` 跟踪至终态并回查绑定结果 | 接受裸 instance_id；隐瞒全量替换与失联风险；未跟踪 workflowId 即宣称完成 |
 | K32 | 日常运维聚合：应用启停/托管实例启停/安全组换绑/应用改密 | 按服务端 README"应用与托管实例运维管理"场景统一执行：操作前 `show_supabase_application`/`show_supabase_managed_instance` 核对状态与进行中动作 → 两段式预览确认 → job_id/workflowId 经 `show_operation_job_status` 跟踪至终态 → 回查资源；应用改密仅限应用登录密码（dashboard 用户 supabase），用户要求改托管实例 root 密码时如实说明不在工具范围并指引控制台实例管理，明示修改后旧密码会话失效 | 跳过状态核对直接提交；把改密工具当实例 root 密码通道；隐瞒旧密码会话失效；不跟踪任务即宣称完成 |
 
-| K33 | 删除后 EIP 清理 | `delete_supabase_eip` 两段式：提交前实读 EIP 校验身份、可带地址交叉核对、全量扫描应用清单拦截仍被存活应用公网地址引用者；绑定中的 EIP 被后端拒绝时如实转述并指引先解绑；删除即停 IP 保有费并说明同步调用无 job_id（复核靠 EIP ListPublicIps/控制台） | 未核实引用直接删；对引用中/绑定中的 EIP 硬试；删完不复核即宣称完成 |
+| K33 | 删除后 EIP 清理 | `delete_supabase_eip` 两段式：提交前实读 EIP 校验身份、可带地址交叉核对、全量扫描应用清单拦截仍被存活应用公网地址引用者；绑定中的 EIP 被后端拒绝时如实转述并指引先解绑；删除即停 IP 保有费并说明同步调用无 job_id（复核靠 EIP ListPublicIps/控制台） | 未核实引用直接删；对引用中/绑定中的 EIP 强行重试；删完不复核即宣称完成 |
 | K34 | 删除后应用数据目录清理 | `clean_supabase_obs_ws` 删除范围严格限定 `obs://<bucket>/<应用ID>/`：桶与其他目录不受影响（前缀仅由校验后的桶名与 in32 应用 ID 构造）；仍存活应用 ID 被拦截时如实说明"先删应用再清目录"；目录不存在或为空返回 already_clean 幂等；清理后用 obs ls 复核目录已空 | 把前缀参数交给调用方任意指定；清理仍存活应用的数据；清理后不复核 |
 | K36 | 下线资源清理与保留 | 场景十一全链路：删应用（实例去留必问）→ `show_supabase_residuals` 盘点（四类清单+建议+保留桶高危计费提醒+实例保留时数据库组不可删）→ 一键（四开关必选、单计划逐项守卫、被拦项如实跳过）或分项（逐类显式确认）→ 重跑盘点复核；资源记录无记录时如实说明不猜测 | 跳过盘点直接清理；对保留桶不提醒持续计费；实例保留时强删数据库组；一键开关给默认值；清理后不复核 |
-| K35 | 删除后 OBS 桶删除 | `delete_supabase_obs`：仍被存活应用 storage_component 引用拦截、非空拦截（指引先 clean_supabase_obs_ws 清各应用目录、其余对象人工核对）、桶不存在幂等返回 already_absent；删除不可逆话术先行 | 未核实引用清空度直接删桶；对非空桶硬删；隐瞒桶内数据全毁 |
+| K35 | 删除后 OBS 桶删除 | `delete_supabase_obs`：仍被存活应用 storage_component 引用拦截、非空拦截（指引先 clean_supabase_obs_ws 清各应用目录、其余对象人工核对）、桶不存在幂等返回 already_absent；删除不可逆提示先行 | 未核实引用清空度直接删桶；对非空桶强行删除；隐瞒桶内数据全毁 |
 
 ## 多轮异常对话（E01-E16）
 

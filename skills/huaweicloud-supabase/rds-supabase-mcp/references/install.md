@@ -1,4 +1,4 @@
-# 一句话动态安装（AI Agent 执行路径）
+# 单命令动态安装（AI Agent 执行路径）
 
 面向 AI Agent 的最短安装流程：收集三项连接信息，写入客户端 MCP 配置，验证即完成。本 MCP 服务器在 Web 全栈开发流程中随实例动态接入：RDS Supabase 实例完成创建或选定后，配置信息（网关 URL 与 API Key）方可获得，随即按本文一次执行到位。完整安装说明（Docker 部署、环境变量全表、护栏规则、execute_sql 函数部署）见 mcp-installation-guide.md。
 

@@ -3,7 +3,7 @@ name: rds-supabase-web-build
 description: 'RDS Supabase 全栈开发编排技能：AI Agent 通过自然语言创建并托管 Web 应用网站的端到端工作流——需求澄清与设计、前端代码生成、后端声明式配置（DDL/GRANT/RLS/RPC）生成与部署、本地 L0 测试验证、前端静态资源 OBS+CDN 全托管、端到端上线与生命周期管理（更新/回滚/下线）。Use when：创建 Web 网站、搭建 AI 应用、全栈应用从零到上线、已有 RDS Supabase 应用的迭代更新与托管维护。编排管理面与数据面两台 MCP（均由工作流步骤动态安装：管理面→步骤三、数据面→步骤四）及 rds-supabase-mgr-mcp / rds-supabase-mcp / rds-supabase-usage / rds-supabase-frontend / rds-supabase-postgres-best-practices / rds-supabase-function-graph 六个专项技能。v1 后端边界为数据层；复杂业务逻辑由 function-graph 技能（云函数）承接，SSR 后端部署不支持。'
 license: MIT
 metadata:
-  version: "0.12.2"
+  version: "0.12.3"
 ---
 
 # RDS Supabase 全栈开发编排（web-build）
@@ -29,7 +29,7 @@ RDS Supabase 全栈开发的**顶层编排技能**：用户以单句自然语言
 
 双平面与双轨：
 
-- **管理面**：`mcp_server_rds_supabase_mgr`（53 工具）——RDS Supabase 实例全托管生命周期（创建/配置/安全访问/删除）；**步骤三动态启动**，不随技能安装装载
+- **管理面**：`mcp_server_rds_supabase_mgr`（58 工具）——RDS Supabase 实例全托管生命周期（创建/配置/安全访问/删除）；**步骤三动态启动**，不随技能安装装载
 - **数据面**：`mcp_server_rds_supabase`（38 工具）——init.sql 执行、结构查询、RLS/advisors；**步骤四动态安装**（实例凭据就绪后）
 - **后端轨**：产出 init.sql（DDL/GRANT/RLS/RPC/种子），运行于 RDS Supabase（PostgREST/GoTrue）
 - **前端轨**：产出静态站点（默认 React+Vite+TS + supabase-js），托管于 OBS+CDN
@@ -78,7 +78,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 
 **配置来源唯一权威：当前项目的 `.hwsupabase/`**（webapp.json `environment` 段 + `secrets/`）——Region/接入点/PROJECT_ID **不从 agent 进程环境、shell 会话或全局环境变量读取**（同名变量可能来自其他项目或本机全局设置，一律不采信）；`HUAWEICLOUD_REGION` 等环境变量名仅在步骤三/四启动 MCP 时**由项目配置注入进程**（进程作用域，不 export）
 
-1. **凭据检查（四选项交互确认，禁止跳过）**：以选择清单呈现凭据来源，未获用户勾选不得推进——**A** 项目内 `secrets/`（AK/SK 或 Token，0600、排除 Git，勾选即采用）；**B** 项目内 devkit 凭据文件（`HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件，勾选即采用）；**C** 感知到的系统/用户级凭证配置（全局 devkit 登录态、`~/.config/huaweicloud/`、`~/.obsutilconfig`、环境变量中的 AK/SK 等）——**不得直接采用**，逐项**显示**（级别 / 来源文件或变量名 / 账号标识，**不显示明文**）经用户确认后采用并记 `credential_source=external_confirmed`，未确认即不采用；**D** 用户指定或输入（给出凭据文件路径，或交互输入 AK/SK/Token → 落盘项目 `secrets/`，0600、排除 Git，agent 不回显、不记录明文）；均无 → 提醒用户经 D 提供
+1. **凭据检查（四选项交互确认，禁止跳过）**：以选择清单呈现凭据来源，未获用户勾选不得推进——**A** 项目内 `secrets/`（AK/SK 或 Token，0600、排除 Git，勾选即采用）；**B** 项目内 devkit 凭据文件（`HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件，勾选即采用）；**C** 感知到的系统/用户级凭证配置（全局 devkit 登录态、`~/.config/huaweicloud/`、`~/.obsutilconfig`、环境变量中的 AK/SK 等）——**不得直接采用**，逐项**显示**（级别 / 来源文件或变量名 / 账号标识，**不显示明文**）经用户确认后采用并记 `credential_source=external_confirmed`，未确认即不采用；**D** 用户指定或输入（给出凭据文件路径，或交互输入 AK/SK/Token → 写入项目 `secrets/`，0600、排除 Git，agent 不回显、不记录明文）；均无 → 提醒用户经 D 提供
 2. **uv（含 uvx）可用**——步骤三/四动态安装 MCP 的前提；缺失 → 提醒用户安装（`curl -LsSf https://astral.sh/uv/install.sh | sh`）
 3. **Region（局点）确认**：读项目配置（webapp.json `environment.region`）；缺失 → 显式提醒用户告知局点并**写入项目配置**（不读进程/全局环境变量）
 4. **RDS 接入点**：项目配置已有 → 采用；缺失且凭据就绪 → `diagnostics discover` 解析并经用户勾选，**结果写回项目配置**；无法解析 → 显式提醒用户设置
@@ -121,13 +121,13 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
    ZIP 归档属本仓官方源（`.../archive/<commit>.zip` 为 pin 等价形式），不违反来源锁定；仍禁 PyPI/第三方源。
    env：`SUPABASE_RDS_ENDPOINT` / `HUAWEICLOUD_PROJECT_ID` / 凭据——**值一律由项目内配置注入进程**（步骤一 `environment` 段与 `secrets/`），不读取会话/全局环境。**凭据模式二选一**：REST token（`HUAWEICLOUD_AUTH_TOKEN`，`SUPABASE_TRANSPORT` 默认 rest）或 **AK/SK（必须设置 `SUPABASE_TRANSPORT=sdk_core`**，读取 `HUAWEICLOUD_ACCESS_KEY`/`HUAWEICLOUD_SECRET_KEY`/可选 `HUAWEICLOUD_SECURITY_TOKEN`）——用户已填 AK/SK 而未设 `sdk_core` 时管理面将按 REST 模式启动并因缺 Token 失败；devkit 优先；或 `diagnostics discover` 勾选；或半自动方案：配置模板含占位符，由用户填入实际值
 
-   **网络与验证纪律**：**默认不走代理直连局点**（内网/专线环境经代理转发易引入链路故障；**禁止上来就走代理**——代理是兜底项而非默认项）；安装完成后执行**连接验证**：MCP 连接 OK 且任一**查询类工具**（优先 `get_supabase_capabilities`，一个即可）正常返回，验证通过才算安装成功；直连验证失败 → 先核对网络可达性、凭据模式（AK/SK 须 `sdk_core`）与 Endpoint，**确认直连不可达后**再显式配置代理并复验
+   **网络与验证纪律**：**默认不经代理直连局点**（内网/专线环境经代理转发易引入链路故障；**禁止一开始就配置代理**——代理是备选项而非默认项）；安装完成后执行**连接验证**：MCP 连接 OK 且任一**查询类工具**（优先 `get_supabase_capabilities`，一个即可）正常返回，验证通过才算安装成功；直连验证失败 → 先核对网络可达性、凭据模式（AK/SK 须 `sdk_core`）与 Endpoint，**确认直连不可达后**再显式配置代理并复验
 
    **注册纪律（项目级隔离）**：MCP 启动后**只注册进当前项目的项目级 MCP 配置**（Claude Code `<项目根>/.mcp.json`、CodeArts `<项目根>/.codeartsdoer/`、OfficeAce 项目根下项目级配置、opencode `<项目根>/opencode.json`；**禁止 `~/.claude.json` user scope、Claude Desktop `claude_desktop_config.json`、`~/.config/opencode/` 等一切用户级/系统级位置**——用户级注册会使本机其他项目可见可用，属边界溢出；宿主仅有用户级机制 → 停止报告，不注册）；含凭据的配置文件列入 `.gitignore`（0600）；**严禁 `uv tool install`/`pip install` 装入用户级/系统级**——uvx 仅一次性缓存运行；注册后核验落位再重载客户端（详细表见 workflow-stages.md 步骤三）
 3. **Supabase 应用接入方式——交互式勾选（禁止跳过）**：以选择清单呈现「使用已有应用 / 新建应用」二选一，未获用户显式选择不得推进，不得代为默认。**使用已有** → `list_supabase_applications` 候选列表（ID/名称/状态/规格）供用户勾选 + `show_supabase_application` 状态核验——**步骤二标记 `storage` 的，核验时必须同时读取存储对接状态**（详情中的存储组件字段），未对接 OBS → **立即触发第 6 项 OBS 自动对接流程**（识别即接入，本步骤内完成，不留待事后）。**新建** → **创建的编排、资源准备（网络/安全组/OBS 桶）、流程与约束全部遵循 `rds-supabase-mgr-mcp` 技能，本技能不复述、不改写、不另行发明**：先按其场景三出编排基线（`plan_supabase_creation_arrangement`，四项意图——托管来源/大文件存储/公网/HTTPS——逐项问明，本工作流默认 Single），再按场景一（新建实例，推荐，`create_supabase_with_new_instance`）或场景二（挂载已有 PG 实例，`create_supabase_link_exist_instance`）执行——安全组与 OBS 桶由创建工具自动准备并回填、一次提交；公网开通走其场景四，SSL 与其余变更见其日常变更章；跟踪与验证（`show_supabase_creation_progress` → `show_supabase_application`）同其纪律。创建完成后**同样必须执行第 4 项**（凭据获取）
-4. **凭据获取（两条路径均必须执行，不得遗漏）**：网关 URL + Anon Key + Service Role Key，按 `rds-supabase-mgr-mcp` 技能场景七执行——`show_supabase_application` 出信息卡、`list_supabase_api_keys` 查元数据、`deliver_supabase_api_key` 将 Key 值只落受保护本地文件（不进对话，纪律见其关键约束章）——落盘 `.hwsupabase/secrets/`（0600、排除 Git，`SUPABASE_REQUESTS_FILE=<项目>/.hwsupabase/requests.json` 注册，步骤四安装所必需）
+4. **凭据获取（两条路径均必须执行，不得遗漏）**：网关 URL + Anon Key + Service Role Key，按 `rds-supabase-mgr-mcp` 技能场景七执行——`show_supabase_application` 出信息卡、`list_supabase_api_keys` 查元数据、`deliver_supabase_api_key` 将 Key 值只落受保护本地文件（不进对话，纪律见其关键约束章）——写入 `.hwsupabase/secrets/`（0600、排除 Git，`SUPABASE_REQUESTS_FILE=<项目>/.hwsupabase/requests.json` 注册，步骤四安装所必需）
 5. **OBS 桶接入方式——交互式勾选（禁止跳过）**：以选择清单呈现「使用已有桶 / 新建桶」二选一，未获用户显式选择不得推进，不得代为默认（frontend 技能引导）。**使用已有** → 列出租户桶并**仅保留满足静态托管条件的公开读桶**（非公开桶一律剔除、不入候选）供用户勾选 + 区域与托管能力核验；**新建** → **桶名默认与应用名称保持一致**（英文化：小写字母/数字/连字符，3–63 字符；**名称冲突追加短 uuid 后缀**），经用户确认后由 frontend 技能创建——**创建前展示桶配置卡**（存储类别**多 AZ 优先**；**阻止公网访问必须关闭**——该开关开启则匿名读被拒、静态托管不可用；**桶策略固定公共读**：仅匿名 GetObject，不可改为其他），创建后**回读核验三项实际生效**。**两桶边界**：此为前端静态托管桶（公开读），与后端存储桶分属两域——后端存储桶的获取方式、私有规格、临时凭证约束与对接工具全部遵循 `rds-supabase-mgr-mcp` 技能场景五，二者禁止混同与复用
-6. **Storage 后端对接（仅当步骤二标记 `storage` 能力；无存储诉求则本项整体跳过，不创建任何后端桶）**：**识别即接入（强制纪律）——存储诉求一经确认，对接在本步骤内必须当场完成，禁止挂起待办、禁止推迟到上线后（"可后补"是兜底能力，不是拖延理由）**。**对接状态先行判定（承接第 3 项勾选与探测结果，不另行选择）**——勾选「使用已有应用」→ 接续第 3 项 `show_supabase_application` 的存储对接状态探测：**已对接 OBS → 复用既有对接**（`storage.source=existing`，不新建桶、不重复对接）；**未对接 → 立即触发对接**：按 `rds-supabase-mgr-mcp` 技能场景五（现有桶列表**私有桶优先**/新建桶两选择经用户勾选，`update_supabase_storage` 首次须全量凭据 桶名+AK/SK 经本地请求文件，两段式提交 → 跟踪 → 回查）——同时告知：新建应用时在创建意图中一次成型为推荐路径（避免事后流程拉长）。勾选「新建应用」→ 存储随创建请求一次成型（四项意图之一，创建工具自动确保桶并回填），无需事后对接。**桶的获取方式（复用/新建两选择）、私有桶规格、临时凭证约束、对接与凭据轮换工具全部遵循 `rds-supabase-mgr-mcp` 技能场景五**（`discover_supabase_storage` / `create_supabase_new_obs` / `update_supabase_storage`），本技能不复述其规则；本技能仅保留专项约束：**禁止复用前端托管桶**（公开读桶复用即权限越界）→ 写 webapp.json instance/obs/mcp/storage 段 → gate PASS
+6. **Storage 后端对接（仅当步骤二已标记 `storage` 能力；无存储诉求则本项整体跳过，不创建任何后端桶）**：**识别即接入（强制纪律）——存储诉求一经确认，对接在本步骤内必须当场完成，禁止挂起待办、禁止推迟到上线后（"可后补"是后备能力，不是拖延的理由）**。**对接状态先行判定（承接第 3 项勾选与探测结果，不另行选择）**——勾选「使用已有应用」→ 接续第 3 项 `show_supabase_application` 的存储对接状态探测：**已对接 OBS → 复用既有对接**（`storage.source=existing`，不新建桶、不重复对接）；**未对接 → 立即触发对接**：按 `rds-supabase-mgr-mcp` 技能场景五（现有桶列表**私有桶优先**/新建桶两选择经用户勾选，`update_supabase_storage` 首次须全量凭据 桶名+AK/SK 经本地请求文件，两段式提交 → 跟踪 → 回查）——同时告知：新建应用时在创建意图中一次成型为推荐路径（避免事后流程拉长）。勾选「新建应用」→ 存储随创建请求一次成型（四项意图之一，创建工具自动确保桶并回填），无需事后对接。**桶的获取方式（复用/新建两选择）、私有桶规格、临时凭证约束、对接与凭据轮换工具全部遵循 `rds-supabase-mgr-mcp` 技能场景五**（`discover_supabase_storage` / `create_supabase_new_obs` / `update_supabase_storage`），本技能不复述其规则；本技能仅保留专项约束：**禁止复用前端托管桶**（公开读桶复用即权限越界）→ 写 webapp.json instance/obs/mcp/storage 段 → gate PASS
 
 ### 步骤四 · 数据面接入 → 断点 `mcp_connected`
 
@@ -193,7 +193,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 
 1. 三层验证（launch-checklist）：后端项 / 前端项 / 连通项（站点渲染、API 可见性、**多用户隔离抽检**、auth 回调）；抽检测试账号创建后即记入 webapp.json `test_accounts`（email/密码/用途）
 2. 上线报告（三级交付语义）→ 写 webapp.json → gate `--verify` PASS
-3. **输出「应用名片」并落盘 `.hwsupabase/app-card.md`**（launched 后最终交付物）：应用名称、功能介绍、访问地址、后端地址、**测试账号（含密码）**、**Dashboard 登录（账号固定 supabase + 密码——新建应用取创建时本地请求文件 create.password 原文，必须展示在名片表格中）**、数据模型与技术栈概览、使用方式（更新/回滚/下线触发语）——格式见输出格式
+3. **输出「应用名片」并写入 `.hwsupabase/app-card.md`**（launched 后最终交付物）：应用名称、功能介绍、访问地址、后端地址、**测试账号（含密码）**、**Dashboard 登录（账号固定 supabase + 密码——新建应用取创建时本地请求文件 create.password 原文，必须展示在名片表格中）**、数据模型与技术栈概览、使用方式（更新/回滚/下线触发语）——格式见输出格式
 
 **断点续作**：会话开始先读 webapp.json → 从 `last_completed_stage` 的下一步骤重入，并**重验该步骤通过条件**（不信任历史结论）。
 
@@ -224,7 +224,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 
 | 平面 | MCP | 关键能力 |
 |---|---|---|
-| 管理面 | mcp_server_rds_supabase_mgr（53 工具） | 实例创建/配置（EIP/安全组/SSL）、ApiKey 交付、`update_supabase_auth_config`（回调配置）、删除；两阶段确认 + 执行账本 |
+| 管理面 | mcp_server_rds_supabase_mgr（58 工具） | 实例创建/配置（EIP/安全组/SSL）、ApiKey 交付、`update_supabase_auth_config`（回调配置）、删除；两阶段确认 + 执行记录 |
 | 数据面 | mcp_server_rds_supabase（38 工具） | `execute_sql`（单一事务，五步部署执行者）、结构查询、RLS/advisors、用户管理；只读拦截/审计脱敏 |
 
 两台 MCP **均不随技能安装装载**——场景触发技能后，由步骤三（管理面）与步骤四（数据面）在流程内自动从本仓动态安装（完整命令内联于 workflow-stages.md 对应步骤，进入时读取）。人类可读的安装指南与来源表见 [README.md](README.md) 与 [INSTALL.md](INSTALL.md)；完整路由矩阵见 references/routing-table.md。
@@ -278,7 +278,7 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 - **节点快讯**（关键动作前后各一行）：`动作 · 对象 · 结果摘要`（如"部署 init.sql · 批次 b1 · 12 对象 applied"）；长操作（实例创建/构建/部署/上传）开始与完成各发一条
 - **步骤报告**（每步骤完成时）：先更新进度看板（聊天内**完整重发步骤总览表**：本步置 ✅、下一步骤置 🔄），再输出报告——目标、执行动作、通过条件验证结果（**引用 gate verdict**）、下一步骤预告 + 需要用户准备什么
 - **上线报告**（步骤九）：三级交付语义（本地已验证/环境已准备/线上验收通过）+ stable_url + 前端版本记录引用；格式见 references/launch-checklist.md
-- **应用名片**（步骤九 launched 后输出 + 落盘 `.hwsupabase/app-card.md`）：
+- **应用名片**（步骤九 launched 后输出 + 写入 `.hwsupabase/app-card.md`）：
 
   ```
   【应用名片】<应用名称>
@@ -311,15 +311,15 @@ environment_ready → requirements_confirmed → instance_ready → mcp_connecte
 ## 注意事项
 
 - **凭据红线**：密钥永不写入 webapp.json/会话内容/工具返回；agent 不读取交付文件；凭据三层优先级（项目 `secrets/` → 项目内 devkit 文件 → 全局 devkit 显式确认）；anon key 进入前端产物属预期，Service Role Key 绝不进入；**唯一例外**——步骤九 验收创建的**应用级测试账号**（邮箱+密码）记入 `test_accounts` 并随「应用名片」交付用户：属应用演示账号而非云凭据（正式使用前改密或删除）
-- **环境配置项目级隔离（红线）**：Region / RDS·OBS 接入点 / PROJECT_ID 的**唯一权威是项目内 webapp.json `environment` 段**——**禁止从 agent 进程环境、shell 会话或全局环境变量读取同名变量**（可能来自其他项目或本机全局，跨项目共享即边界溢出）；`diagnostics discover` 解析结果必须写回项目配置；`HUAWEICLOUD_REGION` 等环境变量名仅在步骤三/四启动 MCP 时由项目配置注入进程（进程作用域，不 export）；凭据四选项交互（禁止跳过）：A 项目 `secrets/` 与 B 项目内 devkit 文件（`HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件）勾选即采用；**C 感知到的系统/用户级凭证配置（全局 devkit、`~/.config/huaweicloud/`、`~/.obsutilconfig`、环境变量）不得直接采用**——逐项显示（级别/来源/账号标识，不显明文）经用户确认后采用并记 `credential_source=external_confirmed`；D 用户指定或输入落盘项目 `secrets/`——多项目共用一台机器时，A 项目的凭证配置不得静默进入 B 项目
-- **凭据项目级隔离（红线）**：登录态与凭据**只存放于当前项目内**——`<项目根>/.hwsupabase/secrets/`（0600、属主本人、目录排除 Git）。**禁止**写入全局或系统环境变量（shell profile、launchd/系统级 env、会话 `export`）；**禁止**新建或覆写个人级配置（`~/.config/huaweicloud/credentials.json`、`~/.obsutilconfig`）——已有个人级文件属既有工具与其他项目，**不迁移、不删除、不覆写**。MCP 进程凭据经进程内 env 或项目内凭据文件注入（`HUAWEICLOUD_MCP_CREDENTIALS_FILE` / `HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件；`SUPABASE_REQUESTS_FILE=<项目>/.hwsupabase/requests.json`，Key 交付落盘 secrets/）。本项目凭据轮换只影响本项目 `.hwsupabase/`，不污染其他项目开发
+- **环境配置项目级隔离（红线）**：Region / RDS·OBS 接入点 / PROJECT_ID 的**唯一权威是项目内 webapp.json `environment` 段**——**禁止从 agent 进程环境、shell 会话或全局环境变量读取同名变量**（可能来自其他项目或本机全局，跨项目共享即边界溢出）；`diagnostics discover` 解析结果必须写回项目配置；`HUAWEICLOUD_REGION` 等环境变量名仅在步骤三/四启动 MCP 时由项目配置注入进程（进程作用域，不 export）；凭据四选项交互（禁止跳过）：A 项目 `secrets/` 与 B 项目内 devkit 文件（`HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件）勾选即采用；**C 感知到的系统/用户级凭证配置（全局 devkit、`~/.config/huaweicloud/`、`~/.obsutilconfig`、环境变量）不得直接采用**——逐项显示（级别/来源/账号标识，不显明文）经用户确认后采用并记 `credential_source=external_confirmed`；D 用户指定或输入写入项目 `secrets/`——多项目共用一台机器时，A 项目的凭证配置不得静默进入 B 项目
+- **凭据项目级隔离（红线）**：登录态与凭据**只存放于当前项目内**——`<项目根>/.hwsupabase/secrets/`（0600、属主本人、目录排除 Git）。**禁止**写入全局或系统环境变量（shell profile、launchd/系统级 env、会话 `export`）；**禁止**新建或覆写个人级配置（`~/.config/huaweicloud/credentials.json`、`~/.obsutilconfig`）——已有个人级文件属既有工具与其他项目，**不迁移、不删除、不覆写**。MCP 进程凭据经进程内 env 或项目内凭据文件注入（`HUAWEICLOUD_MCP_CREDENTIALS_FILE` / `HUAWEICLOUD_DEVKIT_CREDENTIALS_FILE` 指向项目内 0600 文件；`SUPABASE_REQUESTS_FILE=<项目>/.hwsupabase/requests.json`，Key 交付写入 secrets/）。本项目凭据轮换只影响本项目 `.hwsupabase/`，不污染其他项目开发
 - **MCP 注册项目级隔离（红线）**：动态安装的两台 MCP **只注册进当前项目的项目级 MCP 配置**——Claude Code `<项目根>/.mcp.json`（`mcpServers` 结构）、CodeArts `<项目根>/.codeartsdoer/`（与项目级技能目录同根）、OfficeAce 项目根下该宿主项目级配置、opencode `<项目根>/opencode.json` 或 `.opencode/` 内配置（`mcp` 键）；**禁止一切用户级与系统级位置**（`~/.claude.json` user scope、Claude Desktop `claude_desktop_config.json`、`~/.config/opencode/` 全局、`~/.codeartsdoer/` 个人级、系统 managed 配置等）——用户级注册会使本机其他项目可见并使用本项目实例的 MCP 与凭据，属边界溢出；**宿主仅有用户级配置机制 → 停止并报告，不注册**（宁缺毋溢出）；注册后核验条目落位项目级且未触碰用户级/系统级，再重载客户端；含凭据的配置文件必须列入 `.gitignore`（0600，凭据由用户从 secrets/ 填入，agent 不经手明文）；**严禁 `uv tool install`/`pip install` 等装入用户级/系统级环境**——`uvx` 仅一次性缓存运行（共享构建缓存非安装非注册），本地克隆 `.venv` 只落仓内目录（项目级或唯一临时目录）；下线时从项目级配置移除两台条目
 - **MCP 安装来源锁定**：两台 MCP 服务器只从**本仓**安装（uvx git 模板 `git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirectory=...`，本地 `uv run --directory server/... <入口脚本>`，或**网络逃生通道**：git 不可达时立即切换 ZIP 归档下载解压 + 本地运行——`https://github.com/huaweicloud/rds-supabase-fullstack/archive/refs/heads/main.zip`，连续失败 2 次或 30 秒无进展即切换，不反复重试；`.../archive/<commit>.zip` 为 pin 等价形式）；禁止从 PyPI/第三方仓库搜索安装——存在同名第三方 "supabase" MCP 包，会导致连接到完全错误的服务器
 - **配置完备性检查**（步骤三第一动作）：管理面需凭据 + `HUAWEICLOUD_PROJECT_ID` + `SUPABASE_RDS_ENDPOINT`；frontend/OBS 需 AK/SK + `HUAWEICLOUD_REGION`。缺失项以清单**以清单形式提示用户填写**（不猜测不跳过）；endpoint 无法推导（discover 失败/非标准区域）→ 用户显式指定
 - **边界外处置**：复杂业务逻辑（支付/第三方调用/长任务）超出 v1 数据层边界——明确告知用户并停止，不擅自以 RPC 模拟
 - **Storage 按需接入**：步骤二识别文件/图片/视频管理诉求并标记 `storage` 能力 → 步骤三按**条件驱动**对接：**不无条件创建后端 OBS 桶**——仅当存储诉求存在**且**所选实例尚未对接时才创建（新建固定私有桶）；勾选已有应用且已对接 → **复用既有对接，不新建、不重复对接**；选既有桶必先通过桶策略安全评估（存在公开读/匿名授权即停止）；**禁止复用前端托管桶**（公开读桶复用即权限越界与隐私暴露）
 - v1 单环境（webapp.json 字段预留多环境扩展）
-- 管理面操作遵循其两阶段确认与执行账本；未知结果不重放、不删账本
+- 管理面操作遵循其两阶段确认与执行记录；未知结果不重放、不删除执行记录
 - 步骤通过条件未满足不得推进；强制门（步骤五步骤六）不可跳过
 
 ## 文档加载策略
