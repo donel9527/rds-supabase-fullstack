@@ -7,6 +7,16 @@ semantic versioning.
 
 ### Added
 
+- All seven skill INSTALL guides add a proactive environment probe before
+  the download-method choice: `node --version` tests the npx skills add
+  prerequisite and `git ls-remote` live-tests GitHub reachability over
+  git (real-world environments with public-network restrictions on git
+  fail exactly here). One probe run decides the channel - Node >= 22.20
+  picks method A, git reachability picks B, and a double failure switches
+  decisively to the ZIP channel (HTTPS 443 download plus automatic
+  extraction, immune to the git restriction) with no retries of the dead
+  paths; execution-time failures still degrade once A -> B -> C but skip
+  channels the probe already ruled out.
 - `rds-supabase-web-build` skill v0.12.0: the user-guide report gains a
   participant catalog and an end-to-end timeline. New section 7 catalogs
   the six specialist skills and both MCP planes (management plane 53

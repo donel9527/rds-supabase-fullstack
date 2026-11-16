@@ -15,7 +15,7 @@
 | 管理面 MCP 服务器（53 工具） | 技能触发后环境检查通过时动态安装 | 本仓 `server/mcp_server_rds_supabase_mgr/`（不在技能包内，uvx 从 GitHub 直装） |
 | 凭据（AK/SK 或 Token）、Region、PROJECT_ID | 首次使用时 | 项目内受保护文件/用户提供 |
 
-前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（不可达见方式 B）。
+前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（通道受限时经环境探测果断走 ZIP 直下，见安装方式节）。
 
 ## 二、安装位置选择（必须交互，默认项目级）
 
@@ -41,7 +41,26 @@
 - CodeArts 的 `~/.codeartsdoer/skills` 与项目级 `<项目根>/.codeartsdoer/skills` 同名不同根，极易装错——选 ② 时逐字核对完整路径
 - 凭据与 MCP 配置始终只在项目级（本技能红线），装到用户级/系统级不会改变这一点
 
-## 三、安装方式（A/B 择一）
+## 三、安装方式（先探测后选择：A/B/C）
+
+### 前置：环境探测与方法选择（一次探测定通道）
+
+部分用户环境对 git 有公网限制（实测场景），安装前先按序执行两项探测——各一次、失败不重试——按结果直接选定方式：
+
+```bash
+# 探测①：方式 A 前置——Node.js ≥ 22.20（npx skills add 的运行条件）
+node --version 2>/dev/null
+# 探测②：方式 B 前置——git 在且 GitHub 直连可达（git 公网受限的环境此步即失败）
+git ls-remote https://github.com/huaweicloud/rds-supabase-fullstack.git HEAD
+```
+
+| 探测结果（一次即定） | 直接选定 |
+|---|---|
+| ① 输出版本 ≥ v22.20 | **方式 A** |
+| ① 不过（无 Node 或版本低）；② 返回 HEAD 引用 | **方式 B** |
+| ①② 都不过——无 git、`ls-remote` 失败或超时（git 公网受限实测场景） | **方式 C（果断直切，不再回头试 A/B）** |
+
+执行纪律：选定后直接执行；仅当**执行本身**失败时按 A→B→C 顺降一次，并跳过探测已判不可用的方式（如 A 执行失败而探测②曾失败 → 跳过 B 直用 C），同一方式不重复第二次。
 
 ### 方式 A：`npx skills add`（主路径，推荐）
 
@@ -66,7 +85,7 @@ cp -r "$TMP/repo/skills/huaweicloud-supabase/rds-supabase-mgr-mcp" <项目技能
 rm -rf "$TMP"     # 复制完成即清理
 ```
 
-### 方式 C：ZIP 归档（网络逃生通道——git 连续失败 2 次或 30 秒无进展即切，不反复重试）
+### 方式 C：ZIP 直下自动解压（HTTPS 443 通道——git 公网受限或 A/B 执行失败即果断直切，不重试）
 
 ```bash
 TMP=$(mktemp -d)

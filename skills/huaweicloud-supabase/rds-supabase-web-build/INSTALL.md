@@ -17,7 +17,7 @@ Agent 按本文四节执行。安装范围**仅本技能**——不安装、不�
 
 **编排依赖说明**：本技能是编排者，步骤路由指向六个专项技能（mgr-mcp / mcp / usage / frontend / postgres-best-practices / function-graph，均在 `skills/huaweicloud-supabase/` 下）。路由目标缺失时对应环节如实降级：提示用户安装该专项技能后继续，或按能力边界自行执行可直接完成的部分。完整编排体验建议连带安装全部技能。
 
-前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（不可达见方式 C）。
+前置：Agent 支持 Agent Skills 标准；网络可达 GitHub（通道受限时经环境探测果断走 ZIP 直下，见第 1 步）。
 
 ## 二、安装位置选择（必须交互，默认项目级）
 
@@ -45,7 +45,24 @@ Agent 按本文四节执行。安装范围**仅本技能**——不安装、不�
 
 ## 三、三步安装
 
-### 第 1 步 · 安装技能文件（方式 A/B/C 按序择一，A 为主路径）
+### 第 1 步 · 安装技能文件（先探测后选择：A/B/C）
+
+**前置：环境探测与方法选择（一次探测定通道）**——部分用户环境对 git 有公网限制（实测场景），先按序执行两项探测（各一次、失败不重试），按结果直接选定方式：
+
+```bash
+# 探测①：方式 A 前置——Node.js ≥ 22.20（npx skills add 的运行条件）
+node --version 2>/dev/null
+# 探测②：方式 B 前置——git 在且 GitHub 直连可达（git 公网受限的环境此步即失败）
+git ls-remote https://github.com/huaweicloud/rds-supabase-fullstack.git HEAD
+```
+
+| 探测结果（一次即定） | 直接选定 |
+|---|---|
+| ① 输出版本 ≥ v22.20 | **方式 A** |
+| ① 不过（无 Node 或版本低）；② 返回 HEAD 引用 | **方式 B** |
+| ①② 都不过——无 git、`ls-remote` 失败或超时（git 公网受限实测场景） | **方式 C（果断直切，不再回头试 A/B）** |
+
+执行纪律：选定后直接执行；仅当**执行本身**失败时按 A→B→C 顺降一次，并跳过探测已判不可用的方式，同一方式不重复第二次。
 
 **方式 A**（`npx skills add`，主路径，推荐）：标准 Agent Skills 生态 CLI（Vercel 开源，支持 OpenCode、Claude Code 等 75+ 宿主）直接从本仓 GitHub 源安装；前置 Node.js ≥ 22.20。
 
@@ -66,7 +83,7 @@ rm -rf "$TMP"     # 复制完成即清理
 
 （连带安装全部技能时，把复制源换成 `"$TMP/repo/skills/huaweicloud-supabase/"*`。）
 
-**方式 C**（ZIP 归档，网络逃生通道——git 失败即切，不反复重试）：连续失败 2 次或 30 秒无进展即判失败 → 下载 ZIP 归档解压：
+**方式 C**（ZIP 直下自动解压，HTTPS 443 通道——探测②不通（git 公网受限）或 A/B 执行失败即果断直切，不重试）：下载 ZIP 归档解压：
 
 ```bash
 TMP=$(mktemp -d)
