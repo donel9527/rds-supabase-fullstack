@@ -77,16 +77,17 @@ rm -rf "$TMP"     # 复制完成即清理
 
 ### 方式 C：ZIP 直下自动解压（HTTPS 443 通道——git 公网受限或 A/B 执行失败即果断直切，不重试）
 
+**下载与解压固定落当前工作区项目根目录，禁止就此询问用户**（安装全程仅安装位置需用户交互）。在项目根执行：
+
 ```bash
-TMP=$(mktemp -d)
-curl -L --fail --max-time 120 -o "$TMP/rds.zip" \
+curl -L --fail --max-time 120 -o rds-supabase-skills.zip \
   https://github.com/huaweicloud/rds-supabase-fullstack/archive/refs/heads/main.zip
-unzip -q "$TMP/rds.zip" -d "$TMP"
-cp -r "$TMP/rds-supabase-fullstack-main/skills/huaweicloud-supabase/rds-supabase-usage" <项目技能目录>/
-rm -rf "$TMP"
+unzip -q rds-supabase-skills.zip   # 解压出 rds-supabase-fullstack-main/
+cp -r rds-supabase-fullstack-main/skills/huaweicloud-supabase/rds-supabase-usage <项目技能目录>/
+rm -rf rds-supabase-skills.zip rds-supabase-fullstack-main/   # 复制完成即清理，项目零残留
 ```
 
-浏览器直接下载该 ZIP URL 亦可（下载物同样落临时目录）。ZIP 归档属本仓官方源，为无 Node.js 环境时的备选。
+`<项目技能目录>` 按第二节用户已选位置由 Agent 自行解析（项目级即宿主项目技能目录），同样不询问。浏览器直接下载该 ZIP URL 亦可——**落点固定为项目根目录**，不选择保存位置。ZIP 走 HTTPS 443 通道，与 git 传输不同路，通常不受 git 公网限制影响。ZIP 归档属本仓官方源，为无 Node.js 环境时的备选。
 
 ## 三、校验与完成报告
 

@@ -12,7 +12,17 @@
 
 ## 安装
 
-快速安装：`npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-web-build`（Node.js ≥ 22.20；详见 [INSTALL.md](INSTALL.md)）。
+快速安装（**含全部配套技能，`skills/huaweicloud-supabase/` 下七技能必须一次装齐，缺一不可**）：
+
+```bash
+npx skills add huaweicloud/rds-supabase-fullstack \
+  --skill rds-supabase-web-build --skill rds-supabase-mgr-mcp --skill rds-supabase-mcp \
+  --skill rds-supabase-usage --skill rds-supabase-frontend \
+  --skill rds-supabase-postgres-best-practices --skill rds-supabase-function-graph \
+  -a <宿主> -y
+```
+
+（Node.js ≥ 22.20；详见 [INSTALL.md](INSTALL.md)）
 
 ## MCP 安装来源（工作流动态安装时使用；唯一允许的完整 URL）
 
@@ -34,7 +44,7 @@ uvx --from git+https://github.com/huaweicloud/rds-supabase-fullstack --subdirect
 
 ## 价值对比
 
-建站模式价值对比（传统自建 vs 全托管）见 [USER_GUIDE_REPORT.md](USER_GUIDE_REPORT.md)。
+建站模式价值对比（传统自建 vs 全托管；演示材料，不参与技能运行）见 [showcase.md](showcase.md)。
 
 ## 许可
 

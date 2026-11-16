@@ -7,6 +7,19 @@ semantic versioning.
 
 ### Added
 
+- Skill install guides: the ZIP channel now lands the download directly
+  in the workspace project root and never asks the user for a download
+  directory - real-world testing showed agents prompting for one, so
+  the only interactive step left is the install-location choice; the
+  agent resolves the skill target from that choice on its own. The
+  rds-supabase-web-build guide now mandates the full skill family: the
+  seven skills under skills/huaweicloud-supabase/ must be installed
+  together in one pass with no skipping - repeated `--skill` flags are
+  verified live against the skills CLI, methods B/C copy the whole
+  category, and the install check fails on any missing directory. The
+  mode-comparison report is renamed USER_GUIDE_REPORT.md -> showcase.md
+  and marked as demo material that does not participate in skill
+  operation.
 - All seven skill INSTALL guides add a proactive environment probe before
   the download-method choice: `node --version` tests the npx skills add
   prerequisite and `git ls-remote` live-tests GitHub reachability over

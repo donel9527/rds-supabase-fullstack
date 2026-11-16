@@ -14,7 +14,17 @@ Five bands from top to bottom: the orchestration bar (web-build + the webapp.jso
 
 ## Installation
 
-Quick install: `npx skills add huaweicloud/rds-supabase-fullstack --skill rds-supabase-web-build` (Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details).
+Quick install (**with all companion skills - the seven skills under `skills/huaweicloud-supabase/` must be installed together in one pass, no skipping**):
+
+```bash
+npx skills add huaweicloud/rds-supabase-fullstack \
+  --skill rds-supabase-web-build --skill rds-supabase-mgr-mcp --skill rds-supabase-mcp \
+  --skill rds-supabase-usage --skill rds-supabase-frontend \
+  --skill rds-supabase-postgres-best-practices --skill rds-supabase-function-graph \
+  -a <agent> -y
+```
+
+(Node.js >= 22.20; see [INSTALL.md](INSTALL.md) for details)
 
 
 See [INSTALL.md](INSTALL.md).
@@ -39,7 +49,7 @@ When the repository has been cloned locally, `uv run --directory server/<directo
 
 ## Value Comparison
 
-For a value comparison of site-building modes (traditional self-built vs. fully managed), see [USER_GUIDE_REPORT.md](USER_GUIDE_REPORT.md).
+For a value comparison of site-building modes (traditional self-built vs. fully managed; showcase material, not part of skill operation), see [showcase.md](showcase.md).
 
 ## License
 
