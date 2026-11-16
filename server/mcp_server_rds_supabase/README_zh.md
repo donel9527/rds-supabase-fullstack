@@ -77,7 +77,7 @@ uvx --from git+https://github.com/huaweicloud/rds-supabase-fullstack \
 |---|---|---|
 | `list_tables` | 按schema列出可访问的表 | READ |
 | `list_extensions` | 列出已安装的 PostgreSQL 扩展 | READ |
-| `execute_sql` | 执行任意 SQL（service-role 或直连） | WRITE |
+| `execute_sql` | 执行任意 SQL（service-role 或直连）；部署 init.sql 迁移批与配套清理脚本（删除场景、按用户指定执行） | WRITE |
 | `get_database_connections` | pg_stat_activity 活跃客户端后端 | READ |
 | `get_database_stats` | pg_stat_database + pg_stat_bgwriter 快照 | READ |
 | `get_project_url` | 返回配置的 Supabase 项目 URL | READ |

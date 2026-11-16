@@ -190,11 +190,10 @@ class InstanceCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('中文名',options['volume.type']['note'])
         self.assertIn('support_compute_group_type',options['volume.type']['note'])
         self.assertEqual(options['volume.size'],{'minimum':40,'maximum':40000,'recommended':40,'note':'GB'})
-        self.assertEqual(options['charge_info']['values'],
-                         [{'charge_mode':'postPaid'},
-                          {'charge_mode':'prePaid','period_type':'month','period_num':1},
-                          {'charge_mode':'prePaid','period_type':'year','period_num':1}])
+        self.assertEqual(options['charge_info']['values'],[{'charge_mode':'postPaid'}])   # on-demand only
         self.assertEqual(options['charge_info']['recommended'],{'charge_mode':'postPaid'})
+        self.assertIn('不支持包周期',options['charge_info']['note'])
+        self.assertIn('price-rds-pg/rds_00_0005',options['charge_info']['note'])   # billing-rules doc linked
         self.assertEqual(options['ha.mode'],{'fixed':'Single'})
         self.assertEqual(options['ha.replication_mode'],{'values':['async','sync'],'recommended':'async'})
         self.assertEqual(options['availability_zone']['values'],['cn-east-3a','cn-east-3b'])

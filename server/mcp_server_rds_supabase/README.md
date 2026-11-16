@@ -87,7 +87,7 @@ Database / self-hosted Supabase on managed PostgreSQL / operations automation.
 |---|---|---|
 | `list_tables` | List accessible tables grouped by schema | READ |
 | `list_extensions` | List installed PostgreSQL extensions | READ |
-| `execute_sql` | Run arbitrary SQL (service-role or direct connection) | WRITE |
+| `execute_sql` | Run arbitrary SQL (service-role or direct connection); deploys init.sql migration batches and their companion cleanup scripts (deletion scenarios, on user request) | WRITE |
 | `get_database_connections` | Active client backends from pg_stat_activity | READ |
 | `get_database_stats` | pg_stat_database + pg_stat_bgwriter snapshot | READ |
 | `get_project_url` | Return the configured Supabase project URL | READ |

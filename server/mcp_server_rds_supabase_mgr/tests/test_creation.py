@@ -82,18 +82,17 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
             body=copy.deepcopy(self.body);body[key]=value;self.file.write_text(json.dumps({'create':body}))
             with self.assertRaises(McpToolError):await self.ops.create_reference('create')
         self.client.request.assert_not_awaited()
-    async def test_ha_mode_and_prepaid_are_selectable(self):
+    async def test_ha_mode_selectable_and_charge_info_is_postpaid_only(self):
         body=copy.deepcopy(REAL_NEW_PG);body['mode']='Ha'
         body['managed_instance']['ha']={'mode':'Ha','replication_mode':'sync'}
-        body['managed_instance']['charge_info']={'charge_mode':'prePaid','period_type':'year','period_num':3,'is_auto_renew':False}
         self.file.write_text(json.dumps({'create':body}))
         preview=await self.ops.create_reference('create');self.assertNotIn('Fixture-Secret1',str(preview))
-        for bad,needle in (({'charge_mode':'prePaid','period_type':'month','period_num':10},'period_num'),
-                           ({'charge_mode':'prePaid','period_type':'year','period_num':4},'period_num'),
-                           ({'charge_mode':'prePaid','period_type':2,'period_num':1},'not the numeric'),
-                           ({'charge_mode':'prePaid'},'period_type'),
-                           ({'charge_mode':'postPaid','period_num':3},'postPaid charge_info'),
-                           ({'charge_mode':'prePaid','period_type':'month','period_num':3,'is_auto_renew':'yes'},'is_auto_renew')):
+        for bad,needle in (({'charge_mode':'prePaid'},'on-demand only'),
+                           ({'charge_mode':'prePaid','period_type':'month','period_num':3},'unexpected field'),
+                           ({'charge_mode':'x'},'postPaid'),
+                           ({'charge_mode':'postPaid','period_type':'month'},'unexpected field'),
+                           ({'charge_mode':'postPaid','is_auto_pay':True},'unexpected field'),
+                           ({},'missing required field')):
             broken=copy.deepcopy(REAL_NEW_PG);broken['managed_instance']['charge_info']=bad
             self.file.write_text(json.dumps({'create':broken}))
             with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
@@ -103,17 +102,14 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         self.file.write_text(json.dumps({'create':body}))
         with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
         self.assertIn('root',message(ctx.exception))
-    async def test_new_pg_validates_branch_and_billing(self):
+    async def test_new_pg_validates_branch_and_on_demand_billing(self):
         del self.body['existing_instance'];self.body['manage_type']='newly_instance'
         self.body['managed_instance']={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}
         self.save();preview=await self.ops.create_reference('create');self.assertNotIn('Fixture-Secret1',str(preview))
         self.body['managed_instance']['charge_info']={'charge_mode':'prePaid'}
         self.save()
         with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
-        self.assertIn('period_type',message(ctx.exception))
-        self.body['managed_instance']['charge_info']={'charge_mode':'prePaid','period_type':'month','period_num':6}
-        self.save()
-        await self.ops.create_reference('create')
+        self.assertIn('on-demand only',message(ctx.exception))
     async def test_new_pg_without_enterprise_project_is_accepted(self):
         del self.body['existing_instance'];self.body['manage_type']='newly_instance'
         # Personal accounts omit managed_instance.enterprise_project_id entirely -
@@ -128,14 +124,14 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         self.client.request.return_value=(202,{})
         with self.assertRaises(McpToolError):await self.ops.create_reference('create',True,preview['plan_id'])
         self.assertEqual(self.ops.plans.inspect(preview['plan_id'])['state'],'unknown')
-        prepaid=copy.deepcopy(REAL_NEW_PG);prepaid['managed_instance']['charge_info']={'charge_mode':'prePaid','period_type':'year','period_num':1}
+    async def test_prepaid_order_no_longer_exists_on_the_creation_path(self):
+        # On-demand billing is fixed: a prepaid charge_info is rejected before any
+        # cloud call, so the creation path can no longer produce a payable order.
+        prepaid=copy.deepcopy(REAL_NEW_PG);prepaid['managed_instance']['charge_info']={'charge_mode':'prePaid'}
         self.file.write_text(json.dumps({'create':prepaid}))
-        order_preview=await self.ops.create_reference('create')
-        self.client.request.return_value=(202,{'order_id':'order-1'})
-        result=await self.ops.create_reference('create',True,order_preview['plan_id'])
-        self.assertEqual(result['status'],'order_created');self.assertEqual(result['order_id'],'order-1')
-        self.assertIn('pay_supabase_order',str(result))
-        self.assertEqual(self.ops.plans.inspect(order_preview['plan_id'])['state'],'accepted')
+        with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
+        self.assertIn('on-demand only',message(ctx.exception))
+        self.client.request.assert_not_awaited()
     async def test_volume_type_follows_environment_selection(self):
         del self.body['existing_instance'];self.body['manage_type']='newly_instance'
         base={'datastore':{'type':'PostgreSQL','version':'16'},'charge_info':{'charge_mode':'postPaid'},'flavor_ref':'pg-flavor','volume':{'type':'CLOUDSSD','size':100},'availability_zone':'region-1a','security_group_id':'11111111-1111-4111-8111-111111111111','password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}

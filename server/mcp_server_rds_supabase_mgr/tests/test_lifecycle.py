@@ -211,7 +211,7 @@ class JobFollowUpTests(LifecycleTestCase):
         self.client.request.side_effect = [
             (200, detail(managed_instance={'id': INSTANCE_ID, 'name': 'pg-1'})),
             (200, {'total_count': 1, 'data': [{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}]}),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'pg-1'}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'pg-1', 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (202, {'job_id': 'job-app'}),
             (200, {'job_id': 'job-inst'}),
         ]
@@ -226,7 +226,7 @@ class JobFollowUpTests(LifecycleTestCase):
         self.client.request.side_effect = [
             (200, detail(managed_instance={'id': INSTANCE_ID, 'name': 'pg-1'})),
             (200, {'total_count': 1, 'data': [{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}]}),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'pg-1'}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'pg-1', 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (200, {'job_id': 'job-77'}),
         ]
         result = await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])

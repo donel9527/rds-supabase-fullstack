@@ -60,7 +60,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ### 创建请求体（写入本地请求文件的完整字段）
 
-真实可用的创建请求示例（新建实例；选主备或包周期时把 mode/ha/charge_info 换成对应值）：
+真实可用的创建请求示例（新建实例；选主备时把 mode/ha 换成对应值；charge_info 固定按需）：
 
 ```json
 {"name":"rds-supabase-5a55","basic_config":{"region":"cn-east-3","vpc_id":"<VPC ID>","subnet_id":"<子网 ID>","time_zone":"UTC+08:00"},"storage_component":{"enabled":false},"version":"1.0.0","mode":"Single","flavor_ref":"rds.supabase.n1.large.2","availability_zone":"cn-east-3a","password":"<本地生成的密码>","manage_type":"newly_instance","managed_instance":{"datastore":{"type":"PostgreSQL","version":"17.11.260901"},"ha":{"mode":"Single","replication_mode":"async"},"charge_info":{"charge_mode":"postPaid"},"flavor_ref":"rds.pg.n1.medium.2","volume":{"type":"ESSD","size":40},"availability_zone":"cn-east-3a","password":"<本地生成的密码>","port":5432},"security_group_id":"<应用安全组 ID，可省略由创建工具自动创建注入>"}
@@ -69,8 +69,8 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 密码规则（应用密码与数据库密码同规则）：8-32 位，至少包含大写字母、小写字母、数字、特殊字符（`~!@#$%^*-_+=?,`）中的三种；本地生成时只从这些字符里取，生成后直接入文件。
 
 - **公共必填**：name（4-64 字符，中文按 3 字节计，字母或中文开头）、basic_config{region, vpc_id, subnet_id, 可选 time_zone}、version（应用版本，取当前最高）、mode（Single/Ha，与用户确认）、flavor_ref（应用规格，形如 `rds.supabase.n1.large.2`）、availability_zone（Single 一个 AZ；Ha 两个不同 AZ，此处为主 AZ）、password（默认用户 supabase 的密码，兼 Dashboard 管理员登录密码）、storage_component、manage_type。
-- **managed_instance 追加**：datastore{type=PostgreSQL, version=引擎版本}、ha{mode 与顶层一致，replication_mode: async/sync}、charge_info（按需 `{"charge_mode":"postPaid"}`；包周期 `{"charge_mode":"prePaid","period_type":"month"/"year","period_num":1-9 或 1-3}`——period_type 是字符串不是数字）、flavor_ref（数据库规格，形如 `rds.pg.n1.medium.2`，与应用规格是两回事）、volume{type: 按 `list_db_instance_storage_types` 实时结果选择, size: 40-40000 GB}、availability_zone（与顶层主 AZ 一致）、password（规则同上，可与应用密码同值）、security_group_id（可省略，创建工具自动建组注入）、port（固定 5432，传或省略均可）、可选 enterprise_project_id（**仅企业项目账号需要**：取值来自 `discover_db_instance_for_create` 实时返回的企业项目列表，默认选中 default 项目；个人账号省略不填，省略时归属由服务端决定）、可选 configuration_id（参数模板 ID，取值来源 ListConfigurations，默认不传）。
-- 不支持 tags 与未知字段——如实告知，不静默丢弃用户要求。主备/包周期是否可用以所选环境实际为准：后端拒绝时报错附 error_code/error_msg，如实转述。
+- **managed_instance 追加**：datastore{type=PostgreSQL, version=引擎版本}、ha{mode 与顶层一致，replication_mode: async/sync}、charge_info（**固定按需** `{"charge_mode":"postPaid"}`——托管实例仅支持按需计费，不支持包周期；计费规则：计费项=实例规格+存储空间（必选）+备份空间超出免费额度（存储容量 100%）部分，公网带宽/跨区域备份可选，按秒计费整点小时结算、自实例创建成功时间点起计费至删除 https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html ）、flavor_ref（数据库规格，形如 `rds.pg.n1.medium.2`，与应用规格是两回事）、volume{type: 按 `list_db_instance_storage_types` 实时结果选择, size: 40-40000 GB}、availability_zone（与顶层主 AZ 一致）、password（规则同上，可与应用密码同值）、security_group_id（可省略，创建工具自动建组注入）、port（固定 5432，传或省略均可）、可选 enterprise_project_id（**仅企业项目账号需要**：取值来自 `discover_db_instance_for_create` 实时返回的企业项目列表，默认选中 default 项目；个人账号省略不填，省略时归属由服务端决定）、可选 configuration_id（参数模板 ID，取值来源 ListConfigurations，默认不传）。
+- 不支持 tags 与未知字段——如实告知，不静默丢弃用户要求。主备是否可用以所选环境实际为准：后端拒绝时报错附 error_code/error_msg，如实转述。
 
 ### 预览前逐项核对清单
 
@@ -89,7 +89,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 9 | manage_type | 新建实例 | newly_instance |
 | 10 | datastore | PostgreSQL + 引擎版本 | 17.11.260901 |
 | 11 | ha | mode 与顶层 mode 一致 | {"mode":"Single","replication_mode":"async"} |
-| 12 | charge_info | 按需仅 charge_mode；包周期 period_type 字符串 month/year + period_num | postPaid |
+| 12 | charge_info | 固定按需：仅 `{"charge_mode":"postPaid"}`（不支持包周期） | postPaid |
 | 13 | managed flavor_ref | 数据库规格（不等于应用规格）；按 group_type 十大类分组选择，默认推荐与应用同规格 | rds.pg.n1.medium.2 |
 | 14 | volume | 环境支持的盘型（核对中文名与实时兼容规格类型） + 容量 | ESSD / 40 |
 | 15 | managed availability_zone | 与顶层主 AZ 一致 | cn-east-3a |
@@ -109,7 +109,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 结构校验不过 | MCP_INVALID_ARGS（点名具体字段） | 按点名字段修正；不删用户要求后静默重试 |
 | 预览超 10 分钟/参数变 | MCP_GUARDRAIL_BLOCKED | 重新预览确认 |
 | 同意图有未完成执行 | MCP_GUARDRAIL_BLOCKED | 查记录核对，不新建计划绕过 |
-| 响应含 order_id（包周期） | status=order_created，计划记 accepted | 走场景九订单闭环：核对→授权→支付→按正常节奏查任务；放弃则取消 |
+| 响应含 order_id（防御性：固定按需后正常不出现；如出现按订单闭环处理） | status=order_created，计划记 accepted | 走场景九订单闭环：核对→授权→支付→按正常节奏查任务；放弃则取消 |
 | 提交中断 | submission_unknown + plan_id | `show_operation_job_status` 查任务、回查资源；禁止重放 |
 | 后端明确拒绝（4xx） | MCP_INVALID_ARGS 等，报错附后端 error_code/error_msg；计划标 failed | 如实转述；修正参数后重新预览再提交（failed 不阻塞重试，与结果不明不同） |
 | 写开关未开/只读拦截 | MCP_READ_ONLY | 操作员同时核对两个变量并重启 |
@@ -236,7 +236,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 ## 场景九：包周期订单
 
-计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买方式在创建请求 `managed_instance.charge_info` 中确定。创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；出现创建任务（job_id）才开始建资源。
+计费边界：RDS Supabase 应用公测期间免费，费用仅产生于托管实例；托管实例**固定按需计费**（创建请求 `managed_instance.charge_info` 仅 `{"charge_mode":"postPaid"}`，不支持包周期），创建不再返回 `order_id`。订单工具用于**控制台侧产生的包周期订单**（如存量实例）的核对、支付与取消。
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
@@ -251,14 +251,14 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
-| 1. 预检 | `show_supabase_application` | application_id | 状态正常、无进行中操作；记录 public_ip/安全组 ID/托管实例 ID/桶名 |
-| 2. 问实例去留 | — | delete_managed_instance 必选 | 不能默认：false 留实例留费；true 双删不可逆（仅按需可级联，预付费先控制台退订） |
+| 1. 预检 | `show_supabase_application` | application_id | 无进行中操作（**状态不限**：正常/已停止/已移除均可删除）；记录 public_ip/安全组 ID/托管实例 ID/桶名 |
+| 2. 问实例去留 | — | delete_managed_instance 必选 | 不能默认：false 留实例留费；true 双删不可逆（**仅按需可级联**——包周期实例含挂载场景接入的，`true` 整体拒绝、改 false 删应用后控制台退订实例：费用中心→退订管理；计费模式无法核验同样失败关闭） |
 | 3. 预览 | `delete_supabase_application` | application_id、delete_managed_instance、confirm=false | 不可逆影响与费用后果展示给用户 |
 | 4. 提交跟踪 | `delete_supabase_application` → `show_operation_job_status` | confirm=true + plan_id | true 时返回 job_id + instance_job_id 双任务，分别跟踪至终态 |
 | 5. 确认消失 | `list_supabase_applications` | application_id 精确查 | 应用不在列表；级联时实例确认消失（可回 `list_supabase_manageable_instances` 交叉复核） |
 | 6. 残留处置 | 见下 | — | 输出残留清单与处置建议 |
 
-四层校验（服务端自动执行）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。残留处置通道：EIP 释放（控制台/KooCLI，停计费唯一路径）；托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，数据不可恢复先确认导出，包周期走控制台退订）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；OBS 桶与数据、本地 Key 文件与请求文件、项目 MCP 配置按需清理。
+四层校验（服务端自动执行，**均在提交前触发、应用保持可读**）：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**（包年/包月实例不支持 API 直删——级联与单独拆除均拦截，走控制台退订；charge_info 缺失失败关闭）。残留处置通道：EIP 释放（控制台/KooCLI，停计费唯一路径）；托管实例单独拆除 `delete_supabase_managed_instance`（应用 ID + managed_instance.id 双标识，**仅按需实例可直删、包周期走控制台退订**，数据不可恢复先确认导出）；安全组规则清理 `delete_supabase_security_group_rule`（先核对组未被共用）；整组下线 `delete_supabase_security_group`（标签门：仅 AUTO_CREATE=true/USE_FOR=Supabase 双标签且无引用；后端拒绝在用组）；OBS 桶与数据、本地 Key 文件与请求文件、项目 MCP 配置按需清理。
 
 ## 排障补充
 

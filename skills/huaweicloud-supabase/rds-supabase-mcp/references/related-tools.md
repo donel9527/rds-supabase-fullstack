@@ -14,7 +14,7 @@
 
 | 角色 | 工具 |
 |---|---|
-| **SQL 执行** | execute_sql（主要功能：执行任意 SQL；执行 init.sql 迁移脚本时整批一个事务、失败自动回滚；read_only 开关） |
+| **SQL 执行** | execute_sql（主要功能：执行任意 SQL；执行 init.sql 迁移脚本时整批一个事务、失败自动回滚，清理脚本 cleanup.sql 同一通道执行；read_only 开关） |
 | 结构查询 | list_tables / list_table_columns / list_indexes / list_constraints / list_foreign_keys / list_triggers / list_database_functions / get_function_definition / get_trigger_definition / get_rls_status / list_rls_policies |
 | 安全检查 | get_advisors / get_rls_status |
 | 运行态 | get_database_connections / get_database_stats / get_logs（analytics → CSV 级联，未配置时返回空列表与说明）/ explain_query / list_extensions / list_available_extensions |

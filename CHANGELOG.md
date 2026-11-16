@@ -7,6 +7,52 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a60 - deletion relaxes its status gate
+  and instance billing follows the official on-demand contract.
+  delete_supabase_application no longer requires the normal status: stopped
+  and removed applications are deletable - only in-flight current_actions
+  block the mutation (the guard message explains the relaxation). Direct
+  instance deletion is now reserved for on-demand instances behind a
+  billing-mode gate that runs before submission on both deletion tools
+  (delete_supabase_application cascade branch and
+  delete_supabase_managed_instance): yearly/monthly (prePaid) instances -
+  including prepaid PG instances linked via the attach-existing scenario -
+  cannot be deleted through the API; the cascade is rejected as a whole
+  (the application stays readable, the hint steers to re-issuing with
+  delete_managed_instance=False and unsubscribing console-side), and a
+  charge_info that cannot be verified fails closed. The
+  managed PG instance on the create-with-new-instance path is now on-demand
+  only: prePaid and its period fields are removed from charge_info (unknown
+  fields are rejected, prePaid fails with an explicit on-demand-only
+  message), the creation path can no longer produce a payable order, and
+  the order tools remain for console-side legacy orders. The billing rules
+  are shown to the user on every creation surface - preview warnings,
+  discovery charge_info field, arrangement module and the skill guide
+  carry the fee composition (instance flavor + storage mandatory, backup
+  beyond the 100% free allowance, optional public bandwidth / cross-region
+  backup; per-second billing settled hourly from successful creation until
+  deletion) with the official pricing doc linked
+  (price-rds-pg/rds_00_0005). Dynamic pricing was investigated: KooCLI's
+  RDS service has no pricing APIs (348 operations, none rating-related)
+  and its BSS service is unsupported; the BSS SDK rating API rejects all
+  probed RDS catalog-code combinations ("billing item does not exist") -
+  dynamic pricing stays a future enhancement. Skill
+  `rds-supabase-mgr-mcp` 2.9.0 (server requirement >= 0.4.0a60). Tests:
+  542 passed + 168 subtests.
+- `mcp_server_rds_supabase` 0.4.1 - execute_sql now documents its two
+  typical batch uses in the tool description: deploying init.sql migration
+  batches and executing their companion cleanup scripts for deletion
+  scenarios (on user request, single transaction with automatic rollback).
+  Skill `rds-supabase-mcp` 2.7.0 adds the matching discipline: whenever an
+  init.sql migration script is finalized, strongly recommend producing the
+  companion cleanup script (cleanup.sql) at the same time - reverse-order
+  teardown, IF EXISTS for repeatability, covering tables/sequences/
+  functions/triggers/policies/roles while platform built-ins stay
+  untouchable - archived in pairs and executed on demand in deletion
+  scenarios at a user-specified time, never auto-run at deploy. New
+  init-sql-guide section 7, a verification recipe in verification-method,
+  and README/SKILL/related-tools touch-ups. Tests: 241 passed (93.92%
+  coverage).
 - `mcp_server_rds_supabase_mgr` 0.4.0a59 - new-EIP billing follows the
   official on-demand contract. The purchase path is fixed to on-demand
   billing (prepaid periods are removed from create_supabase_eip along

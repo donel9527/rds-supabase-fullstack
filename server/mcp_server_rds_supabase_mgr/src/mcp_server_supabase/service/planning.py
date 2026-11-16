@@ -9,7 +9,7 @@ except Exception:
     _GROUP_TYPE_LABELS = {"general": "通用型", "dedicated": "专属型", "bigmem": "大内存型", "arm": "鲲鹏型"}
 
 SCENARIOS = {
-    "create": "Creation via local reference available: existing PG (database_name fixed to root) or new PG (Single or Ha mode; postPaid or prepaid 1-9 months / 1-3 years - prepaid returns a console order); intent-driven phase planning via plan_supabase_creation; backend policy/live acceptance pending",
+    "create": "Creation via local reference available: existing PG (database_name fixed to root) or new PG (Single or Ha mode; on-demand billing only - the managed PG instance is postPaid, prepaid periods are not supported); intent-driven phase planning via plan_supabase_creation; backend policy/live acceptance pending",
     "delete": "Application-only execution available; PG cascade remains unavailable",
     "access": "SSL/EIP/application-password adapters available; SCM certificate inventory (list_ssl_certificates) and two-phase purchase (purchase_supabase_ssl_cert) available; live validation pending",
     "security_group": "Native VPC group query/create and rule add/delete adapters available; shared-resource inventory and live validation pending",
@@ -46,7 +46,7 @@ class PlanningService:
         return self.network
 
     def capabilities(self) -> dict[str, object]:
-        return {"mode": "configured_" + os.getenv("SUPABASE_TRANSPORT", "rest"), "generated_supabase_sdk": False, "input_policy": "reject_unknown_fields", "local_plan_cancellation": "prepared_only", "cloud_execution": "configured_subset", "implemented_operations": ["application queries", "key metadata", "auth query", "job query", "bounded job observation", "accepted Auth plan reconciliation", "SSL", "EIP", "application lifecycle (start/stop/restart)", "managed-instance lifecycle (stop/start/restart) and simplified detail query", "application-only deletion", "key reset", "registration flags", "local request references", "application password", "Auth providers and confirmation template", "OBS full-credential update", "VPC group query/create", "VPC rule add/delete", "security-group set for application/managed/attachable instance", "creation candidate queries", "Single and Ha creation (postPaid or prepaid order)", "protected local key delivery"], "scenarios": SCENARIOS.copy()}
+        return {"mode": "configured_" + os.getenv("SUPABASE_TRANSPORT", "rest"), "generated_supabase_sdk": False, "input_policy": "reject_unknown_fields", "local_plan_cancellation": "prepared_only", "cloud_execution": "configured_subset", "implemented_operations": ["application queries", "key metadata", "auth query", "job query", "bounded job observation", "accepted Auth plan reconciliation", "SSL", "EIP", "application lifecycle (start/stop/restart)", "managed-instance lifecycle (stop/start/restart) and simplified detail query", "application-only deletion", "key reset", "registration flags", "local request references", "application password", "Auth providers and confirmation template", "OBS full-credential update", "VPC group query/create", "VPC rule add/delete", "security-group set for application/managed/attachable instance", "creation candidate queries", "Single and Ha creation (on-demand billing only - the managed PG instance is postPaid, prepaid periods are not supported)", "protected local key delivery"], "scenarios": SCENARIOS.copy()}
 
     @staticmethod
     def _candidate_view(row):

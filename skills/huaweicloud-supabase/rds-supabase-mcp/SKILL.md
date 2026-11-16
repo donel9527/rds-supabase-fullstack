@@ -4,7 +4,7 @@ description: '华为云 RDS Supabase 管理技能：管理部署在华为云 RDS
 license: MIT
 metadata:
   tags: [huawei-cloud, rds, supabase, postgresql, mcp, database, baas]
-  version: "2.6.2"
+  version: "2.7.0"
 ---
 
 # 华为云 RDS Supabase 管理
@@ -29,7 +29,7 @@ metadata:
 
 1. 实例接入：实例创建或选定后，凭网关 URL 与 API Key 按 references/install.md 动态安装 → `get_project_url` 验证
 2. 了解现状：`list_tables` → `list_table_columns` → `get_rls_status`
-3. 部署后端定义：AI 生成 init.sql（建表、授权、RLS 策略、函数）→ `execute_sql` 执行 → 查询确认
+3. 部署后端定义：AI 生成 init.sql（建表、授权、RLS 策略、函数）→ `execute_sql` 执行 → 查询确认；init.sql 成稿时同步产出清理脚本 cleanup.sql（强烈建议，删除场景按需执行）
 4. 安全检查：`get_advisors` + `get_rls_status` 核查对外表的权限与 RLS 覆盖
 5. 数据排查：`execute_sql`（`read_only=true`）逐层查询
 6. 用户管理：`list/get/create/update/delete_auth_user`
@@ -76,6 +76,8 @@ Web 全栈开发流程中实例创建或选定后执行一次：从流程获得 
 ```
 init.sql → ① 预检 → ② 审查 → ③ 部署 → ④ 授权暴露 → ⑤ 查询确认
 ```
+
+**清理脚本纪律（强烈建议）**：init.sql 每次成稿时同步产出配套清理脚本（如 `cleanup.sql`，见 references/init-sql-guide.md 第 7 节）——逆序拆除、`IF EXISTS` 可重复执行、与 init.sql 成对归档；用于后续删除场景的清理（应用下线/环境回收，按需执行、时机由用户指定），不随部署自动执行。
 
 **① 预检（核对现状）**
 
@@ -131,7 +133,7 @@ NOTIFY pgrst, 'reload schema';            -- PostgREST 立即感知结构变更�
 
 | 分类 | 工具 | 说明 |
 |---|---|---|
-| SQL 执行 | execute_sql | 执行任意 SQL；执行迁移脚本（init.sql）部署后端定义时，整批为单一事务，失败自动回滚；支持 read_only 参数 |
+| SQL 执行 | execute_sql | 执行任意 SQL；执行迁移脚本（init.sql）部署后端定义时，整批为单一事务，失败自动回滚；清理脚本（cleanup.sql）经同一通道按需执行；支持 read_only 参数 |
 | 结构查询 | list_tables, list_table_columns, list_indexes, list_constraints, list_foreign_keys, list_triggers, list_database_functions, get_function_definition, get_trigger_definition | 表、列、索引、约束、外键、触发器、函数定义 |
 | 安全检查 | get_rls_status, list_rls_policies, get_advisors | RLS 状态、策略明细、安全与性能建议 |
 | 运行排查 | get_database_connections, get_database_stats, get_logs, explain_query | 活跃连接、数据库与 bgwriter 统计快照、服务日志（analytics → CSV 级联，未配置时返回空列表与说明）、执行计划 |

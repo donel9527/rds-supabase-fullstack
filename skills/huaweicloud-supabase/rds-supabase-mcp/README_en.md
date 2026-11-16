@@ -17,7 +17,7 @@ See [SKILL.md](SKILL.md) for the execution logic.
 | Workflow | What it covers |
 |---|---|
 | Instance onboarding | Once the instance is ready, dynamically connect the MCP server with three configuration items; verify with `get_project_url` / `list_tables` |
-| Deploy backend definitions (five steps) | init.sql → ① pre-check (verify current state) → ② review (four mandatory checks: repeatable execution, destructive statements, RLS coverage, least privilege) → ③ deploy (whole batch in a single transaction, automatic rollback on failure) → ④ grant exposure (GRANT + `NOTIFY pgrst, 'reload schema'`) → ⑤ query confirmation (the actually queried state is authoritative) |
+| Deploy backend definitions (five steps) | init.sql → ① pre-check (verify current state) → ② review (four mandatory checks: repeatable execution, destructive statements, RLS coverage, least privilege) → ③ deploy (whole batch in a single transaction, automatic rollback on failure) → ④ grant exposure (GRANT + `NOTIFY pgrst, 'reload schema'`) → ⑤ query confirmation (the actually queried state is authoritative); whenever init.sql is finalized, strongly recommend also producing the companion cleanup script cleanup.sql (executed on demand in deletion scenarios, see init-sql-guide section 7) |
 | SQL troubleshooting | `execute_sql` with `read_only=true` (the database layer allows only SELECT, WITH, VALUES, TABLE, EXPLAIN) |
 | Security checks | Work through `get_advisors` (security/performance) item by item; re-verify with `get_rls_status` / `list_rls_policies` |
 | User management | list/get/create/update/delete_auth_user (official admin API; password hashing and email confirmation are handled by GoTrue) |

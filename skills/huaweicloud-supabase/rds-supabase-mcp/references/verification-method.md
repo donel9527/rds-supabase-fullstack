@@ -8,6 +8,12 @@
 4. **查询确认**：`list_table_columns`/`list_constraints`/`list_rls_policies` 与脚本定义逐项一致；`get_rls_status` 确认已启用（必要时加 FORCE）
 5. **安全检查**：`get_advisors(type=security)` 无新增 issue（重点 0013 未启用 RLS / 0007 有策略未启用 / 0008 已启用但无策略）
 
+## 清理脚本验证（cleanup.sql，按需）
+
+- **产出即验证**：init.sql 成稿时同步产出 cleanup.sql（init-sql-guide 第 7 节）；核对两点——与 init.sql 对象清单一一对应（不漏不越界）、逆序拆除且全部 `IF EXISTS`（可重复执行）
+- **执行验证（删除场景、用户指定时机）**：执行前先 `list_tables`/`get_rls_status` 核对现状 → `execute_sql` 整批执行（同事务、失败自动回滚）→ `list_tables` 确认对象已消失、`get_advisors` 无新增 issue
+- **红线**：只清理项目自建对象，严禁触碰 `public` schema 平台内置对象与 auth/storage 等系统 schema
+
 ## 只读模式验证
 
 `HUAWEICLOUD_MCP_READ_ONLY=true` 时调用任一 WRITE 工具，会收到 `MCP_READ_ONLY` 错误（统一错误格式）；READ 工具不受影响。

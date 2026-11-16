@@ -59,3 +59,12 @@ NOTIFY pgrst, 'reload schema';                         -- 热更新，表立即�
 - 对外表放 `public`；内部表放独立 schema（如 `app_internal`）且不 GRANT
 - 策略命名 `<table>_<action>[_<role>]`（如 `posts_select_authenticated`）
 - 脚本内对象顺序：表 → 约束/索引 → 函数 → 触发器 → RLS → GRANT → NOTIFY
+
+## 7. 清理脚本（强烈建议与 init.sql 同时产出）
+
+init.sql 每次成稿时，**强烈建议同时产出配套清理脚本**（如 `cleanup.sql`，与 init.sql 同目录成对保存）——用于后续删除场景的清理操作（应用下线、环境回收、按需指定清理），执行时机由用户指定，不随部署自动执行。
+
+- **内容要求**：按 init.sql 的逆序拆除——先回收授权与 RLS（`DROP POLICY`），再删触发器、函数，最后 `DROP TABLE`；全部使用 `IF EXISTS`，脚本本身可重复执行（第 1 节规则同样适用）
+- **覆盖范围**：表、序列、函数、触发器、策略、为项目创建的角色/权限一并清理；`public` schema 与平台内置对象（auth/storage 等系统 schema）不属于清理对象，严禁触碰
+- **执行方式**：与 init.sql 相同经 `execute_sql` 整批一个事务提交、失败自动回滚；执行前先核对现状（哪些对象已不存在）
+- **产出即归档**：部署时未执行也一并入库保存；删除场景来临时不需现场补写、直接可用

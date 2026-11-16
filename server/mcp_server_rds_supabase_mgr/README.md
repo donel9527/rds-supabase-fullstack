@@ -162,8 +162,8 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 ### 场景三：EIP 创建与绑定
 
 **采购**：`create_supabase_eip` 空闲优先（`prefer_idle=true`）——先列出未绑定 EIP
-供用户选定，选定后直接用于绑定、不新建；无空闲时按基线新建：按需购买（包周期返回
-控制台订单）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
+供用户选定，选定后直接用于绑定、不新建；无空闲时新建：按需计费固定（不支持
+包周期）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
 按需计费固定——计费方式（bandwidth 按带宽 / traffic 按流量，无默认由用户按场景选择）与带宽大小（bandwidth 5-1000 / traffic 5-300 峰值）均由用户决策；收费（带宽费/流量费+IP 保有费）在采购前展示并确认，并自动打标 USAGE_FOR。
 
 **绑定**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
@@ -232,12 +232,15 @@ supabase）；托管实例 root 登录密码不在本工具范围，实例密码
 
 `delete_supabase_application` 的 `delete_managed_instance` 为必选项：`false` 仅删
 应用，托管实例保留并继续计费；`true` 应用与实例并发双删——实例删除不可逆，仅
-pay-per-use 可级联，预付费须先在控制台退订。删除前执行四层校验：实例归属、云端
-`managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。提交后返回双任务
+pay-per-use 可级联。删除前执行四层校验（均在提交前触发、应用保持可读）：实例
+归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁**——
+包周期（包年/包月）实例不支持 API 级联删除（含挂载已有实例场景接入的包周期
+PG）：`true` 会被整体拒绝（应用未删除），改 `false` 删应用后到控制台退订实例
+（费用中心→退订管理）；`charge_info` 缺失同样失败关闭。提交后返回双任务
 ID，经 `wait_operation_job_complete` 跟踪到终态并复查资源。
 
 托管实例亦可经 `delete_supabase_managed_instance` 在应用存续时单独拆除，同样执行
-四层校验。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
+四层校验（计费模式门禁同样适用：仅按需实例可直删，包周期走控制台退订）。自动创建的安全组经 `delete_supabase_security_group` 按标签门清理：仅
 允许删除带 `AUTO_CREATE=true`/`USE_FOR=Supabase` 双标签且无引用的安全组。
 
 ### 场景六：购买方式
@@ -248,22 +251,21 @@ RDS Supabase 应用公测期间免费，费用仅产生于托管实例；购买�
 #### 计费边界（应用免费，实例计费）
 
 - **应用本身**：公测期免费，不产生任何费用。
-- **托管实例**：唯一计费主体——按需按实际使用计费，包周期按订购时长计费。
-- 创建返回 `order_id` 表示包周期订单已创建、资源尚未开通；待支付订单不代表
-  实例已开通，出现创建任务（`job_id`）才开始建资源。
+- **托管实例**：唯一计费主体——**固定按需计费**（创建仅支持 `postPaid`，不支持包周期）：计费项=实例规格+存储空间（必选）+备份空间超出免费额度（存储容量 100%）部分；按秒计费、整点小时结算，自实例创建成功时间点起计费至删除（[计费规则](https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html)）。
+- 托管实例固定按需后，创建不再产生待支付订单；订单工具（`get`/`pay`/`cancel`）保留用于控制台侧产生的包周期订单（如存量实例）的核对与取消。
 
-#### 购买方式选择（强烈建议按需）
+#### 计费方式（固定按需）
 
-- **按需（postPaid，强烈建议）**：`charge_info` 仅携带 `charge_mode`；随用随停，
-  试运行与变更期成本可控，删除实例即停止计费。
-- **包周期（prePaid）**：`period_type` 为字符串 `month`（时长 1-9 个月）或
-  `year`（1-3 年）；创建返回订单，经订单工具支付后才开始建资源；适合长期
-  稳定运行。
-- 提交前先取得用户对购买方式与费用的明确授权。
+- **托管实例固定按需计费（postPaid）**：`charge_info` 仅携带 `charge_mode`，不支持
+  包周期。按秒计费、整点小时结算，自实例创建成功时间点起计费至删除；计费项=实例
+  规格+存储空间（必选）+备份空间超出免费额度（存储容量 100%）部分，公网带宽/
+  跨区域备份为可选计费项（计费规则：
+  https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html ）。
+- 提交前向用户明确展示计费规则与费用构成（发现与编排输出同样携带），取得授权。
 
-#### 包周期订单支付
+#### 包周期订单支付（控制台侧存量订单）
 
-1. 创建返回 `order_id` 后，先 `get_supabase_order(order_id)` 查询订单状态、
+1. 控制台侧产生包周期订单后，先 `get_supabase_order(order_id)` 查询订单状态、
    金额、币种与明细（默认 20 条，`marker` 分页）；`amount_after_discount` 为
    优惠后、不含券与卡的金额，金额须结合返回币种与度量单位解释。
 2. 核对并取得用户对准确金额与币种的授权后，调用

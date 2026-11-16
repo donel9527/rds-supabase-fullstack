@@ -144,9 +144,9 @@ class CreationFlowService:
                 args['instance_job_id']=result.get('instance_job_id')
                 args['instance_id']=result.get('instance_id')
             track={'tool':'show_supabase_creation_progress','args':args}
-            reminder=('创建任务已下发：请调用方持续查询创建状态（整体约 20-30 分钟；实例先就绪、应用任务才开始；预付费需先支付订单）'
+            reminder=('创建任务已下发：请调用方持续查询创建状态（整体约 20-30 分钟；实例先就绪、应用任务才开始）'
                       if scenario=='newly_instance' else
-                      '创建任务已下发：请调用方持续查询创建状态（整体约 20-30 分钟；预付费需先支付订单）')
+                      '创建任务已下发：请调用方持续查询创建状态（整体约 20-30 分钟）')
         return {'track':track,'reminder':reminder,
                 'after_completion':{'eip_automation':EIP_AUTOMATION,
                                     'note':'状态到终态且确认公网访问后执行；空闲 EIP 优先复用；新建带宽为收费项（按带宽计费、创建即计费），大小必须由用户明确给定'}}
@@ -179,8 +179,8 @@ class CreationFlowService:
                     'request':preview_request(body),
                     'security_group_plan':self._group_plan('newly_instance',ingress_cidr,subnet_cidr),
                     'obs_plan':obs_plan,
-                    'warnings':['确认即创建两个专用安全组（启用存储时确保 OBS 桶）并提交应用创建（计费开始）',
-                                '预付费（prePaid）返回订单，须 get/pay_supabase_order 支付后才建资源']
+                    'warnings':['确认即创建两个专用安全组（启用存储时确保 OBS 桶）并提交应用创建',
+                                '托管 PG 实例按需计费（固定，不支持包周期）：计费项=实例规格+存储空间（必选），备份空间免费额度=存储容量 100%、超出部分按需计费，公网带宽/跨区域备份为可选计费项；按秒计费、整点小时结算，自实例创建成功时间点起计费至删除；计费规则 https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html']
                               +((obs_plan or {}).get('warnings') or []),
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':

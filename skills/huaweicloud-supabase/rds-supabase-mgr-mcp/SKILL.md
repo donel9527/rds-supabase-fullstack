@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.8.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a59`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.9.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a60`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -101,7 +101,7 @@ metadata:
 4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
 6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交——请求文件无需手填 `security_group_id`。
-7. **跟踪**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；包周期返回 `order_id` 时先走场景九支付，支付后才开始建资源。
+7. **跟踪**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；托管实例**固定按需计费**（无订单支付环节），实例创建成功即开始计费。
 8. **验证与后续**：`show_supabase_application` 回查状态就绪；随后按需执行公网开通（场景四）、SSL（证书获取三路径，见第 1 步④）、登录配置（场景六）与接入信息交付（场景七）。
 
 **验证方式**：`show_supabase_application` 状态正常且无进行中操作；（开通公网后）访问地址探活可达；接入信息卡交付完整。
@@ -114,7 +114,7 @@ metadata:
 2. `discover_db_instance_for_create(scenario="existed_instance")`（或 `list_supabase_manageable_instances`）分页列出可托管候选（每页 20 条），含版本、部署类型、端口、可用区、创建时间与 `current_actions`——**`current_actions` 非空或状态非 ACTIVE 的实例必须排除**（正在重启/升级/变更，任务冲突会失败）；交用户选定 `instance_id`，可传 `instance_id` 取该实例基础/配置/网络详情回填编排。
 3. 组装本地请求文件：`manage_type="existed_instance"` 与 `existing_instance{"instance_id", "database_name":"root", "database_pwd"}`——用户名固定 `root` 不能改；root 密码引导用户写本地文件（存量密码不受创建密码规则约束），全程不进对话。
 4. 预览与确认提交：`create_supabase_link_exist_instance(request_ref, public_access_cidr, ...)`——自动创建应用组（8443 入方向三选一 + 5432 出方向指向实例所在子网 CIDR），**实例自身安全组不动**；启用存储时同样确保 OBS 桶；回填注入后一次提交。
-5. 跟踪：回显 `application_id` 与应用工作流 ID（无实例任务）；`show_supabase_creation_progress` 跟踪至就绪；包周期订单同场景九。
+5. 跟踪：回显 `application_id` 与应用工作流 ID（无实例任务）；`show_supabase_creation_progress` 跟踪至就绪。
 6. 验证与创建后动作同场景一第 8 步。
 
 **验证方式**：`show_supabase_application` 状态就绪且 `managed_instance` 指向所选实例；其余同场景一。
@@ -208,9 +208,9 @@ metadata:
 
 ## 场景九：包周期订单支付与取消
 
-**触发**：创建包周期实例返回 `order_id`（RDS Supabase 应用公测期间免费，费用仅产生于托管实例），用户要支付或弃用订单。
+**触发**：用户要核对、支付或取消**控制台侧产生的包周期订单**——托管实例已固定按需计费，创建路径不再产生待支付订单；订单工具用于存量实例或控制台购买产生的包周期订单（RDS Supabase 应用公测期间免费，费用仅产生于托管实例）。
 
-1. **购买方式选择**：强烈建议按需 `postPaid`（`charge_info` 仅携带 `charge_mode`，随用随停、删除即停计费）；包周期 `prePaid` 须先取得用户对购买方式与费用的明确授权——`period_type` 为字符串 `month`（1-9 个月）或 `year`（1-3 年），传数字会被本地校验拒绝。
+1. **计费方式（固定按需）**：托管实例创建**仅支持按需 `postPaid`**（`charge_info` 仅携带 `{"charge_mode":"postPaid"}`，不支持包周期）——提交前向用户展示计费规则：计费项=实例规格+存储空间（必选）+备份空间超出免费额度（存储容量 100%）部分，公网带宽/跨区域备份为可选计费项；按秒计费、整点小时结算，自实例创建成功时间点起计费至删除（[计费规则](https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html)）。
 2. **核对**：`get_supabase_order(order_id)` 查订单状态、金额、币种与明细（默认 20 条、`marker` 分页）；`amount_after_discount` 为优惠后、不含券与卡的金额，须结合返回币种与度量单位解释，不自行改写为最终支付金额。
 3. **支付**：取得用户对准确订单号、金额、币种的授权后 `pay_supabase_order(order_id, expected_amount, currency, confirm=true)`——`expected_amount` 必须同时等于 `official_amount` 与 `amount_after_discount`，两者不同即存在折扣或券，工具拒绝支付以防丢失优惠，此类订单走费用中心处理；单次确认单次提交、不自动重试；返回 `payment_submitted` 与 `payment_verified`，支付后复查订单状态与支付时间确认到账；提交结果未知时先查询同一订单，不自动再次付款。
 4. **支付完成**：订单开通后出现创建任务（`job_id`），回场景一第 7 步跟踪创建进度并验证。
@@ -222,10 +222,10 @@ metadata:
 
 **触发**：用户要删除应用（下线、测试资源清理）。
 
-1. **删除前预检**：`show_supabase_application` 核验状态正常、无进行中操作；记录 `public_ip`、安全组 ID、托管实例 ID、对接桶名（残留核对用）；问用户数据要不要导出（要则先导出再删）。
-2. **必问实例去留**：`delete_managed_instance` 为必选项、不能默认——`false` 仅删应用，托管实例保留并**继续计费**（停止托管实例只省 VM 费用：EIP/存储/备份照常计费，且已停止实例删除后不进回收站）；`true` 应用与实例两笔删除同时提交（返回 `job_id` + `instance_job_id` 双任务编号），实例删除不可逆、仅按需计费可级联，预付费须先在控制台退订。删除前服务端执行四层校验：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、预付费拦截。
+1. **删除前预检**：`show_supabase_application` 核验**无进行中操作**（**状态不作要求：正常、已停止、已移除的应用均可删除**）；记录 `public_ip`、安全组 ID、托管实例 ID、对接桶名（残留核对用）；问用户数据要不要导出（要则先导出再删）。
+2. **必问实例去留**：`delete_managed_instance` 为必选项、不能默认——`false` 仅删应用，托管实例保留并**继续计费**（停止托管实例只省 VM 费用：EIP/存储/备份照常计费，且已停止实例删除后不进回收站）；`true` 应用与实例两笔删除同时提交（返回 `job_id` + `instance_job_id` 双任务编号），实例删除不可逆、**仅按需计费可级联**。删除前服务端执行四层校验：实例归属、云端 `managed_instance` 现状复核、实例未被其他应用挂载、**计费模式门禁（提交前触发，应用保持可读）**——包周期（包年/包月）实例拦截：包括挂载已有实例场景接入的包周期 PG，`true` 会被整体拒绝（应用未删除），改 `false` 删应用后到控制台退订实例（费用中心→退订管理）；计费模式无法核验同样失败关闭。
 3. **执行**：`delete_supabase_application(application_id, delete_managed_instance, ...)` 预览（把不可逆影响与费用后果说清楚）→ 确认 → 提交 → 双任务分别跟踪 → `list_supabase_applications` 确认应用已消失。
-4. **残留清单（这些都不会随应用消失）**：EIP 保留继续计费（控制台/KooCLI 释放是停计费唯一路径）；托管实例保留时走 `delete_supabase_managed_instance`（应用 ID + `managed_instance.id` 双标识，同样四层校验，数据不可恢复先确认导出）；安全组规则可经规则工具清理，整组下线走 `delete_supabase_security_group` 标签门（仅放行双标签且无引用的组）；OBS 桶与数据保留；本地 Key 文件与请求文件由用户/操作员自行清理；项目 MCP 配置在整项目下线时移除。
+4. **残留清单（这些都不会随应用消失）**：EIP 保留继续计费（控制台/KooCLI 释放是停计费唯一路径）；托管实例保留时走 `delete_supabase_managed_instance`（应用 ID + `managed_instance.id` 双标识，同样四层校验含计费模式门禁——**仅按需实例可直删，包周期实例走控制台退订**，数据不可恢复先确认导出）；安全组规则可经规则工具清理，整组下线走 `delete_supabase_security_group` 标签门（仅放行双标签且无引用的组）；OBS 桶与数据保留；本地 Key 文件与请求文件由用户/操作员自行清理；项目 MCP 配置在整项目下线时移除。
 5. **删除后确认**：两个任务分别到终态 → 应用列表确认消失 → （级联删除时）实例确认消失 → 输出残留清单与处置建议。
 
 **验证方式**：`list_supabase_applications` 无该应用；级联删除时托管实例亦消失；残留清单如实交付。
@@ -330,14 +330,14 @@ metadata:
 |---|---|---|
 | `pay_supabase_order` | 核对后余额支付订单 | DANGEROUS |
 | `cancel_supabase_order` | 取消待支付订单 | DANGEROUS |
-| `delete_supabase_application` | 删应用，实例去留必选 | DANGEROUS |
-| `delete_supabase_managed_instance` | 单独拆除托管实例 | DANGEROUS |
+| `delete_supabase_application` | 删应用，实例去留必选；状态不限（正常/已停止/已移除均可删），仅拦进行中操作；级联删实例仅限按需（包周期整体拒绝，改 false 后控制台退订） | DANGEROUS |
+| `delete_supabase_managed_instance` | 单独拆除托管实例（仅按需；包周期走控制台退订） | DANGEROUS |
 
 ## 参数契约速查
 
 | 契约 | 规则 |
 |---|---|
-| `charge_info.period_type` | 字符串 `month`（1-9 个月）/`year`（1-3 年）；按需仅携带 `charge_mode` |
+| `charge_info`（实例计费） | 托管实例固定**按需计费**：仅 `{"charge_mode":"postPaid"}`（不支持包周期）；计费项=实例规格+存储空间（必选）+备份空间超出免费额度（存储容量 100%）部分，公网带宽/跨区域备份可选；按秒计费整点结算，自创建成功计费至删除——[计费规则](https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html)，提交前展示给用户 |
 | EIP 带宽计费 | 新增 EIP 固定**按需计费**（不支持包周期）；**计费方式由用户按场景选择（无默认）**：`bandwidth` 按带宽计费（带宽费=峰值×时长、不限流量；阶梯计费，官方示例 6Mbps≈0.565 元/小时）/ `traffic` 按流量计费（出云流量按 GB、入云不计；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、区域峰值总和 ≤5Gbps）；费用另含 IP 保有费（未绑定且未释放时，官方示例 0.02 元/小时）；**带宽大小由用户决策**（bandwidth 5-1000 / traffic 5-300），采购前须展示收费标准——[场景](https://support.huaweicloud.com/price-eip/eip_billing_0005.html) [收费标准](https://support.huaweicloud.com/price-eip/eip_billing_0007.html)，精确单价以官网价格详情为准 |
 | `basic_config.time_zone` | 整段 `UTC-12:00`~`UTC+12:00`（25 个值，不支持半点与时区名），推荐 `UTC+08:00`（中国北京） |
 | `规格选择` | 应用与实例规格分开单独询问；实例按 group_type 十类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型（ESSD=极速型SSD、CLOUDSSD=SSD云盘、ULTRAHIGH=SSD、LOCALSSD=本地SSD） |

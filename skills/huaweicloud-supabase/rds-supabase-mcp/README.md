@@ -15,7 +15,7 @@
 | 工作流 | 内容 |
 |---|---|
 | 实例接入 | 实例就绪后凭三项配置信息动态接入 MCP 服务器，`get_project_url` / `list_tables` 验证 |
-| 部署后端定义（五步） | init.sql → ① 预检（核对现状）→ ② 审查（可重复执行、破坏性语句、RLS 覆盖、最小授权四项强制检查）→ ③ 部署（整批单一事务，失败自动回滚）→ ④ 授权暴露（GRANT + `NOTIFY pgrst, 'reload schema'`）→ ⑤ 查询确认（以查询到的实际状态为准） |
+| 部署后端定义（五步） | init.sql → ① 预检（核对现状）→ ② 审查（可重复执行、破坏性语句、RLS 覆盖、最小授权四项强制检查）→ ③ 部署（整批单一事务，失败自动回滚）→ ④ 授权暴露（GRANT + `NOTIFY pgrst, 'reload schema'`）→ ⑤ 查询确认（以查询到的实际状态为准）；init.sql 成稿时强烈建议同步产出清理脚本 cleanup.sql（删除场景按需执行，见 init-sql-guide 第 7 节） |
 | SQL 排查 | `execute_sql` 传 `read_only=true`（数据库层仅允许 SELECT、WITH、VALUES、TABLE、EXPLAIN） |
 | 安全检查 | `get_advisors`（security/performance）逐条处置，`get_rls_status` / `list_rls_policies` 复核 |
 | 用户管理 | `list/get/create/update/delete_auth_user`（官方管理 API，密码哈希与邮箱确认由 GoTrue 处理） |

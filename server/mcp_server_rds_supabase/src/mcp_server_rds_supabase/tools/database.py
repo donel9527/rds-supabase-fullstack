@@ -48,9 +48,13 @@ async def list_extensions() -> Any:
 async def execute_sql(sql: str, read_only: bool = False) -> Any:
     """Executes an arbitrary SQL query against the database. SECURITY: Requires a service_role key.
 
-    Scenario: run a reviewed statement beyond the scenario tools. With
-    read_only=true the in-database gate restricts the statement to the
-    SELECT / WITH / VALUES / TABLE / EXPLAIN whitelist.
+    Scenario: run a reviewed statement beyond the scenario tools - typical uses
+    are deploying an init.sql migration batch (table creation, grants, RLS
+    policies, functions) or executing its companion cleanup script for deletion
+    scenarios (on user request); each batch runs in one transaction and rolls
+    back automatically on failure. With read_only=true the in-database gate
+    restricts the statement to the SELECT / WITH / VALUES / TABLE / EXPLAIN
+    whitelist.
 
     Args:
         sql: The SQL query to execute.

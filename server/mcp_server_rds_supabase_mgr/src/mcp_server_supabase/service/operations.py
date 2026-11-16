@@ -70,6 +70,31 @@ class Operations:
         from mcp_server_supabase.service.key_delivery import deliver
         return await deliver(self,application_id,key_id,delivery_ref,confirm,plan_id)
 
+    def _assert_instance_directly_deletable(self, row, cascade):
+        """Direct instance deletion is reserved for on-demand instances.
+
+        Yearly/monthly (prePaid) instances are order-bound resources - deleting
+        them is an unsubscription handled in the console (fee center), not an
+        API deletion. The charge mode must be positively verified: a row whose
+        charge_info is missing fails closed, because the mutation is
+        destructive and the billing contract cannot be confirmed.
+        """
+        charge = row.get('charge_info') if isinstance(row, dict) else None
+        mode = charge.get('charge_mode') if isinstance(charge, dict) else None
+        if mode == 'postPaid':
+            return
+        label = 'yearly/monthly (prePaid)' if mode == 'prePaid' else 'not verifiable'
+        if cascade:
+            hint = ('本工具仅支持删除按需（postPaid）实例：包年/包月实例不支持级联删除。'
+                    '若只要删除应用，请重新调用并将 delete_managed_instance=False；'
+                    '包周期实例请到华为云控制台退订（费用中心→退订管理）。')
+        else:
+            hint = ('本工具仅支持直接删除按需（postPaid）实例；包年/包月实例请到华为云控制台'
+                   '退订（费用中心→退订管理）。')
+        raise McpToolError('MCP_GUARDRAIL_BLOCKED',
+                           f'Instance billing mode is {label}: direct deletion is not supported',
+                           hint=hint)
+
     async def delete_application(self, application_id, delete_managed_instance=None, confirm=False, plan_id=None):
         """Delete one Supabase application, optionally together with its managed PG instance.
 
@@ -104,10 +129,15 @@ class Operations:
                     'resource_path': path, **notices, **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES') != 'true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY', 'false').lower() == 'true':
             raise McpToolError('MCP_READ_ONLY', 'Writes are disabled')
-        # Read the real target immediately before mutation. Unknown/active states fail closed.
+        # Read the real target immediately before mutation. Deletion does not require
+        # the normal status: stopped and removed applications stay deletable - only
+        # in-flight actions block the mutation; the cloud stays authoritative for
+        # anything else.
         _, target = await self.client.request('GET', path)
-        if target.get('id') != application_id or target.get('status') != 'normal' or target.get('current_actions'):
-            raise McpToolError('MCP_GUARDRAIL_BLOCKED', 'Target is not demonstrably ready for mutation')
+        if target.get('id') != application_id or target.get('current_actions'):
+            raise McpToolError('MCP_GUARDRAIL_BLOCKED',
+                               'Target is not deletable: application not found or actions in progress',
+                               hint='应用有进行中操作时不可删除；用 show_operation_job_status 跟踪任务至终态后重试。状态不作要求——已停止/已移除的应用均可删除。')
         from huaweicloud_mcp_core.guardrails import assert_not_protected
         assert_not_protected(target)
         instance_id = None
@@ -124,6 +154,9 @@ class Operations:
             if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get('id') != instance_id:
                 raise McpToolError('MCP_NOT_FOUND', 'Instance not found or not unique in the inventory',
                                    hint='A missing instance does not prove deletion; inspect the console before any retry.')
+            # Billing gate runs before submission, while the application is still
+            # readable: a prepaid managed instance cannot be cascade-deleted.
+            self._assert_instance_directly_deletable(rows[0], cascade=True)
         self.plans.claim(plan_id, digest)
         unknown = RecoveryError('MCP_SDK_ERROR', 'Deletion result unknown', 'submission_unknown',
                                 'Query the operation task and the target resources directly; do not resubmit - previews and the recorded intent are single-use.', plan_id)
@@ -261,6 +294,9 @@ class Operations:
         if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get('id') != instance_id:
             raise McpToolError('MCP_NOT_FOUND', 'Instance not found or not unique in the inventory',
                                hint='A missing instance does not prove deletion; inspect the console before any retry.')
+        # Billing gate: direct deletion only targets on-demand instances; yearly/
+        # monthly instances are unsubscribed console-side.
+        self._assert_instance_directly_deletable(rows[0], cascade=False)
         self.plans.claim(plan_id, digest)
         unknown = RecoveryError('MCP_SDK_ERROR', 'Instance deletion result unknown', 'submission_unknown',
                                 'Inspect the plan and the instance inventory; never blindly repeat the deletion.', plan_id)

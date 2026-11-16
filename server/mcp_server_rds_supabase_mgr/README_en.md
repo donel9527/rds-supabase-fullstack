@@ -193,8 +193,7 @@ identifier into the request before one successful submission.
 6. application_id/instance_id and both workflow IDs are echoed; keep
    querying via `show_supabase_creation_progress`: roughly 20-30 minutes
    overall, the instance becomes ready first and only then does the
-   application task start; prepaid resources begin only after the order is
-   paid per Scenario 6.
+   application task start.
 7. Verify readiness with `show_supabase_application`; then proceed as needed
    with public access (Scenario 3), SSL (three certificate paths: reuse /
    purchase / import your own), login configuration, and access
@@ -225,8 +224,8 @@ identifier into the request before one successful submission.
 **Provisioning**: `create_supabase_eip` is idle-first
 (`prefer_idle=true`) — it first lists unbound EIPs for the user to pick,
 and the selection binds directly with nothing created; with no idle EIP, it
-creates per the baseline: pay-per-use purchase (prepaid returns a console
-order), full-dynamic BGP (`publicip.type=5_bgp`), dedicated bandwidth
+creates per the baseline: on-demand billing fixed (no prepaid periods),
+full-dynamic BGP (`publicip.type=5_bgp`), dedicated bandwidth
 (`share_type=PER`) on-demand billing fixed - the billing method (bandwidth-based or traffic-based, no default, chosen by the user per scenario) and the size (bandwidth 5-1000 / traffic 5-300 peak cap) are both user decisions; the fee schedule is shown and confirmed before purchase, auto-tagged USAGE_FOR.
 
 **Binding**: `bind_supabase_eip` runs triple validation — `instance_id` must
@@ -327,16 +326,23 @@ toggles, and other routine changes follow the same rhythm above.
 `delete_supabase_application`'s `delete_managed_instance` is mandatory:
 `false` deletes only the application, with the managed instance retained and
 still billing; `true` deletes both concurrently — instance deletion is
-irreversible, cascade applies to pay-per-use only, and prepaid instances must
-be unsubscribed in the console first. Four verification layers run before
-deletion: instance ownership, live re-check of the cloud `managed_instance`
-state, no other application mounting the instance, and prepaid interception.
-Submission returns two job IDs; track them to a terminal state with
+irreversible and cascade applies to pay-per-use only. Four verification
+layers run before submission (while the application stays readable):
+instance ownership, live re-check of the cloud `managed_instance` state, no
+other application mounting the instance, and a **billing-mode gate** —
+yearly/monthly (prepaid) instances do not support API deletion (including
+prepaid PG instances linked in the attach-existing scenario): `true` is
+rejected as a whole (the application is not deleted); re-issue with `false`
+and unsubscribe the instance in the console (fee center -> unsubscribe
+management). A missing `charge_info` fails closed too. Submission returns
+two job IDs; track them to a terminal state with
 `wait_operation_job_complete` and re-verify the resources.
 
 The managed instance can also be torn down standalone via
 `delete_supabase_managed_instance` while the application lives, under the
-same four verification layers. Auto-created security groups are cleaned up
+same four verification layers (the billing-mode gate applies here too: only
+pay-per-use instances can be deleted directly; prepaid instances are
+unsubscribed console-side). Auto-created security groups are cleaned up
 via `delete_supabase_security_group` behind the tag gate: only groups bearing
 the `AUTO_CREATE=true`/`USE_FOR=Supabase` tag pair and free of references
 may be deleted.
@@ -344,31 +350,33 @@ may be deleted.
 ### Scenario 6: Purchase modes
 
 The RDS Supabase application is free during public beta; charges arise only
-from the managed instance. The purchase mode is set in
+from the managed instance. The billing mode is fixed to on-demand in
 `managed_instance.charge_info` of the creation request.
 
 #### Billing boundary (application free, instance charged)
 
 - **The application itself**: free during public beta, no charge.
-- **The managed instance**: the only billing subject - pay-per-use
-  bills actual usage, prepaid bills the ordered period.
-- A creation that returns `order_id` means a prepaid order was created and no
-  resource provisioned yet; an unpaid order does not mean the instance is
-  provisioned - resources are built only once a creation task (`job_id`)
-  appears.
+- **The managed instance**: the only billing subject - **fixed on-demand
+  billing** (creation supports `postPaid` only, no prepaid periods): the
+  billable items are the instance flavor and storage space (both mandatory)
+  plus backup space beyond the free allowance (100% of the purchased
+  storage), with public bandwidth / cross-region backup as optional items;
+  billed per second and settled hourly, from the moment the instance is
+  created successfully until it is deleted (billing rules:
+  https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html ).
+- With on-demand billing fixed, creation no longer produces payable orders;
+  the order tools (`get`/`pay`/`cancel`) remain for prepaid orders created
+  console-side (e.g. existing instances).
 
-#### Purchase-mode choice (pay-per-use strongly recommended)
+#### Billing-mode presentation (fixed on-demand)
 
-- **Pay-per-use (postPaid, strongly recommended)**: `charge_info` carries
-  `charge_mode` only; start and stop at any time, controllable cost during
-  trial and change periods, billing stops when the instance is deleted.
-- **Prepaid (prePaid)**: `period_type` is the string `month` (1-9 months) or
-  `year` (1-3 years); creation returns an order and resources are built only
-  after payment through the order tools; suited to long-term stable runs.
-- Obtain the user's explicit approval of the purchase mode and cost before
-  submitting.
+- **The managed instance is on-demand (postPaid) fixed**: `charge_info`
+  carries `charge_mode` only; prepaid periods are not supported. Show the
+  billing rules and the fee composition to the user before submission (the
+  discovery and arrangement outputs carry the same notice) and obtain
+  explicit approval.
 
-#### Prepaid order payment
+#### Prepaid order payment (console-side legacy orders)
 
 1. Once the creation returns `order_id`, first query the order status,
    amounts, currency and lines with `get_supabase_order(order_id)` (20 lines

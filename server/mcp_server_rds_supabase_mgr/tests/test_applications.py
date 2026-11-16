@@ -416,7 +416,7 @@ class ManagedInstanceDeleteTests(unittest.IsolatedAsyncioTestCase):
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'rds-supabase-pg-01309873', 'status': 'ACTIVE'}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'name': 'rds-supabase-pg-01309873', 'status': 'ACTIVE', 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (200, {'job_id': 'job-77'}),
         ]
         result = await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
@@ -476,13 +476,45 @@ class ManagedInstanceDeleteTests(unittest.IsolatedAsyncioTestCase):
             await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
         self.assertEqual(ctx.exception.code, 'MCP_NOT_FOUND')
 
+    async def test_prepaid_instance_blocked_for_console_unsubscription(self):
+        # A yearly/monthly instance cannot be deleted through the API - it must
+        # be unsubscribed in the console; the gate fires before submission and
+        # the plan stays unclaimed.
+        preview = await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID)
+        self.client.request.side_effect = [
+            (200, self.detail()),
+            (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID,
+                                                    'charge_info': {'charge_mode': 'prePaid'}}]}),
+        ]
+        with self.assertRaises(McpToolError) as ctx:
+            await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
+        self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
+        self.assertIn('prePaid', ctx.exception.message)
+        self.assertIn('控制台', ctx.exception.hint)
+        methods = [c.args[0] for c in self.client.request.call_args_list]
+        self.assertEqual(methods, ['GET', 'GET', 'GET'])      # no DELETE submitted
+        self.assertEqual(self.ops.plans.inspect(preview['plan_id'])['state'], 'prepared')
+
+    async def test_unverifiable_billing_fails_closed(self):
+        preview = await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID)
+        self.client.request.side_effect = [
+            (200, self.detail()),
+            (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+        ]
+        with self.assertRaises(McpToolError) as ctx:
+            await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
+        self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
+        self.assertIn('not verifiable', ctx.exception.message)
+
     async def test_definite_rejection_marks_failed(self):
         from mcp_server_supabase.failures import RecoveryError
         preview = await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID)
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'charge_info': {'charge_mode': 'postPaid'}}]}),
             RecoveryError('MCP_INVALID_ARGS', 'bad', 'invalid_request', 'fix it'),
         ]
         with self.assertRaises(McpToolError):
@@ -495,7 +527,7 @@ class ManagedInstanceDeleteTests(unittest.IsolatedAsyncioTestCase):
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'charge_info': {'charge_mode': 'postPaid'}}]}),
             RecoveryError('MCP_SDK_ERROR', 'boom', 'service_unavailable', 'retry later'),
         ]
         with self.assertRaises(McpToolError):
@@ -507,7 +539,7 @@ class ManagedInstanceDeleteTests(unittest.IsolatedAsyncioTestCase):
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (200, {}),
         ]
         with self.assertRaises(McpToolError):
@@ -519,14 +551,14 @@ class ManagedInstanceDeleteTests(unittest.IsolatedAsyncioTestCase):
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (200, {'job_id': 'job-77'}),
         ]
         await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
         self.client.request.side_effect = [
             (200, self.detail()),
             (200, self.sweep([{'id': APP_ID, 'managed_instance': {'id': INSTANCE_ID}}])),
-            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID}]}),
+            (200, {'total_count': 1, 'instances': [{'id': INSTANCE_ID, 'charge_info': {'charge_mode': 'postPaid'}}]}),
         ]
         with self.assertRaises(McpToolError) as ctx:
             await self.ops.delete_managed_instance(APP_ID, INSTANCE_ID, True, preview['plan_id'])
@@ -607,13 +639,48 @@ class DeleteApplicationWithInstanceTests(unittest.IsolatedAsyncioTestCase):
         calls = [c.args for c in self.client.request.call_args_list]
         self.assertEqual(len(calls), 2)                    # no instance reads at all
 
+    async def test_stopped_application_is_deletable(self):
+        # Deletion does not require the normal status - a stopped app stays
+        # deletable; only in-flight actions block the mutation.
+        preview = await self.ops.delete_application(self.APP, False)
+        detail = self.detail(); detail['status'] = 'stopped'
+        self.client.request.side_effect = [
+            (200, detail),
+            (202, {'job_id': 'job-app'}),
+        ]
+        result = await self.ops.delete_application(self.APP, False, True, preview['plan_id'])
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['job_id'], 'job-app')
+
+    async def test_removed_application_is_deletable(self):
+        preview = await self.ops.delete_application(self.APP, False)
+        detail = self.detail(); detail['status'] = 'removed'
+        self.client.request.side_effect = [
+            (200, detail),
+            (202, {'job_id': 'job-app'}),
+        ]
+        result = await self.ops.delete_application(self.APP, False, True, preview['plan_id'])
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['job_id'], 'job-app')
+
+    async def test_deletion_blocked_only_by_inflight_actions(self):
+        preview = await self.ops.delete_application(self.APP, False)
+        detail = self.detail(); detail['status'] = 'stopped'; detail['current_actions'] = [{'action': 'reboot'}]
+        self.client.request.side_effect = [(200, detail)]
+        with self.assertRaises(McpToolError) as ctx:
+            await self.ops.delete_application(self.APP, False, True, preview['plan_id'])
+        self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
+        self.assertIn('not deletable', ctx.exception.message)   # actions in progress block the mutation
+        methods = [c.args[0] for c in self.client.request.call_args_list]
+        self.assertEqual(methods, ['GET'])
+
     async def test_yes_path_deletes_application_and_instance_together(self):
         preview = await self.ops.delete_application(self.APP, True)
         self.client.request.side_effect = [
             (200, self.detail()),                                                   # application readiness
             # instance preflight (before submission, while the app is readable)
             (200, self.apps_page([{'id': self.APP, 'managed_instance': {'id': self.INSTANCE}}])),
-            (200, {'total_count': 1, 'instances': [{'id': self.INSTANCE, 'name': 'pg-1'}]}),
+            (200, {'total_count': 1, 'instances': [{'id': self.INSTANCE, 'name': 'pg-1', 'charge_info': {'charge_mode': 'postPaid'}}]}),
             (202, {'job_id': 'job-app'}),                                           # application delete
             (200, {'job_id': 'job-inst'}),                                          # instance delete
         ]
@@ -649,6 +716,38 @@ class DeleteApplicationWithInstanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
         methods = [c.args[0] for c in self.client.request.call_args_list]
         self.assertEqual(methods, ['GET', 'GET'])
+
+    async def test_yes_path_prepaid_instance_blocked_before_submission(self):
+        # A yearly/monthly managed instance cannot be cascade-deleted: the billing
+        # gate fires before claim/submission, the application stays readable and
+        # the caller is steered to re-issue with delete_managed_instance=False.
+        preview = await self.ops.delete_application(self.APP, True)
+        self.client.request.side_effect = [
+            (200, self.detail()),
+            (200, self.apps_page([{'id': self.APP, 'managed_instance': {'id': self.INSTANCE}}])),
+            (200, {'total_count': 1, 'instances': [{'id': self.INSTANCE, 'name': 'pg-1',
+                                                    'charge_info': {'charge_mode': 'prePaid'}}]}),
+        ]
+        with self.assertRaises(McpToolError) as ctx:
+            await self.ops.delete_application(self.APP, True, True, preview['plan_id'])
+        self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
+        self.assertIn('prePaid', ctx.exception.message)
+        self.assertIn('delete_managed_instance=False', ctx.exception.hint)
+        methods = [c.args[0] for c in self.client.request.call_args_list]
+        self.assertEqual(methods, ['GET', 'GET', 'GET'])      # no deletion submitted
+
+    async def test_yes_path_unverifiable_billing_fails_closed(self):
+        # A prepaid instance fails closed even without charge_info in the row.
+        preview = await self.ops.delete_application(self.APP, True)
+        self.client.request.side_effect = [
+            (200, self.detail()),
+            (200, self.apps_page([{'id': self.APP, 'managed_instance': {'id': self.INSTANCE}}])),
+            (200, {'total_count': 1, 'instances': [{'id': self.INSTANCE, 'name': 'pg-1'}]}),
+        ]
+        with self.assertRaises(McpToolError) as ctx:
+            await self.ops.delete_application(self.APP, True, True, preview['plan_id'])
+        self.assertEqual(ctx.exception.code, 'MCP_GUARDRAIL_BLOCKED')
+        self.assertIn('not verifiable', ctx.exception.message)
 
     async def test_readonly_gate_blocks_before_any_write(self):
         import os
