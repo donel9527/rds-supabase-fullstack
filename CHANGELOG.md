@@ -7,6 +7,24 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a58 - the EIP bandwidth charge becomes
+  a forced, explicit notice. The missing-bandwidth guard now states the
+  bandwidth is a chargeable item (fixed-bandwidth billing, continuous from
+  creation until release) and carries the fee reference; the purchase
+  preview gains a structured `billing` block (charge item, unit price
+  model, reference magnitude ~0.06 CNY/Mbps/hour with the official pricing
+  calculator link, billing window) and the first warning spells out the
+  charge and echoes the user-confirmed size; the arrangement's
+  size_decision and the creation-flow EIP follow-up note carry the same
+  charge notice. Skill guidance (scenario 4, command table, a new
+  contract-table row for EIP bandwidth billing) instructs asking the user
+  and stating the charge before purchasing. Dynamic rating was
+  investigated live: the BSS ListOnDemandResourceRatings API exists in the
+  already-installed SDK, but five catalog-code combinations were rejected
+  ("billing item does not exist") and the SDK ships no product-catalog
+  discovery API - dynamic pricing stays a future enhancement; the official
+  pricing calculator URL is referenced everywhere instead. Skill
+  `rds-supabase-mgr-mcp` 2.7.1 (server requirement >= 0.4.0a58).
 - `mcp_server_rds_supabase_mgr` 0.4.0a57 - the new-EIP bandwidth is a user
   decision, not a default. `create_supabase_eip` drops the silent 300 Mbps
   default: `bandwidth_size_mbps` becomes optional-with-no-default and the

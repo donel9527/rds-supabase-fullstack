@@ -112,7 +112,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
   请求一次提交。
 
 编排同时输出两个意图独立模块：**公网访问（EIP）** 给出购买基线（按需购买、全动态 BGP
-独享带宽 5-1000M、大小由用户决策）与绑定、`api_external_url` 同步步骤；**SSL 配置** 给出
+独享带宽 5-1000M、大小由用户决策——带宽为收费项：按固定带宽计费，创建即持续计费直至释放，单价以官网价格计算器为准）与绑定、`api_external_url` 同步步骤；**SSL 配置** 给出
 证书获取三路径——复用已有证书（`list_ssl_certificates` 盘点）、购买新证书
 （`purchase_supabase_ssl_cert`，推荐，免费档 DV_SSL_CERT_BASIC、付费档生成待支付订单）、
 导入自有证书。纯 EIP 公网 IP 证书仅支持文件验证。输出为步骤编号的创建流程与创建后动作
@@ -164,7 +164,7 @@ uvx --from "git+https://github.com/huaweicloud/rds-supabase-fullstack#subdirecto
 **采购**：`create_supabase_eip` 空闲优先（`prefer_idle=true`）——先列出未绑定 EIP
 供用户选定，选定后直接用于绑定、不新建；无空闲时按基线新建：按需购买（包周期返回
 控制台订单）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
-5-1000M（大小由用户决策，采购前先问），并自动打标 USAGE_FOR。
+5-1000M（大小由用户决策——收费项：按固定带宽计费、创建即持续计费直至释放，采购前先问并告知收费），并自动打标 USAGE_FOR。
 
 **绑定**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
 Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip`

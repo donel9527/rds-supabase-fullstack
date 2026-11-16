@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.7.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a57`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.7.1；配套服务端 `mcp_server_supabase ≥ 0.4.0a58`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -134,7 +134,7 @@ metadata:
 
 **触发**：应用已创建但 `public_ip` 为空（用户访问不了），或用户要求开通/变更公网访问。刚创建的应用没有公网地址，必须做完本场景才算可访问。
 
-1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时按基线新建：按需购买（包周期返回控制台订单）、全动态 BGP（`type=5_bgp`）、独享带宽 5-1000M（**大小由用户决策——采购前先问用户，无默认推荐，缺失被服务端拒绝**），并自动打标 USAGE_FOR 标记来源与用途。
+1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时按基线新建：按需购买（包周期返回控制台订单）、全动态 BGP（`type=5_bgp`）、独享带宽 5-1000M（**大小由用户决策——采购前先问用户并明确告知收费：带宽为收费项，按固定带宽计费（元/Mbps/小时，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准），自创建持续计费直至释放；无默认推荐，缺失被服务端拒绝**），并自动打标 USAGE_FOR 标记来源与用途。
 2. **绑定**：`bind_supabase_eip(instance_id, public_ip_id, public_ip)` 三重校验——`instance_id` 必须为 in32 结尾的 Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip` 为合法 IPv4——全部通过后经 RDS AttachEip 执行。
 3. **同步 `api_external_url`**：公网地址变了，邮箱确认链接与 OAuth 回调都指向该 URL，不同步则登录链路是断的。把拼装的公网访问地址写入请求文件别名 → `update_supabase_auth_config` 预览 → 确认 → 查任务 → `show_supabase_auth_config` 回查不再是 localhost。
 4. **探活**：以 curl 探测访问地址（任何状态码都算网络可达）；不通回头查安全组规则与 EIP 绑定状态。
@@ -274,7 +274,7 @@ metadata:
 |---|---|---|
 | `create_supabase_with_new_instance` | 新建实例场景创建（推荐） | DANGEROUS |
 | `create_supabase_link_exist_instance` | 挂载已有实例创建应用 | DANGEROUS |
-| `create_supabase_eip` | EIP 空闲优先采购（新建带宽 5-1000M 由用户决策，无默认） | DANGEROUS |
+| `create_supabase_eip` | EIP 空闲优先采购（新建带宽 5-1000M 由用户决策，收费项——按带宽计费） | DANGEROUS |
 | `create_supabase_new_obs` | 新建私有 OBS 桶 | DANGEROUS |
 
 **绑定与变更（含安全组工具：`list_supabase_security_groups`、`show_supabase_security_group`、`create_supabase_security_group`、`add_supabase_security_group_rule`、`delete_supabase_security_group_rule`、`delete_supabase_security_group`、`change_supabase_security_group`）**
@@ -338,6 +338,7 @@ metadata:
 | 契约 | 规则 |
 |---|---|
 | `charge_info.period_type` | 字符串 `month`（1-9 个月）/`year`（1-3 年）；按需仅携带 `charge_mode` |
+| EIP 带宽计费 | 新增 EIP 带宽为**收费项**：按固定带宽计费（元/Mbps/小时，全动态 BGP，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器实时为准 https://www.huaweicloud.com/pricing/eip.html ），自创建持续计费直至释放——大小**禁止默认**，必须用户明确给定并向用户告知收费 |
 | `basic_config.time_zone` | 整段 `UTC-12:00`~`UTC+12:00`（25 个值，不支持半点与时区名），推荐 `UTC+08:00`（中国北京） |
 | `规格选择` | 应用与实例规格分开单独询问；实例按 group_type 十类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型（ESSD=极速型SSD、CLOUDSSD=SSD云盘、ULTRAHIGH=SSD、LOCALSSD=本地SSD） |
 | `enterprise_project_id` | 可选，仅企业项目账号填写：发现/编排实时返回企业项目列表（默认选中 default 项目）供选择；个人账号省略该字段，省略时归属由服务端决定 |

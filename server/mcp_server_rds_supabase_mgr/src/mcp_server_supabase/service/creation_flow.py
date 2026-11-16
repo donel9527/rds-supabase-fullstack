@@ -149,7 +149,7 @@ class CreationFlowService:
                       '创建任务已下发：请调用方持续查询创建状态（整体约 20-30 分钟；预付费需先支付订单）')
         return {'track':track,'reminder':reminder,
                 'after_completion':{'eip_automation':EIP_AUTOMATION,
-                                    'note':'状态到终态且确认公网访问后执行；空闲 EIP 优先复用'}}
+                                    'note':'状态到终态且确认公网访问后执行；空闲 EIP 优先复用；新建带宽为收费项（按带宽计费、创建即计费），大小必须由用户明确给定'}}
 
     def _response(self,result,groups,scenario,prepared_obs=None):
         """Echo the creation identifiers plus the prepared-resource record and workflow follow-ups."""

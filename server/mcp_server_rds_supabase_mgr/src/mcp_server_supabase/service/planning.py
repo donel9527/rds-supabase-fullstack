@@ -287,7 +287,7 @@ class PlanningService:
                              "bandwidth": {"share_type": "PER（独享带宽）",
                                            "type": "全动态 BGP（publicip.type=5_bgp）",
                                            "size_range_mbps": "5-1000",
-                                           "size_decision": "大小由用户决策（无默认推荐）——采购前向用户确认后填入 create_supabase_eip(bandwidth_size_mbps=<5-1000>)"},
+                                           "size_decision": "大小由用户决策（无默认推荐）——带宽为收费项：按固定带宽计费（元/Mbps/小时，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准），自创建持续计费直至释放；采购前向用户确认并明确告知收费后填入 create_supabase_eip(bandwidth_size_mbps=<5-1000>)"},
                              "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
                              "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
                              "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}

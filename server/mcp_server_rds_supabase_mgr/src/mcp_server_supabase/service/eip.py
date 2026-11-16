@@ -72,8 +72,8 @@ class EipService:
                         'note':'存在空闲 EIP：请展示给用户选定其一，直接用于 bind_supabase_eip，无需新建'}
         # The new-purchase branch only: bandwidth is a user decision with no default.
         if bandwidth_size_mbps is None:
-            raise McpToolError('MCP_INVALID_ARGS','新增 EIP 的带宽大小由用户决策（5-1000 Mbps 整数），无默认推荐——请向用户确认后传入 bandwidth_size_mbps',
-                               hint='空闲复用路径（prefer_idle=true 且存在空闲 EIP）无需带宽参数；仅新建采购必须提供')
+            raise McpToolError('MCP_INVALID_ARGS','新增 EIP 的带宽大小由用户决策（5-1000 Mbps 整数），无默认推荐——带宽为收费项（按固定带宽计费，创建即开始持续计费直至释放），请向用户明确确认大小后传入 bandwidth_size_mbps',
+                               hint='计费参考：元/Mbps/小时（全动态 BGP 单价随地域浮动，参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准 https://www.huaweicloud.com/pricing/eip.html）；空闲复用路径（prefer_idle=true 且存在空闲 EIP）无需带宽参数')
         digest=self.intent_digest('POST',EIP_PATH,
                                   {'charge_mode':charge_mode,'bandwidth_size_mbps':bandwidth_size_mbps,
                                    'publicip_type':'5_bgp','share_type':'PER','name':name})
@@ -85,7 +85,12 @@ class EipService:
                            'publicip_type':'5_bgp（全动态 BGP）','share_type':'PER（独享）'},
                     'recommendation':{'charge_mode':'按需购买（postPaid）推荐',
                                       'bandwidth':'全动态 BGP，5-1000M，大小由用户决策（无默认推荐）'},
-                    'warnings':['新购 EIP 立即计费','包周期需控制台支付订单后生效'],
+                    'billing':{'charge_item':'公网带宽（按固定带宽计费）',
+                               'unit_price':'元/Mbps/小时（全动态 BGP 单价，随地域浮动）',
+                               'reference':'参考量级约 0.06 元/Mbps/小时，以官网价格计算器实时为准：https://www.huaweicloud.com/pricing/eip.html',
+                               'window':'自 EIP 创建起持续计费，直至释放 EIP 才停止'},
+                    'warnings':['带宽为收费项：按固定带宽计费（元/Mbps/小时，随地域浮动），自创建起持续计费直至释放——大小 %s Mbps 已由用户确认'%bandwidth_size_mbps,
+                                '包周期需控制台支付订单后生效'],
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')

@@ -144,7 +144,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
-| 1. 采购 | `create_supabase_eip` | prefer_idle=true、bandwidth_size_mbps=<用户决策 5-1000> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按基线新建（带宽大小先问用户再传参，按需+全动态 BGP+独享带宽 5-1000M+自动打标 USAGE_FOR） |
+| 1. 采购 | `create_supabase_eip` | prefer_idle=true、bandwidth_size_mbps=<用户决策 5-1000> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按基线新建（**带宽大小先问用户并明确告知收费**——按固定带宽计费、创建即持续计费直至释放，单价以官网价格计算器为准；再传参执行。按需+全动态 BGP+独享带宽 5-1000M+自动打标 USAGE_FOR） |
 | 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
 | 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
 | 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |

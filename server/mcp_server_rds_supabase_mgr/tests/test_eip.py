@@ -75,7 +75,12 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
                                         'publicip_type':'5_bgp（全动态 BGP）','share_type':'PER（独享）'})
         self.assertEqual(result['recommendation'],{'charge_mode':'按需购买（postPaid）推荐',
                                                     'bandwidth':'全动态 BGP，5-1000M，大小由用户决策（无默认推荐）'})
-        self.assertEqual(result['warnings'],['新购 EIP 立即计费','包周期需控制台支付订单后生效'])
+        self.assertEqual(result['billing'],{'charge_item':'公网带宽（按固定带宽计费）',
+                                             'unit_price':'元/Mbps/小时（全动态 BGP 单价，随地域浮动）',
+                                             'reference':'参考量级约 0.06 元/Mbps/小时，以官网价格计算器实时为准：https://www.huaweicloud.com/pricing/eip.html',
+                                             'window':'自 EIP 创建起持续计费，直至释放 EIP 才停止'})
+        self.assertEqual(result['warnings'],['带宽为收费项：按固定带宽计费（元/Mbps/小时，随地域浮动），自创建起持续计费直至释放——大小 300 Mbps 已由用户确认',
+                                             '包周期需控制台支付订单后生效'])
         self.assertEqual([c[1] for c in self.koocli.calls],['ListPublicips'])
 
     async def test_purchase_without_bandwidth_is_rejected_as_user_decision(self):
@@ -84,6 +89,7 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
             await self.service.ensure_publicip()
         self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
         self.assertIn('用户决策',ctx.exception.message)
+        self.assertIn('收费',ctx.exception.message)   # the guard forces the charge notice
         self.assertEqual(self.koocli.calls,[('EIP','ListPublicips',{'limit':100})])
 
     async def test_chosen_bandwidth_flows_through_preview(self):
