@@ -448,6 +448,17 @@ class RenderArrangementTests(unittest.TestCase):
         self.assertIn('【待决策】',out)
         self.assertIn('az_code：可售 AZ 待选',out)
 
+    def test_eip_bandwidth_user_decision_renders_without_default(self):
+        result=arrangement_fixture()
+        result['eip_baseline']['bandwidth']={'share_type':'PER（独享带宽）','type':'全动态 BGP（publicip.type=5_bgp）',
+                                            'size_range_mbps':'5-1000',
+                                            'size_decision':'大小由用户决策（无默认推荐）——采购前向用户确认后填入 create_supabase_eip(bandwidth_size_mbps=<5-1000>)'}
+        out=visual.render_arrangement(result)
+        self.assertIn('【EIP 购买基线】',out)
+        self.assertIn('用户决策',out)
+        self.assertIn('大小由用户决策（无默认推荐）',out)
+        self.assertNotIn('300M',out)   # no default bandwidth anymore
+
     def test_instance_selection_module_reuses_candidate_table(self):
         result=arrangement_fixture()
         result['step_modules']['managed_instance']={

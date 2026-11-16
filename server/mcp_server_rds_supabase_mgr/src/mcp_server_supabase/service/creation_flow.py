@@ -6,7 +6,7 @@ from mcp_server_supabase.service.network import Network
 from mcp_server_supabase.service.plans import PlanStore, fingerprint
 
 CIDR_CHOICES='public_access_cidr 三选一：auto（探测当前设备出口 IP）/ open（0.0.0.0/0，经 KooCLI）/ 自定义有界 CIDR'
-EIP_AUTOMATION=[{'tool':'create_supabase_eip','args':{'prefer_idle':True,'charge_mode':'postPaid','bandwidth_size_mbps':300}},
+EIP_AUTOMATION=[{'tool':'create_supabase_eip','args':{'prefer_idle':True,'charge_mode':'postPaid','bandwidth_size_mbps':'<用户决策（5-1000）>'}},
                 {'tool':'bind_supabase_eip','args':{'instance_id':'<application_id（in32 结尾）>','public_ip_id':'<EIP ID>','public_ip':'<EIP 地址>'}},
                 {'tool':'update_supabase_auth_config','action':'同步 api_external_url 为公网地址并探活'}]
 

@@ -7,6 +7,20 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a57 - the new-EIP bandwidth is a user
+  decision, not a default. `create_supabase_eip` drops the silent 300 Mbps
+  default: `bandwidth_size_mbps` becomes optional-with-no-default and the
+  new-purchase branch rejects the call when it is missing ("ask the user"),
+  while the idle-reuse path stays bandwidth-free as before. The arrangement's
+  public-access module replaces `recommended_size_mbps: 300` with an explicit
+  `size_decision` ("user decides, 5-1000, no default"), the post-creation
+  flow and the creation-flow EIP automation carry a user-decision
+  placeholder, the EIP visual renders the bandwidth row as "用户决策" for
+  the new shape (legacy payloads keep rendering their explicit size), and
+  preview recommendations state "大小由用户决策（无默认推荐）". READMEs and
+  the skill guide (Scenario 1 step 2, Scenario 4, command table,
+  scenarios.md) instruct asking the user before purchasing. Skill
+  `rds-supabase-mgr-mcp` 2.7.0 (server requirement >= 0.4.0a57).
 - `mcp_server_rds_supabase_mgr` 0.4.0a56 - storage integration after
   creation is supported, not forbidden - and it is proactive. The
   "cannot be enabled after creation" claim is corrected everywhere it

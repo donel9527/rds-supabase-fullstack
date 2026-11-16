@@ -406,13 +406,14 @@ def _module_public_access(module):
     options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
                           for o in _list(purchase.get('options')))
     size=bandwidth.get('recommended_size_mbps')
+    decision=bandwidth.get('size_decision')
     bandwidth_note='；'.join(str(bandwidth.get(key)) for key in
-                             ('share_type','type','size_range_mbps') if bandwidth.get(key) is not None)
+                             ('share_type','type','size_range_mbps','size_decision') if bandwidth.get(key) is not None)
     rows=[]
     if module.get('applies_when') is not None:
         rows.append(['适用','',_clip(module.get('applies_when'),60)])
     rows.append(['购买方式',recommended.get('name'),options_note])
-    rows.append(['带宽','%sM' % size if size is not None else '-',bandwidth_note])
+    rows.append(['带宽','%sM' % size if size is not None else ('用户决策' if decision else '-'),bandwidth_note])
     if module.get('purchase') is not None:
         rows.append(['采购','',_clip(module.get('purchase'),60)])
     rows.append(['绑定',_clip(module.get('bind'),60),_clip(module.get('post_bind'),60)])
@@ -429,11 +430,12 @@ def _eip_baseline_block(eip):
     options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
                           for o in _list(purchase.get('options')))
     size=bandwidth.get('recommended_size_mbps')
+    decision=bandwidth.get('size_decision')
     bandwidth_note='；'.join(str(bandwidth.get(key)) for key in
-                             ('share_type','type','size_range_mbps') if bandwidth.get(key) is not None)
+                             ('share_type','type','size_range_mbps','size_decision') if bandwidth.get(key) is not None)
     eip_rows=[
         ['购买方式',recommended.get('name'),options_note],
-        ['带宽','%sM' % size if size is not None else '-',bandwidth_note],
+        ['带宽','%sM' % size if size is not None else ('用户决策' if decision else '-'),bandwidth_note],
         ['绑定',_clip(eip.get('bind'),60),_clip(eip.get('post_bind'),60)],
     ]
     return block('EIP 购买基线',table(['项','推荐','说明'],eip_rows))

@@ -47,12 +47,12 @@ class EipService:
               (row.get('status')=='FREE' or (row.get('status') is None and not row.get('associate_instance_id')))]
         return {'data':idle,'note':'空闲=未绑定（FREE）；选定其一可直接用于 bind_supabase_eip'}
 
-    async def ensure_publicip(self,prefer_idle=True,charge_mode='postPaid',bandwidth_size_mbps=300,
+    async def ensure_publicip(self,prefer_idle=True,charge_mode='postPaid',bandwidth_size_mbps=None,
                               name=None,period_type=None,period_num=None,confirm=False,plan_id=None):
         """Return idle EIPs for reuse, preview the purchase, or execute it behind the plan ledger."""
         if charge_mode not in ('postPaid','prePaid'):
             raise McpToolError('MCP_INVALID_ARGS','charge_mode must be postPaid or prePaid')
-        if type(bandwidth_size_mbps) is not int or not 5<=bandwidth_size_mbps<=1000:
+        if bandwidth_size_mbps is not None and (type(bandwidth_size_mbps) is not int or not 5<=bandwidth_size_mbps<=1000):
             raise McpToolError('MCP_INVALID_ARGS','bandwidth_size_mbps must be an integer between 5 and 1000')
         if name is not None and (not isinstance(name,str) or len(name)>64):
             raise McpToolError('MCP_INVALID_ARGS','name must be a string of at most 64 characters')
@@ -70,6 +70,10 @@ class EipService:
             if idle['data']:
                 return {'mode':'idle_selection','idle_eips':idle['data'],
                         'note':'存在空闲 EIP：请展示给用户选定其一，直接用于 bind_supabase_eip，无需新建'}
+        # The new-purchase branch only: bandwidth is a user decision with no default.
+        if bandwidth_size_mbps is None:
+            raise McpToolError('MCP_INVALID_ARGS','新增 EIP 的带宽大小由用户决策（5-1000 Mbps 整数），无默认推荐——请向用户确认后传入 bandwidth_size_mbps',
+                               hint='空闲复用路径（prefer_idle=true 且存在空闲 EIP）无需带宽参数；仅新建采购必须提供')
         digest=self.intent_digest('POST',EIP_PATH,
                                   {'charge_mode':charge_mode,'bandwidth_size_mbps':bandwidth_size_mbps,
                                    'publicip_type':'5_bgp','share_type':'PER','name':name})
@@ -80,7 +84,7 @@ class EipService:
                            'bandwidth_size_mbps':bandwidth_size_mbps,'charge_mode':charge_mode,
                            'publicip_type':'5_bgp（全动态 BGP）','share_type':'PER（独享）'},
                     'recommendation':{'charge_mode':'按需购买（postPaid）推荐',
-                                      'bandwidth':'全动态 BGP，5-1000M，推荐 300M'},
+                                      'bandwidth':'全动态 BGP，5-1000M，大小由用户决策（无默认推荐）'},
                     'warnings':['新购 EIP 立即计费','包周期需控制台支付订单后生效'],
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':

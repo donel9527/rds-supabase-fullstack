@@ -64,7 +64,7 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_idle_preview_requires_confirmation(self):
         self.koocli.push({'publicips':[]})
-        result=await self.service.ensure_publicip()
+        result=await self.service.ensure_publicip(bandwidth_size_mbps=300)
         self.assertEqual(result['mode'],'confirmation_required')
         self.assertEqual(result['status'],'confirmation_required')
         self.assertEqual(result['execution'],'not_executed')
@@ -74,19 +74,32 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
                                         'bandwidth_size_mbps':300,'charge_mode':'postPaid',
                                         'publicip_type':'5_bgp（全动态 BGP）','share_type':'PER（独享）'})
         self.assertEqual(result['recommendation'],{'charge_mode':'按需购买（postPaid）推荐',
-                                                    'bandwidth':'全动态 BGP，5-1000M，推荐 300M'})
+                                                    'bandwidth':'全动态 BGP，5-1000M，大小由用户决策（无默认推荐）'})
         self.assertEqual(result['warnings'],['新购 EIP 立即计费','包周期需控制台支付订单后生效'])
         self.assertEqual([c[1] for c in self.koocli.calls],['ListPublicips'])
 
+    async def test_purchase_without_bandwidth_is_rejected_as_user_decision(self):
+        self.koocli.push({'publicips':[]})
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.ensure_publicip()
+        self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
+        self.assertIn('用户决策',ctx.exception.message)
+        self.assertEqual(self.koocli.calls,[('EIP','ListPublicips',{'limit':100})])
+
+    async def test_chosen_bandwidth_flows_through_preview(self):
+        self.koocli.push({'publicips':[]})
+        result=await self.service.ensure_publicip(bandwidth_size_mbps=50)
+        self.assertEqual(result['eip']['bandwidth_size_mbps'],50)
+
     async def test_postpaid_execute_creates_and_tags(self):
         self.koocli.push({'publicips':[]})
-        preview=await self.service.ensure_publicip(name='app-eip')
+        preview=await self.service.ensure_publicip(name='app-eip',bandwidth_size_mbps=300)
         self.assertEqual(preview['eip']['alias'],'app-eip')
         self.koocli.push({'publicips':[]})
         self.koocli.push({'publicip':{'id':'e-9','status':'ACTIVE','public_ip_address':'9.9.9.9',
                                       'bandwidth':{'size':300,'share_type':'PER','charge_mode':'bandwidth'}}})
         self.koocli.push({})
-        result=await self.service.ensure_publicip(name='app-eip',confirm=True,plan_id=preview['plan_id'])
+        result=await self.service.ensure_publicip(name='app-eip',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual([c[1] for c in self.koocli.calls],
                          ['ListPublicips','ListPublicips','CreatePublicip','BatchCreatePublicipTags'])
         service,operation,params=self.koocli.calls[2]
@@ -121,14 +134,14 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
 
     async def test_prefer_idle_false_skips_the_idle_query(self):
-        preview=await self.service.ensure_publicip(prefer_idle=False)
+        preview=await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300)
         self.assertEqual(preview['mode'],'confirmation_required')
         self.assertTrue(preview['plan_id'])
         self.assertEqual(self.koocli.calls,[])
 
     async def test_invalid_arguments_rejected_before_any_call(self):
         for case in ({'charge_mode':'x'},{'bandwidth_size_mbps':4},{'bandwidth_size_mbps':1001},
-                     {'bandwidth_size_mbps':'300'},{'name':123},{'name':'x'*65},
+                     {'bandwidth_size_mbps':'300'},{'bandwidth_size_mbps':None},{'name':123},{'name':'x'*65},
                      {'charge_mode':'prePaid'},
                      {'charge_mode':'prePaid','period_type':'week','period_num':1},
                      {'charge_mode':'prePaid','period_type':'month'},
@@ -141,22 +154,22 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.koocli.calls,[])
 
     async def test_write_gate_blocks_execution(self):
-        preview=await self.service.ensure_publicip(prefer_idle=False)
+        preview=await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300)
         os.environ['SUPABASE_ENABLE_WRITES']='false'
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_READ_ONLY')
         os.environ['SUPABASE_ENABLE_WRITES']='true';os.environ['HUAWEICLOUD_MCP_READ_ONLY']='true'
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_READ_ONLY')
         self.assertEqual(self.koocli.calls,[])
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'prepared')
 
     async def test_broken_plan_refused_and_left_prepared(self):
-        preview=await self.service.ensure_publicip(prefer_idle=False)
+        preview=await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300)
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id='bogus')
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id='bogus')
         self.assertEqual(ctx.exception.code,'MCP_GUARDRAIL_BLOCKED')
         with self.assertRaises(McpToolError) as ctx:
             await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=100,
@@ -166,22 +179,22 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'prepared')
         self.koocli.push({'publicip':{'id':'e-5','public_ip_address':'5.5.5.5'}})
         self.koocli.push({})
-        await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+        await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_GUARDRAIL_BLOCKED')
         self.assertEqual(len(self.koocli.calls),2)
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
 
     async def test_prepaid_execute_returns_order_id(self):
         preview=await self.service.ensure_publicip(prefer_idle=False,charge_mode='prePaid',
-                                                   period_type='month',period_num=3)
+                                                   period_type='month',period_num=3,bandwidth_size_mbps=300)
         self.assertEqual(preview['charge_mode'],'prePaid')
         self.assertEqual(self.koocli.calls,[])
         self.koocli.push({'publicip':{'id':'e-8','status':'PENDING_CREATE','public_ip_address':'8.8.8.8'},
                           'order_id':'CS123'})
         result=await self.service.ensure_publicip(prefer_idle=False,charge_mode='prePaid',period_type='month',
-                                                  period_num=3,confirm=True,plan_id=preview['plan_id'])
+                                                  period_num=3,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(result['mode'],'created')
         self.assertEqual(result['order_id'],'CS123')
         self.assertEqual(result['eip']['public_ip_address'],'8.8.8.8')
@@ -196,28 +209,28 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('--extendParam.period_num=3',flags)
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
         preview=await self.service.ensure_publicip(prefer_idle=False,charge_mode='prePaid',period_type='year',
-                                                   period_num=1,name='app-eip')
+                                                   period_num=1,name='app-eip',bandwidth_size_mbps=300)
         self.koocli.push({'data':{'order_id':'CS456'},'publicip':{'id':'e-6'}})
         result=await self.service.ensure_publicip(prefer_idle=False,charge_mode='prePaid',period_type='year',
-                                                  period_num=1,name='app-eip',confirm=True,plan_id=preview['plan_id'])
+                                                  period_num=1,name='app-eip',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(result['order_id'],'CS456')
         self.assertEqual([c[1] for c in self.koocli.calls],['CreatePrePaidPublicip','CreatePrePaidPublicip'])
 
     async def test_write_failure_keeps_unknown(self):
-        preview=await self.service.ensure_publicip(prefer_idle=False)
+        preview=await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300)
         self.koocli.push(McpToolError('MCP_CLI_ERROR','boom'))
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_SDK_ERROR')
         self.assertEqual(ctx.exception.recovery['category'],'submission_unknown')
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
 
     async def test_tag_failure_after_create_keeps_unknown(self):
-        preview=await self.service.ensure_publicip(prefer_idle=False)
+        preview=await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300)
         self.koocli.push({'publicip':{'id':'e-7','public_ip_address':'7.7.7.7'}})
         self.koocli.push(McpToolError('MCP_CLI_ERROR','tag failed'))
         with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,confirm=True,plan_id=preview['plan_id'])
+            await self.service.ensure_publicip(prefer_idle=False,bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_SDK_ERROR')
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
 

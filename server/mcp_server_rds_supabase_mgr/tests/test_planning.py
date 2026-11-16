@@ -137,7 +137,9 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
         eip = result['step_modules']['public_access']
         self.assertEqual(eip['status'], 'planned')
         self.assertEqual(eip['purchase_method']['recommended']['charge_mode'], 'postPaid')
-        self.assertEqual(eip['bandwidth']['recommended_size_mbps'], 300)
+        self.assertEqual(eip['bandwidth']['size_range_mbps'], '5-1000')
+        self.assertIn('用户决策', eip['bandwidth']['size_decision'])   # no default size - the user decides
+        self.assertNotIn('recommended_size_mbps', eip['bandwidth'])
         self.assertIn('5_bgp', eip['bandwidth']['type'])
         self.assertIn('CreatePublicip', eip['purchase'])
         flow = result['creation_flow']

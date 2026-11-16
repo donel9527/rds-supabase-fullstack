@@ -8,8 +8,8 @@ def register(server):
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
-    async def create_supabase_eip(prefer_idle: bool = True, charge_mode: str = 'postPaid', bandwidth_size_mbps: int = 300, name: str | None = None, period_type: str | None = None, period_num: int | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """为 Supabase 应用采购公网入口 EIP，两段式提交。空闲优先：先列出未绑定 EIP 供选用，无空闲才新建；采购基线为按需计费加全动态 BGP 独享带宽。响应含 visual 图表。"""
+    async def create_supabase_eip(prefer_idle: bool = True, charge_mode: str = 'postPaid', bandwidth_size_mbps: int | None = None, name: str | None = None, period_type: str | None = None, period_num: int | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """为 Supabase 应用采购公网入口 EIP，两段式提交。空闲优先：先列出未绑定 EIP 供选用（无需带宽参数），无空闲才新建；新建带宽大小由用户决策（5-1000 Mbps 整数，无默认推荐，缺失即拒）；采购基线为按需计费加全动态 BGP 独享带宽。响应含 visual 图表。"""
         result = await EipService().ensure_publicip(prefer_idle, charge_mode, bandwidth_size_mbps, name, period_type, period_num, confirm, plan_id)
         result['visual'] = visual.render_eip(result)
         return result

@@ -286,7 +286,8 @@ class PlanningService:
                                                  "recommended": {"charge_mode": "postPaid", "name": "按需购买"}},
                              "bandwidth": {"share_type": "PER（独享带宽）",
                                            "type": "全动态 BGP（publicip.type=5_bgp）",
-                                           "size_range_mbps": "5-1000", "recommended_size_mbps": 300},
+                                           "size_range_mbps": "5-1000",
+                                           "size_decision": "大小由用户决策（无默认推荐）——采购前向用户确认后填入 create_supabase_eip(bandwidth_size_mbps=<5-1000>)"},
                              "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
                              "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
                              "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}
@@ -373,8 +374,8 @@ class PlanningService:
             post.append({"tool": "show_supabase_application", "action": "内网交付 private_ip；不购买 EIP、不开公网入方向"})
         else:
             post.append({"tool": "create_supabase_eip",
-                         "action": "按 public_access 模块执行：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、300M 独享、自动打标）",
-                         "args": {"prefer_idle": True, "charge_mode": "postPaid", "bandwidth_size_mbps": 300}})
+                         "action": "按 public_access 模块执行：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、独享带宽大小由用户决策、自动打标）",
+                         "args": {"prefer_idle": True, "charge_mode": "postPaid", "bandwidth_size_mbps": "<用户决策（5-1000）>"}})
             post.append({"tool": "bind_supabase_eip",
                          "args": {"instance_id": "<应用 ID（in32 结尾）>", "public_ip_id": "<EIP ID>", "public_ip": "<EIP 地址>"},
                          "note": "预览确认后绑定；in32/归属/格式三重校验"})

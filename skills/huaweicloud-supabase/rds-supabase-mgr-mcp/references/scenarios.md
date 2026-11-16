@@ -138,13 +138,13 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 3. 追问决策点 | — | — | 按 decision_points 逐项追问到明确答复 |
 | 4. 展示 | visual 输出 | — | 表格/流程图直接给用户；三大必选模块参数注明实时来源 |
 
-基线输出结构：托管来源两决策 → 三必选模块（Supabase 基本信息/托管实例/网络控制，各注明所依赖的发现工具）→ OBS 关键可选模块（needs_storage 答复后给复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（needs_ssl/needs_public_access 答复后输出：SSL 给证书获取三路径——复用 `list_ssl_certificates`/购买 `purchase_supabase_ssl_cert` 推荐/导入自有，免费档 DV_SSL_CERT_BASIC；公网给 EIP 购买基线：按需+全动态 BGP 独享带宽 5-1000M 推荐 300M）→ 步骤化 creation_flow → 创建后动作（SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`）→ decision_points → 秘密边界。实际创建 1:1 严格按 creation_flow 执行，不偏离目标与计划。
+基线输出结构：托管来源两决策 → 三必选模块（Supabase 基本信息/托管实例/网络控制，各注明所依赖的发现工具）→ OBS 关键可选模块（needs_storage 答复后给复用/新建两方案）→ SSL 配置与公网访问（EIP）两个独立模块（needs_ssl/needs_public_access 答复后输出：SSL 给证书获取三路径——复用 `list_ssl_certificates`/购买 `purchase_supabase_ssl_cert` 推荐/导入自有，免费档 DV_SSL_CERT_BASIC；公网给 EIP 购买基线：按需+全动态 BGP 独享带宽 5-1000M，大小由用户决策（无默认推荐））→ 步骤化 creation_flow → 创建后动作（SSL 分支 `list_ssl_certificates`→`purchase_supabase_ssl_cert`→`change_supabase_ssl`）→ decision_points → 秘密边界。实际创建 1:1 严格按 creation_flow 执行，不偏离目标与计划。
 
 ## 场景四：公网开通（EIP 采购与绑定）
 
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
-| 1. 采购 | `create_supabase_eip` | prefer_idle=true、bandwidth_size_mbps=300 | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按基线新建（按需+全动态 BGP+独享带宽 5-1000M+自动打标 USAGE_FOR） |
+| 1. 采购 | `create_supabase_eip` | prefer_idle=true、bandwidth_size_mbps=<用户决策 5-1000> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按基线新建（带宽大小先问用户再传参，按需+全动态 BGP+独享带宽 5-1000M+自动打标 USAGE_FOR） |
 | 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
 | 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
 | 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |
