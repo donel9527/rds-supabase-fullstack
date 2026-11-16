@@ -400,8 +400,10 @@ def _module_public_access(module):
     module=_dict(module)
     if module.get('status')=='excluded':
         return block('公网访问（EIP）',_excluded_lines(module,'内网交付：不购买 EIP、不开公网入方向，接入用 private_ip'))
+    billing_mode=_dict(module.get('billing_mode'))
     purchase=_dict(module.get('purchase_method'))
     recommended=_dict(purchase.get('recommended'))
+    method_decision=purchase.get('method_decision')
     bandwidth=_dict(module.get('bandwidth'))
     options_note='；'.join('%s：%s' % (_dict(o).get('name'),_dict(o).get('note'))
                           for o in _list(purchase.get('options')))
@@ -412,7 +414,11 @@ def _module_public_access(module):
     rows=[]
     if module.get('applies_when') is not None:
         rows.append(['适用','',_clip(module.get('applies_when'),60)])
-    rows.append(['购买方式',recommended.get('name'),options_note])
+    if billing_mode.get('fixed') is not None:
+        rows.append(['计费模式','按需（固定）',_clip(billing_mode.get('fixed'),100)])
+        if billing_mode.get('price_source') is not None:
+            rows.append(['单价来源','',_clip(billing_mode.get('price_source'),100)])
+    rows.append(['计费方式',recommended.get('name') or ('用户选择' if method_decision else None),options_note])
     rows.append(['带宽','%sM' % size if size is not None else ('用户决策' if decision else '-'),bandwidth_note])
     if module.get('purchase') is not None:
         rows.append(['采购','',_clip(module.get('purchase'),60)])
@@ -611,9 +617,13 @@ def render_eip(result):
         return block('空闲 EIP（选定其一可直接绑定，不新建）',
                      table(['ID','地址','别名','状态','带宽 M','计费'],rows))
     rows=[[key,result.get(key)] for key in
-          ('id','public_ip_address','alias','status','bandwidth_size_mbps','charge_mode','publicip_type','share_type')]
-    if result.get('order_id') is not None:
-        rows.append(['订单 ID（控制台支付后生效）',result.get('order_id')])
+          ('id','public_ip_address','alias','status','bandwidth_size_mbps','billing_method','charge_mode','publicip_type','share_type')]
+    billing=_dict(result.get('billing'))
+    if billing:
+        for key,label in (('mode','计费模式'),('method','计费方式'),('fee_components','费用构成'),
+                          ('unit_price_reference','单价参考'),('price_source','单价来源')):
+            if billing.get(key) is not None:rows.append([label,_clip(billing.get(key),100)])
+        if billing.get('traffic_limit') is not None:rows.append(['流量计费约束',_clip(billing['traffic_limit'],100)])
     return block('弹性 EIP',table(['属性','值'],rows))
 
 

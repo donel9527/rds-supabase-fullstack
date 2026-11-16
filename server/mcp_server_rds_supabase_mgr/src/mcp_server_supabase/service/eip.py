@@ -47,50 +47,55 @@ class EipService:
               (row.get('status')=='FREE' or (row.get('status') is None and not row.get('associate_instance_id')))]
         return {'data':idle,'note':'空闲=未绑定（FREE）；选定其一可直接用于 bind_supabase_eip'}
 
-    async def ensure_publicip(self,prefer_idle=True,charge_mode='postPaid',bandwidth_size_mbps=None,
-                              name=None,period_type=None,period_num=None,confirm=False,plan_id=None):
-        """Return idle EIPs for reuse, preview the purchase, or execute it behind the plan ledger."""
-        if charge_mode not in ('postPaid','prePaid'):
-            raise McpToolError('MCP_INVALID_ARGS','charge_mode must be postPaid or prePaid')
-        if bandwidth_size_mbps is not None and (type(bandwidth_size_mbps) is not int or not 5<=bandwidth_size_mbps<=1000):
-            raise McpToolError('MCP_INVALID_ARGS','bandwidth_size_mbps must be an integer between 5 and 1000')
+    async def ensure_publicip(self,prefer_idle=True,billing_method=None,bandwidth_size_mbps=None,
+                              name=None,confirm=False,plan_id=None):
+        """Return idle EIPs for reuse, preview the on-demand purchase, or execute it behind the plan ledger."""
+        # On-demand billing is fixed on this path: prepaid periods are not supported.
+        if billing_method not in (None,'bandwidth','traffic'):
+            raise McpToolError('MCP_INVALID_ARGS','billing_method must be bandwidth (按带宽计费) or traffic (按流量计费)')
+        size_ceiling=300 if billing_method=='traffic' else 1000   # traffic-mode per-EIP peak cap (official rule)
+        if bandwidth_size_mbps is not None and (type(bandwidth_size_mbps) is not int or not 5<=bandwidth_size_mbps<=size_ceiling):
+            raise McpToolError('MCP_INVALID_ARGS',
+                               'bandwidth_size_mbps must be an integer between 5 and %d%s'%(size_ceiling,
+                                   ' (按流量计费单 EIP 带宽峰值上限 300Mbps，官方约束)' if billing_method=='traffic' else ''))
         if name is not None and (not isinstance(name,str) or len(name)>64):
             raise McpToolError('MCP_INVALID_ARGS','name must be a string of at most 64 characters')
-        if charge_mode=='prePaid':
-            if period_type not in ('month','year'):
-                raise McpToolError('MCP_INVALID_ARGS','prePaid requires period_type month or year')
-            if type(period_num) is not int:
-                raise McpToolError('MCP_INVALID_ARGS','prePaid requires an integer period_num')
-            if period_type=='month' and not 1<=period_num<=9:
-                raise McpToolError('MCP_INVALID_ARGS','month period_num must be between 1 and 9')
-            if period_type=='year' and not 1<=period_num<=3:
-                raise McpToolError('MCP_INVALID_ARGS','year period_num must be between 1 and 3')
         if prefer_idle:
             idle=await self.list_idle_publicips()
             if idle['data']:
                 return {'mode':'idle_selection','idle_eips':idle['data'],
                         'note':'存在空闲 EIP：请展示给用户选定其一，直接用于 bind_supabase_eip，无需新建'}
-        # The new-purchase branch only: bandwidth is a user decision with no default.
+        # The new-purchase branch only: billing method and bandwidth size are user decisions with no defaults.
+        if billing_method is None:
+            raise McpToolError('MCP_INVALID_ARGS','计费方式由用户根据场景选择（无默认）：bandwidth（按带宽计费——流量大或访问量稳定）/ traffic（按流量计费——流量低或访问量波动大）',
+                               hint='按需计费固定（不支持包周期）；费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取）；计费方式适用场景见 https://support.huaweicloud.com/price-eip/eip_billing_0005.html')
         if bandwidth_size_mbps is None:
-            raise McpToolError('MCP_INVALID_ARGS','新增 EIP 的带宽大小由用户决策（5-1000 Mbps 整数），无默认推荐——带宽为收费项（按固定带宽计费，创建即开始持续计费直至释放），请向用户明确确认大小后传入 bandwidth_size_mbps',
-                               hint='计费参考：元/Mbps/小时（全动态 BGP 单价随地域浮动，参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准 https://www.huaweicloud.com/pricing/eip.html）；空闲复用路径（prefer_idle=true 且存在空闲 EIP）无需带宽参数')
+            raise McpToolError('MCP_INVALID_ARGS',
+                              '带宽大小由用户决策（%s），无默认推荐——带宽为收费项，创建即持续计费直至释放'%(
+                                  '5-300 Mbps 整数；按流量计费下带宽为峰值限速（单 EIP 上限 300Mbps）' if billing_method=='traffic'
+                                  else '5-1000 Mbps 整数；按带宽计费下大小即计费尺寸'),
+                               hint='收费标准见 https://support.huaweicloud.com/price-eip/eip_billing_0007.html 与官网价格详情；空闲复用路径（prefer_idle=true 且存在空闲 EIP）无需带宽参数')
         digest=self.intent_digest('POST',EIP_PATH,
-                                  {'charge_mode':charge_mode,'bandwidth_size_mbps':bandwidth_size_mbps,
+                                  {'billing_method':billing_method,'bandwidth_size_mbps':bandwidth_size_mbps,
                                    'publicip_type':'5_bgp','share_type':'PER','name':name})
         if not confirm:
+            method_note={'bandwidth':'按带宽计费——带宽费按带宽峰值×时长（不限流量），流量大或访问量稳定场景更优',
+                         'traffic':'按流量计费——流量费按出云流量 GB 计费（入云不计），带宽仅作峰值限速，流量低或波动大场景更优'}[billing_method]
+            unit_ref={'bandwidth':'阶梯计费：0-5M 统一单价、超 5M 按每 Mbps 计费；官方示例 6Mbps≈0.565 元/小时（随地域浮动，以价格详情为准）',
+                      'traffic':'官方示例 0.64 元/GB（仅出云流量；随地域浮动，以价格详情为准）'}[billing_method]
             return {'mode':'confirmation_required','status':'confirmation_required','execution':'not_executed',
-                    'charge_mode':charge_mode,
+                    'billing_method':billing_method,
                     'eip':{'id':None,'public_ip_address':None,'alias':name,'status':None,
-                           'bandwidth_size_mbps':bandwidth_size_mbps,'charge_mode':charge_mode,
+                           'bandwidth_size_mbps':bandwidth_size_mbps,'billing_method':billing_method,
                            'publicip_type':'5_bgp（全动态 BGP）','share_type':'PER（独享）'},
-                    'recommendation':{'charge_mode':'按需购买（postPaid）推荐',
-                                      'bandwidth':'全动态 BGP，5-1000M，大小由用户决策（无默认推荐）'},
-                    'billing':{'charge_item':'公网带宽（按固定带宽计费）',
-                               'unit_price':'元/Mbps/小时（全动态 BGP 单价，随地域浮动）',
-                               'reference':'参考量级约 0.06 元/Mbps/小时，以官网价格计算器实时为准：https://www.huaweicloud.com/pricing/eip.html',
-                               'window':'自 EIP 创建起持续计费，直至释放 EIP 才停止'},
-                    'warnings':['带宽为收费项：按固定带宽计费（元/Mbps/小时，随地域浮动），自创建起持续计费直至释放——大小 %s Mbps 已由用户确认'%bandwidth_size_mbps,
-                                '包周期需控制台支付订单后生效'],
+                    'billing':{'mode':'按需计费（固定，不支持包周期）——秒级计费按小时结算，自 EIP 创建起计费至释放',
+                               'method':method_note,
+                               'fee_components':'费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时）',
+                               'unit_price_reference':unit_ref,
+                               'price_source':'精确单价以官网价格详情为准：https://www.huaweicloud.com/pricing.html?tab=detail#/eip',
+                               'traffic_limit':'单 EIP 带宽峰值上限 300Mbps；同账号同区域所有按流量 EIP 峰值总和 ≤5Gbps（2026-04 起官方约束）' if billing_method=='traffic' else None},
+                    'warnings':['%s——已由用户确认（%s Mbps）'%(method_note,bandwidth_size_mbps),
+                                '带宽/流量均为收费项：自 EIP 创建起持续计费直至释放'],
                     **self.plans.issue(digest)}
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')
@@ -98,10 +103,7 @@ class EipService:
         operation='CreatePublicip'
         params={'publicip':{'type':'5_bgp','ip_version':4,'alias':name or 'supabase-app-eip'},
                 'bandwidth':{'name':name or 'supabase-bandwidth','share_type':'PER',
-                             'size':bandwidth_size_mbps,'charge_mode':'bandwidth'}}
-        if charge_mode=='prePaid':
-            operation='CreatePrePaidPublicip'
-            params['extendParam']={'period_type':period_type,'period_num':period_num}
+                             'size':bandwidth_size_mbps,'charge_mode':billing_method}}
         try:
             data=await self.koocli.call('EIP',operation,params)
             nested=data.get('publicip') if isinstance(data,dict) else None
@@ -109,15 +111,6 @@ class EipService:
             view=self._view(row)
             if isinstance(data,dict) and data.get('public_ip_address') and not view.get('public_ip_address'):
                 view['public_ip_address']=data['public_ip_address']
-            if charge_mode=='prePaid':
-                order_id=None
-                if isinstance(data,dict):
-                    order_id=data.get('order_id')
-                    inner=data.get('data')
-                    if not order_id and isinstance(inner,dict):order_id=inner.get('order_id')
-                self.plans.finish(plan_id,'accepted')
-                return {'mode':'created','status':'order_created','eip':view,'order_id':order_id,
-                        'plan_id':plan_id,'note':'包周期订单在控制台支付后生效'}
             if not view.get('id'):raise ValueError()
             await self.koocli.call('EIP','BatchCreatePublicipTags',
                                    {'action':'create','publicip_id':view['id'],

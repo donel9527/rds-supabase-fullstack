@@ -548,13 +548,21 @@ class RenderEipTests(unittest.TestCase):
 
     def test_elastic_properties(self):
         out=visual.render_eip({'id':'e2','public_ip_address':'5.6.7.8','alias':'a2','status':'bind',
-                                'bandwidth_size_mbps':300,'charge_mode':'postPaid','publicip_type':'5_bgp',
-                                'share_type':'PER','order_id':'CS123'})
+                                'bandwidth_size_mbps':300,'billing_method':'bandwidth','publicip_type':'5_bgp',
+                                'share_type':'PER',
+                                'billing':{'mode':'按需计费（固定，不支持包周期）——秒级计费按小时结算，自 EIP 创建起计费至释放',
+                                           'method':'按带宽计费——带宽费按带宽峰值×时长（不限流量），流量大或访问量稳定场景更优',
+                                           'fee_components':'费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时）',
+                                           'unit_price_reference':'阶梯计费：0-5M 统一单价、超 5M 按每 Mbps 计费；官方示例 6Mbps≈0.565 元/小时（随地域浮动，以价格详情为准）',
+                                           'price_source':'精确单价以官网价格详情为准：https://www.huaweicloud.com/pricing.html?tab=detail#/eip',
+                                           'traffic_limit':None}})
         self.assertIn('【弹性 EIP】',out)
         self.assertIn('5.6.7.8',out)
         self.assertIn('5_bgp',out)
-        self.assertIn('订单 ID（控制台支付后生效）',out)
-        self.assertIn('CS123',out)
+        self.assertIn('计费模式',out)
+        self.assertIn('按需计费（固定，不支持包周期）',out)
+        self.assertIn('0.02',out)
+        self.assertIn('费用构成',out)
 
     def test_missing_keys_do_not_raise(self):
         out=visual.render_eip({})

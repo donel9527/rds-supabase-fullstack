@@ -7,6 +7,26 @@ semantic versioning.
 
 ### Added
 
+- `mcp_server_rds_supabase_mgr` 0.4.0a59 - new-EIP billing follows the
+  official on-demand contract. The purchase path is fixed to on-demand
+  billing (prepaid periods are removed from create_supabase_eip along
+  with its order flow), and the billing method becomes an explicit user
+  choice with no default: bandwidth-based (peak x duration, unlimited
+  traffic - best for steady traffic; tiered pricing with the official
+  6Mbps ~0.565 CNY/hour example) or traffic-based (outbound GB only,
+  the bandwidth acts as a peak speed cap - best for low or bursty
+  traffic; official example 0.64 CNY/GB, per-EIP peak capped at
+  300 Mbps with a 5 Gbps regional account-wide cap per the 2026-04
+  official rule). The bandwidth size stays a user decision
+  (bandwidth 5-1000 / traffic 5-300 peak cap). Every purchase surface
+  shows the fee schedule before confirmation: bandwidth/traffic fee
+  plus the IP retention fee (official example 0.02 CNY/hour while
+  unbound and unreleased), with the scenario and pricing docs linked
+  (eip_billing_0005 / eip_billing_0007) and the official pricing page
+  as the exact-price source. The arrangement module, creation-flow
+  automation note, EIP visual block and both READMEs carry the same
+  contract. Skill `rds-supabase-mgr-mcp` 2.8.0 (server requirement
+  >= 0.4.0a59). Tests: 534 passed + 168 subtests.
 - `mcp_server_rds_supabase_mgr` 0.4.0a58 - the EIP bandwidth charge becomes
   a forced, explicit notice. The missing-bandwidth guard now states the
   bandwidth is a chargeable item (fixed-bandwidth billing, continuous from

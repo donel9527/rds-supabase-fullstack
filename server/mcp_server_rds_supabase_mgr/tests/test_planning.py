@@ -136,8 +136,12 @@ class ArrangementTests(unittest.IsolatedAsyncioTestCase):
                          ['discover_supabase_storage'])
         eip = result['step_modules']['public_access']
         self.assertEqual(eip['status'], 'planned')
-        self.assertEqual(eip['purchase_method']['recommended']['charge_mode'], 'postPaid')
-        self.assertEqual(eip['bandwidth']['size_range_mbps'], '5-1000')
+        self.assertIn('按需计费（固定，不支持包周期）', eip['billing_mode']['fixed'])
+        self.assertIn('0.02', eip['billing_mode']['fixed'])   # official IP-retention fee example
+        self.assertEqual([o['method'] for o in eip['purchase_method']['options']], ['bandwidth', 'traffic'])
+        self.assertIn('0.64', eip['purchase_method']['options'][1]['note'])   # official traffic-price example
+        self.assertIn('300Mbps', eip['purchase_method']['options'][1]['note'])   # traffic per-EIP peak cap
+        self.assertIn('traffic', eip['bandwidth']['size_range_mbps'])
         self.assertIn('用户决策', eip['bandwidth']['size_decision'])   # no default size - the user decides
         self.assertNotIn('recommended_size_mbps', eip['bandwidth'])
         self.assertIn('5_bgp', eip['bandwidth']['type'])

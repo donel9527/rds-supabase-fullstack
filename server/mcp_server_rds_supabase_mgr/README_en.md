@@ -153,7 +153,7 @@ one key optional module:
 
 The arrangement also emits two independent intent modules: **public access (EIP)**
 carries the purchase baseline (pay-per-use, dedicated full-dynamic BGP bandwidth
-5-1000M, size decided by the user - bandwidth is a chargeable item billed per Mbps per hour from creation until release, unit price per the official pricing calculator), the binding, and the `api_external_url` sync steps;
+on-demand billing fixed (no prepaid periods) with full-dynamic BGP dedicated bandwidth - the **billing method is chosen by the user per scenario** (bandwidth-based or traffic-based, traffic mode capped at a 300 Mbps peak per EIP) and the **bandwidth size is decided by the user**; the fee schedule is shown before purchase: bandwidth/traffic fee plus IP retention fee, official examples 6Mbps ~0.565 CNY/hour / 0.64 CNY/GB / 0.02 CNY/hour retention, exact unit prices per the official pricing details), the binding, and the `api_external_url` sync steps;
 **SSL configuration** carries the three certificate acquisition paths — reuse an
 existing certificate (`list_ssl_certificates` inventory), purchase a new one
 (`purchase_supabase_ssl_cert`, recommended; free-tier DV_SSL_CERT_BASIC, paid
@@ -227,7 +227,7 @@ identifier into the request before one successful submission.
 and the selection binds directly with nothing created; with no idle EIP, it
 creates per the baseline: pay-per-use purchase (prepaid returns a console
 order), full-dynamic BGP (`publicip.type=5_bgp`), dedicated bandwidth
-(`share_type=PER`) 5-1000M with the size decided by the user (asked before purchase; bandwidth is chargeable - fixed-bandwidth billing from creation until release), auto-tagged USAGE_FOR.
+(`share_type=PER`) on-demand billing fixed - the billing method (bandwidth-based or traffic-based, no default, chosen by the user per scenario) and the size (bandwidth 5-1000 / traffic 5-300 peak cap) are both user decisions; the fee schedule is shown and confirmed before purchase, auto-tagged USAGE_FOR.
 
 **Binding**: `bind_supabase_eip` runs triple validation — `instance_id` must
 be an in32-suffixed Supabase application ID within this environment's

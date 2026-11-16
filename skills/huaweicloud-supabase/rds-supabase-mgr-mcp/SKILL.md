@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.7.1；配套服务端 `mcp_server_supabase ≥ 0.4.0a58`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.8.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a59`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，53 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -96,7 +96,7 @@ metadata:
 **触发**：用户要从零创建 RDS Supabase 应用，数据库也一起新建。完成标准不是“创建成功”，而是“用户能用浏览器打开、能用密钥连上”——创建、公网开通与接入信息交付缺一不可。
 
 1. **四问意图（必须逐个问，不许默认、不许替用户决定）**：① 数据库来源——新建实例（本场景，推荐）还是挂载已有实例（场景二）；② 大文件存储——要传图片/视频/附件则按场景五先定 OBS 方案（**强烈建议创建时当场定**：业务确认需要就当场启用，避免遗漏与流程拉长；事后可经场景五 `update_supabase_storage` 补开对接），不要则 `storage_component` 写 `{"enabled":false}` 且不能整个省略；③ 公网访问——要则创建后走场景四，不要则明确告知仅内网可达；④ HTTPS——要则先定证书获取三路径：复用已有证书（`list_ssl_certificates` 盘点）/ 购买新证书（`purchase_supabase_ssl_cert`，推荐；免费档 DV_SSL_CERT_BASIC，付费档生成待支付订单）/ 导入自有证书，纯 EIP 公网 IP 无域名时证书仅支持文件验证；创建后开 SSL。
-2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、SSL 配置与公网访问（EIP）两个独立模块（公网：按需+全动态 BGP 独享带宽 5-1000M，**大小由用户决策（无默认推荐）**；SSL：证书获取三路径）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
+2. **编排基线**：`plan_supabase_creation_arrangement(manage_type="newly_instance", az_code, needs_storage, ...)` 生成端到端基线——三大必选模块实时固化（应用规格与实例规格分开单独询问，实例默认推荐与应用同规格）、OBS 关键可选模块、SSL 配置与公网访问（EIP）两个独立模块（公网：按需计费固定（不支持包周期）+全动态 BGP 独享带宽，**计费方式（bandwidth 按带宽/traffic 按流量）与带宽大小均由用户决策（无默认）**，基线含收费标准；SSL：证书获取三路径）、步骤编号的 `creation_flow` 与创建后动作；实际创建对 `creation_flow` 1:1 严格逐步执行。
 3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；企业项目为可选字段，仅企业项目账号需要——发现时实时查询企业项目列表（仅此场景查询）供选择，默认选中 default 项目，查询不可用或个人账号直接省略该字段；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、兜底 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
 4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
@@ -134,7 +134,7 @@ metadata:
 
 **触发**：应用已创建但 `public_ip` 为空（用户访问不了），或用户要求开通/变更公网访问。刚创建的应用没有公网地址，必须做完本场景才算可访问。
 
-1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时按基线新建：按需购买（包周期返回控制台订单）、全动态 BGP（`type=5_bgp`）、独享带宽 5-1000M（**大小由用户决策——采购前先问用户并明确告知收费：带宽为收费项，按固定带宽计费（元/Mbps/小时，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准），自创建持续计费直至释放；无默认推荐，缺失被服务端拒绝**），并自动打标 USAGE_FOR 标记来源与用途。
+1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时新建：**按需计费固定（不支持包周期）**、全动态 BGP（`type=5_bgp`）、独享带宽。**计费方式由用户按场景选择（无默认，缺失即拒）**：`bandwidth`（按带宽计费——带宽费=带宽峰值×时长、不限流量，流量大或访问量稳定场景更优；阶梯计费 0-5M 统一单价、超 5M 按 Mbps 计费，官方示例 6Mbps≈0.565 元/小时）/ `traffic`（按流量计费——流量费按出云流量 GB 计、入云不计，带宽仅作峰值限速，流量低或波动大场景更优；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、同账号区域峰值总和 ≤5Gbps）。**带宽大小由用户决策**（bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速，无默认，缺失即拒）。两项均须采购前向用户**展示收费标准**并确认：费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时），精确单价以[官网价格详情](https://www.huaweicloud.com/pricing.html?tab=detail#/eip)为准（[场景](https://support.huaweicloud.com/price-eip/eip_billing_0005.html)/[收费标准](https://support.huaweicloud.com/price-eip/eip_billing_0007.html)）；自创建起持续计费直至释放。并自动打标 USAGE_FOR 标记来源与用途。
 2. **绑定**：`bind_supabase_eip(instance_id, public_ip_id, public_ip)` 三重校验——`instance_id` 必须为 in32 结尾的 Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip` 为合法 IPv4——全部通过后经 RDS AttachEip 执行。
 3. **同步 `api_external_url`**：公网地址变了，邮箱确认链接与 OAuth 回调都指向该 URL，不同步则登录链路是断的。把拼装的公网访问地址写入请求文件别名 → `update_supabase_auth_config` 预览 → 确认 → 查任务 → `show_supabase_auth_config` 回查不再是 localhost。
 4. **探活**：以 curl 探测访问地址（任何状态码都算网络可达）；不通回头查安全组规则与 EIP 绑定状态。
@@ -274,7 +274,7 @@ metadata:
 |---|---|---|
 | `create_supabase_with_new_instance` | 新建实例场景创建（推荐） | DANGEROUS |
 | `create_supabase_link_exist_instance` | 挂载已有实例创建应用 | DANGEROUS |
-| `create_supabase_eip` | EIP 空闲优先采购（新建带宽 5-1000M 由用户决策，收费项——按带宽计费） | DANGEROUS |
+| `create_supabase_eip` | EIP 空闲优先采购（按需计费固定；计费方式 bandwidth/traffic 与带宽大小均由用户决策，收费项） | DANGEROUS |
 | `create_supabase_new_obs` | 新建私有 OBS 桶 | DANGEROUS |
 
 **绑定与变更（含安全组工具：`list_supabase_security_groups`、`show_supabase_security_group`、`create_supabase_security_group`、`add_supabase_security_group_rule`、`delete_supabase_security_group_rule`、`delete_supabase_security_group`、`change_supabase_security_group`）**
@@ -338,7 +338,7 @@ metadata:
 | 契约 | 规则 |
 |---|---|
 | `charge_info.period_type` | 字符串 `month`（1-9 个月）/`year`（1-3 年）；按需仅携带 `charge_mode` |
-| EIP 带宽计费 | 新增 EIP 带宽为**收费项**：按固定带宽计费（元/Mbps/小时，全动态 BGP，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器实时为准 https://www.huaweicloud.com/pricing/eip.html ），自创建持续计费直至释放——大小**禁止默认**，必须用户明确给定并向用户告知收费 |
+| EIP 带宽计费 | 新增 EIP 固定**按需计费**（不支持包周期）；**计费方式由用户按场景选择（无默认）**：`bandwidth` 按带宽计费（带宽费=峰值×时长、不限流量；阶梯计费，官方示例 6Mbps≈0.565 元/小时）/ `traffic` 按流量计费（出云流量按 GB、入云不计；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、区域峰值总和 ≤5Gbps）；费用另含 IP 保有费（未绑定且未释放时，官方示例 0.02 元/小时）；**带宽大小由用户决策**（bandwidth 5-1000 / traffic 5-300），采购前须展示收费标准——[场景](https://support.huaweicloud.com/price-eip/eip_billing_0005.html) [收费标准](https://support.huaweicloud.com/price-eip/eip_billing_0007.html)，精确单价以官网价格详情为准 |
 | `basic_config.time_zone` | 整段 `UTC-12:00`~`UTC+12:00`（25 个值，不支持半点与时区名），推荐 `UTC+08:00`（中国北京） |
 | `规格选择` | 应用与实例规格分开单独询问；实例按 group_type 十类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名与实时兼容规格类型（ESSD=极速型SSD、CLOUDSSD=SSD云盘、ULTRAHIGH=SSD、LOCALSSD=本地SSD） |
 | `enterprise_project_id` | 可选，仅企业项目账号填写：发现/编排实时返回企业项目列表（默认选中 default 项目）供选择；个人账号省略该字段，省略时归属由服务端决定 |

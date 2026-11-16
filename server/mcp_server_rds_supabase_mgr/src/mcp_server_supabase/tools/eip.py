@@ -8,9 +8,9 @@ def register(server):
 
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
-    async def create_supabase_eip(prefer_idle: bool = True, charge_mode: str = 'postPaid', bandwidth_size_mbps: int | None = None, name: str | None = None, period_type: str | None = None, period_num: int | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """为 Supabase 应用采购公网入口 EIP，两段式提交。空闲优先：先列出未绑定 EIP 供选用（无需带宽参数），无空闲才新建；新建带宽大小由用户决策（5-1000 Mbps 整数，无默认推荐，缺失即拒）——带宽为收费项，按固定带宽计费、创建即持续计费直至释放（预览含计费说明与单价参考）；采购基线为按需计费加全动态 BGP 独享带宽。响应含 visual 图表。"""
-        result = await EipService().ensure_publicip(prefer_idle, charge_mode, bandwidth_size_mbps, name, period_type, period_num, confirm, plan_id)
+    async def create_supabase_eip(prefer_idle: bool = True, billing_method: str | None = None, bandwidth_size_mbps: int | None = None, name: str | None = None, confirm: bool = False, plan_id: str | None = None) -> dict:
+        """为 Supabase 应用采购公网入口 EIP，两段式提交。空闲优先：先列出未绑定 EIP 供选用（无需计费参数），无空闲才新建；新建为按需计费（固定，不支持包周期），计费方式由用户按场景选择——bandwidth（按带宽计费：流量大或访问量稳定）/ traffic（按流量计费：流量低或波动大；带宽为峰值限速，单 EIP 上限 300Mbps）——无默认，缺失即拒；带宽大小同样由用户决策（bandwidth 5-1000 / traffic 5-300）；预览展示收费标准（费用=带宽费/流量费+IP保有费，单价以官网价格详情为准）。响应含 visual 图表。"""
+        result = await EipService().ensure_publicip(prefer_idle, billing_method, bandwidth_size_mbps, name, confirm, plan_id)
         result['visual'] = visual.render_eip(result)
         return result
 

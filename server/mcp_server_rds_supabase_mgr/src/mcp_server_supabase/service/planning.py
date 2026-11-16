@@ -279,16 +279,19 @@ class PlanningService:
         if needs_public_access is True:
             module_public = {"status": "planned",
                              "applies_when": "公网访问（needs_public_access；建议默认启用）",
-                             "purchase_method": {"options": [{"charge_mode": "postPaid", "name": "按需购买",
-                                                             "note": "随用随停，试运行与变更期成本可控"},
-                                                            {"charge_mode": "prePaid", "name": "包周期",
-                                                             "note": "订单支付与退订受合约约束，长期稳定运行再选"}],
-                                                 "recommended": {"charge_mode": "postPaid", "name": "按需购买"}},
+                             "billing_mode": {"fixed": "按需计费（固定，不支持包周期）——秒级计费按小时结算，自 EIP 创建计费至释放；费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时）",
+                                              "price_source": "精确单价以官网价格详情为准：https://www.huaweicloud.com/pricing.html?tab=detail#/eip",
+                                              "scenario_doc": "计费方式适用场景：https://support.huaweicloud.com/price-eip/eip_billing_0005.html"},
+                             "purchase_method": {"options": [{"method": "bandwidth", "name": "按带宽计费",
+                                                             "note": "带宽费按带宽峰值×时长（不限流量），流量大或访问量稳定场景更优；阶梯计费：0-5M 统一单价、超 5M 按每 Mbps 计费（官方示例 6Mbps≈0.565 元/小时）"},
+                                                            {"method": "traffic", "name": "按流量计费",
+                                                             "note": "流量费按出云流量 GB 计费（入云不计），带宽仅作峰值限速，流量低或波动大场景更优；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、同账号区域峰值总和 ≤5Gbps（2026-04 起官方约束）"}],
+                                                 "method_decision": "计费方式由用户根据场景选择（无默认）"},
                              "bandwidth": {"share_type": "PER（独享带宽）",
                                            "type": "全动态 BGP（publicip.type=5_bgp）",
-                                           "size_range_mbps": "5-1000",
-                                           "size_decision": "大小由用户决策（无默认推荐）——带宽为收费项：按固定带宽计费（元/Mbps/小时，随地域浮动；参考量级约 0.06 元/Mbps/小时，以官网价格计算器为准），自创建持续计费直至释放；采购前向用户确认并明确告知收费后填入 create_supabase_eip(bandwidth_size_mbps=<5-1000>)"},
-                             "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按基线新建（KooCLI EIP CreatePublicip，postPaid 自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
+                                           "size_range_mbps": "bandwidth 5-1000（计费尺寸）/ traffic 5-300（峰值限速）",
+                                           "size_decision": "带宽大小由用户决策（无默认推荐）——bandwidth 方式即计费尺寸、traffic 方式为峰值上限；带宽/流量均为收费项，自创建持续计费直至释放；采购前向用户确认计费方式与大小并明确告知收费后填入 create_supabase_eip(billing_method=<bandwidth|traffic>, bandwidth_size_mbps=…)"},
+                             "purchase": "优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定（直接用于绑定，不新建）；无空闲或 prefer_idle=false 则按需新建（KooCLI EIP CreatePublicip，按需计费固定，自动打标 USAGE_FOR=Supabase应用公网访问，自动创建的）；也可控制台购买",
                              "bind": "bind_supabase_eip(instance_id, public_ip_id, public_ip)（in32 结尾应用 ID、归属、格式三重校验，RDS AttachEip）",
                              "post_bind": "绑定成功后必须 update_supabase_auth_config 同步 api_external_url（邮箱链接与 OAuth 回调都指向它）"}
         elif needs_public_access is False:
@@ -374,8 +377,8 @@ class PlanningService:
             post.append({"tool": "show_supabase_application", "action": "内网交付 private_ip；不购买 EIP、不开公网入方向"})
         else:
             post.append({"tool": "create_supabase_eip",
-                         "action": "按 public_access 模块执行：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（全动态 BGP、独享带宽大小由用户决策、自动打标）",
-                         "args": {"prefer_idle": True, "charge_mode": "postPaid", "bandwidth_size_mbps": "<用户决策（5-1000）>"}})
+                         "action": "按 public_access 模块执行：prefer_idle=true 优先空闲（用户选定其一，直接绑定不新建）；无空闲则按需新建（按需计费固定——计费方式 bandwidth/traffic 由用户按场景选择、带宽大小由用户决策，全动态 BGP 独享、自动打标）",
+                         "args": {"prefer_idle": True, "billing_method": "<用户按场景选择：bandwidth 按带宽计费 / traffic 按流量计费>", "bandwidth_size_mbps": "<用户决策（bandwidth 5-1000 / traffic 5-300 峰值限速）>"}})
             post.append({"tool": "bind_supabase_eip",
                          "args": {"instance_id": "<应用 ID（in32 结尾）>", "public_ip_id": "<EIP ID>", "public_ip": "<EIP 地址>"},
                          "note": "预览确认后绑定；in32/归属/格式三重校验"})
