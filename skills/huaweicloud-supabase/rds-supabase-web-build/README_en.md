@@ -53,4 +53,4 @@ For a value comparison of site-building modes (traditional self-built vs. fully 
 
 ## License
 
-MIT (see [LICENSE](LICENSE))
+MIT (see [LICENSE.txt](LICENSE.txt))

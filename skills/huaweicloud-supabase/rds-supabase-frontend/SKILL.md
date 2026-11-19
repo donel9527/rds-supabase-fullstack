@@ -1,14 +1,27 @@
 ---
 name: rds-supabase-frontend
-description: 触发场景：创建并部署、更新、回退和维护华为云 OBS 静态前端（入口域名直连桶或经 CDN 回源），接入已有华为云 RDS Supabase，或为这些任务准备构建环境。不用于其他托管平台、普通 UI/前端创建、通用 Node 环境准备、SSR 后端部署或数据库采购。
+description: '触发场景：创建并部署、更新、回退和维护华为云 OBS 静态前端（入口域名直连桶或经 CDN 回源），接入已有华为云 RDS Supabase，或为这些任务准备构建环境。不用于其他托管平台、普通 UI/前端创建、通用 Node 环境准备、SSR 后端部署或数据库采购。
+  English triggers: deploy static site to obs, custom domain and cdn, https certificate, update rollback frontend release, supabase javascript backend integration, vite react build.'
 license: MIT
+version: "0.2.6"
+tags: [huawei-cloud, rds, supabase, frontend, obs]
 metadata:
-  version: "0.2.5"
+  version: "0.2.6"
 ---
 
 # 华为云前端部署与 Supabase 接入
 
 前端静态产物存放在公开读 OBS 桶，通过自有域名的两条托管路线之一提供访问：`obs-domain`（入口域名直连桶，默认）或 `obs-cdn`（入口域名经 CDN 回源同一公开桶）。浏览器加载前端后直接调用已有华为云 RDS Supabase HTTPS API，终端用户无需华为云账号。保留已有框架、构建环境和 OBS 发布方式，不新增独立部署 CLI。
+
+在技能族中的位置：本技能是前端托管环节——承接全栈编排技能 rds-supabase-web-build 的步骤八（构建与托管），也可独立触发；所接后端为已有华为云 RDS Supabase（其数据面管理见 rds-supabase-mcp 技能，客户端用法见 rds-supabase-usage 技能）。云资源操作优先 KooCLI（`hcloud`，OBS 文件用其内置 obs 命令），兼容已有独立 obsutil。
+
+典型用例：
+
+1. 首次创建并部署静态前端（`obs-domain` 直连桶 / `obs-cdn` 经 CDN 回源）
+2. 更新已有站点：新构建产物发布与版本记录
+3. 回退到上一验收通过的版本
+4. 为前端接入已有 RDS Supabase（回调、CORS、RLS 配置）
+5. 准备或修复前端构建环境（Node、包管理器、CI 产物复用）
 
 ## 先快照，再读取分支
 
@@ -21,6 +34,17 @@ endpoint 或 console 主机以 `.ulanqab.huawei.com` 结尾时读取 [内部云]
 已有成功记录、同桶新版本或切回已验收原产物、无托管配置变更且本次操作已获授权时，沿用未变更的策略、website、域名结论，不再进入确认清单。先核对产物哈希和本次对象键被既有策略覆盖，再单遍上传 → 一轮批量 GET → 写新记录 → 报告。生产切换若已获本次授权不重复确认；历史成功记录本身不授予新操作权限。配置漂移、策略不覆盖或产物不一致时退出快速路径，仅处理差异。
 
 基础必检为 `entry`、`assets`，需要后端时增加 `supabase`；条件项见 [记录契约](references/record-contract.md)。使用 [批量探测脚本](scripts/probe-suite.sh) 并行留证；真实 URL 的内容、MIME、版本与浏览器验收仍需核对。已有产物重复发布目标 ≤5 分钟；首次候选目标 5–8 分钟（用户域名/备案等待另计），记录实际耗时，不能为达标跳过证据。
+
+## 安全硬约束与责任边界
+
+以下红线汇集自正文各节（出处以括号标注），任一触发即停止并如实报告：
+
+- **凭据不输出**：快照只提取 endpoint 等必要信息，`~/.obsutilconfig` 的凭据不进入输出（见"先快照，再读取分支"）
+- **授权边界**：历史成功记录本身不授予新操作权限；候选上传不代表稳定入口验收通过；新付费资源及授权外公网/数据库变更另行确认（见"重复发布快速路径"、"任务与工作流"第 5 步）
+- **不夸大交付**：缺少可用域名或备案未完成时不报告公网完成，也不改用存储服务默认域名；HTTP 入口可达不等于 HTTPS 通过（见"托管前提"、"交付"）
+- **不扩张权限掩盖缺项**：没有安全可用的后端地址时不扩张网络权限；版本不匹配时不自动安装、升级或切换本地 Node（见"任务与工作流"第 3、4 步）
+- **共享资源不擅动**：保留共享配置，不因缺域名、无配额或区域限制自动更换资源区域或购买数据库；不迁移、不删除、不覆写已有个人级配置文件（见"工具与边界"、"任务与工作流"）
+- **错误处置与诚实报告**：认证/权限错误修正前停止重试；不能自动化时输出控制台步骤，不假装已完成；探测失败不撤销已建资源（见"任务与工作流"第 6 步、"工具与边界"）
 
 ## 托管前提
 

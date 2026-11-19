@@ -91,7 +91,7 @@ rm -rf rds-supabase-skills.zip rds-supabase-fullstack-main/   # 复制完成即�
 
 ## 三、校验与完成报告
 
-- 校验：技能目录内含 `SKILL.md`、`README.md`、`INSTALL.md`、`LICENSE`，且 `references/` 下有 35 个规则文件
+- 校验：技能目录内含 `SKILL.md`、`README.md`、`INSTALL.md`、`LICENSE.txt`，且 `references/` 下有 35 个规则文件
 - 向用户报告：安装位置（层级 + 完整路径，须与交互选择一致）；触发语示例（如"帮我设计订单表结构"）；说明——规则在编写或修改任何 SQL 前自动生效
 
 ## 四、更新与卸载

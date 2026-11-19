@@ -1,9 +1,12 @@
 ---
 name: rds-supabase-function-graph
-description: 'RDS Supabase FunctionGraph 云函数技能：为 Web 应用生成、部署、安全验证并运维承载于华为云 FunctionGraph 的自定义服务端业务代码（交易通知、对接外部系统、复杂领域逻辑、高安全隐私处理）。前端经共享版 APIG 触发器以 Supabase GoTrue JWT 调用函数，函数内完成验签、CORS、幂等与错误契约；全流程经 KooCLI 原子命令编排并受 fgs-gate 机械核验。Use when：需要 Postgres RPC 之外的出站 HTTP/Webhook、密钥不进前端的服务端处理、外部 I/O 定时作业（对账/补单/汇总推送），或为已上线的 RDS Supabase 应用追加、更新、回滚、下线云函数。'
+description: 'RDS Supabase FunctionGraph 云函数技能：为 Web 应用生成、部署、安全验证并运维承载于华为云 FunctionGraph 的自定义服务端业务代码（交易通知、对接外部系统、复杂领域逻辑、高安全隐私处理）。前端经共享版 APIG 触发器以 Supabase GoTrue JWT 调用函数，函数内完成验签、CORS、幂等与错误契约；全流程经 KooCLI 原子命令编排并受 fgs-gate 机械核验。Use when：需要 Postgres RPC 之外的出站 HTTP/Webhook、密钥不进前端的服务端处理、外部 I/O 定时作业（对账/补单/汇总推送），或为已上线的 RDS Supabase 应用追加、更新、回滚、下线云函数。
+  English triggers: huawei functiongraph cloud function, apig trigger, jwt verification, outbound webhook http, server side secrets, timer scheduled job, deploy update rollback function.'
 license: Proprietary
+version: "0.1.3"
+tags: [huawei-cloud, rds, supabase, functiongraph, serverless]
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
 ---
 
 # RDS Supabase FunctionGraph 云函数技能
@@ -25,6 +28,16 @@ metadata:
 编排工具：KooCLI（hcloud FGS / obs）——v1 唯一云操作通道，无新增 MCP
 ```
 
+在技能族中的位置：本技能承接全栈编排技能 rds-supabase-web-build 边界外的服务端逻辑（复杂业务逻辑→云函数承载），为已上线的 RDS Supabase 应用追加服务端能力；库内变换仍归 Postgres RPC（判定矩阵见 references/routing-matrix.md，步骤二分解前查）。
+
+典型用例：
+
+1. 交易通知可靠投递：幂等键去重，重复提交单次生效
+2. 对接外部系统：出站 Webhook/API 调用与结果回写
+3. 定时外部 I/O 作业：对账、补单、汇总推送（Timer 触发）
+4. 高安全隐私处理：密钥只存函数环境变量，永不进前端与库
+5. 已上线函数的运维：更新（新版本切别名）、回滚（别名回切）、下线（删触发器/函数/清 artifacts）
+
 ## 适用范围与边界
 
 | 逻辑特征 | 去处 |
@@ -36,13 +49,23 @@ metadata:
 | 高安全处理（密钥永不进前端/DB） | 本技能（密钥存函数环境变量） |
 | SSR / 长驻进程 / WebSocket 服务端 | v1 边界外：明确告知用户并停止 |
 
-v1 负向边界（不得擅自引入）：专享版 APIG（升级路径见 references/secret-management.md 附录）、DEW CSMS、Python 模板、VPC 内网直连 Postgres（v1 数据访问一律经 Kong 网关 REST 公网 HTTPS）、告警规则、预留实例。
+v1 负向边界（不得擅自引入）：专享版 APIG（升级路径见 references/secret-management.md 附录，需升级专享版时读）、DEW CSMS、Python 模板、VPC 内网直连 Postgres（v1 数据访问一律经 Kong 网关 REST 公网 HTTPS）、告警规则、预留实例。
+
+## 安全硬约束与责任边界
+
+以下红线汇集自正文各节（密钥纪律详见 references/secret-management.md，步骤四配置 env 前必读），任一违反即停止部署：
+
+- **密钥红线**：env 值永不进 agent 上下文/trace/functions.json/会话；`FGS_JWT_SECRET` 等由用户放入项目内受保护文件，agent 不读内容；env 值经 `--cli-json-file` 由用户/受保护文件组装，agent 只传文件路径（见"前置条件"、"参数确认"）
+- **验签不可降级**：对外（apig 触发）函数必须含 `FGS_JWT_SECRET` 验签与 `FGS_ALLOWED_ORIGINS` 精确 CORS，不得降级跳过；gate 负向硬门（无认证 401、坏 JWT 401）PASS 才算 released（见"工作流"步骤二/五）
+- **样板安全件不得删改**：验签、精确 CORS、request_id 透传、结构化日志、catch-all 错误契约、幂等键（交易类启用）随模板内置（见"工作流"步骤三）
+- **确认边界**：函数清单经用户逐项确认后才进入步骤三；付费资源费用预估展示 + 用户显式确认；别名切换展示版本差异后确认，切换≠成功（见"参数确认"）
+- **命令纪律**：hcloud 命令名以步骤一 `--help` 实测为准，实测前不得假设 schema；禁止新建 MCP 服务器承载本技能操作（见"可用工具"）
 
 ## 前置条件
 
 1. 本技能包已按 [README](README.md) 独立安装；KooCLI（hcloud）已安装——步骤一核对，缺失则提醒安装并停止
 2. 已有可用的 RDS Supabase 应用（用户提供接入地址，或项目内已有记录）；`.hwsupabase/webapp.json` 存在时经 `webapp_ref` 关联，不存在则独立使用（允许 null，自建 `.hwsupabase/functions.json` 即可）
-3. 凭据：KooCLI 认证（`hcloud configure test` 连通性确认）+ **项目内**受保护文件 `.hwsupabase/secrets/` 中的 `FGS_JWT_SECRET`（用户从控制台获取 GoTrue JWT Secret 后放入，agent 不读内容）——**项目级隔离**：不入全局/系统变量与个人级配置，不污染其他项目（红线见 references/secret-management.md）
+3. 凭据：KooCLI 认证（`hcloud configure test` 连通性确认）+ **项目内**受保护文件 `.hwsupabase/secrets/` 中的 `FGS_JWT_SECRET`（用户从控制台获取 GoTrue JWT Secret 后放入，agent 不读内容）——**项目级隔离**：不入全局/系统变量与个人级配置，不污染其他项目（红线见 references/secret-management.md，配置凭据前读）
 4. OBS：已有桶可用（artifacts 前缀私有路径，不设公开读）
 
 ## 工作流
@@ -130,9 +153,9 @@ export async function callFgs(path, { method = 'POST', body, idempotencyKey }) {
 2. 单次回复推进单一步骤
 3. 等待协议：>30s 操作每 30 秒轮询、上限 20 次，等待期间禁止无关操作
 4. 连续失败中止：同一动作连续失败 2 次 → 中止报告，禁止第三次盲目重试
-5. 工具白名单：每步骤允许/禁止见 references/workflow-stages.md；越界须用户同意并记 trace
+5. 工具白名单：每步骤允许/禁止见 references/workflow-stages.md（进入该步骤前读对应小节）；越界须用户同意并记 trace
 6. gate 机械核验：步骤四、五、六完成前运行 fgs-gate.py 对应模式，**PASS 才能输出步骤报告与推进**；步骤五、六的 check-stage 必须带 `--verify`——安全事实（401/200/CORS）由 gate 直连机器核验，不采信 agent 自报
-7. trace：每个 KooCLI/CLI 调用后追加 `.hwsupabase/trace.jsonl` 一行（格式见 references/project-state.md）
+7. trace：每个 KooCLI/CLI 调用后追加 `.hwsupabase/trace.jsonl` 一行（格式与契约见 references/project-state.md，首次读写 functions.json/trace 前读）
 8. 进度看板：触发后第一动作——创建六项待办（宿主待办联动）并在聊天输出完整步骤总览表；每步骤报告头部完整重发（状态标记 ⏳/🔄/✅/⛔）；重入会话依据 functions.json 重建
 
 ## 可用工具
@@ -202,10 +225,10 @@ export async function callFgs(path, { method = 'POST', body, idempotencyKey }) {
 
 ## 参考文档
 
-- [references/workflow-stages.md](references/workflow-stages.md)：六步三段式 playbook（输入/动作/输出断言 + 白名单 + 黄金路径 + 横向操作）
-- [references/project-state.md](references/project-state.md)：functions.json 契约与 trace 格式
-- [references/routing-matrix.md](references/routing-matrix.md)：逻辑分工判定矩阵（Postgres RPC / pg_cron / pg_net / FunctionGraph / 边界外）
-- [references/cli-commands.md](references/cli-commands.md)：KooCLI 命令链与自校准纪律
-- [references/secret-management.md](references/secret-management.md)：密钥纪律、cli-json-file 隔离、CSMS v2 升级路径
-- [template/](template/)：零依赖 Node.js 样板（handler/lib/config/test-events）
-- [scripts/fgs-gate.py](scripts/fgs-gate.py)：机械验证门（check-contract/check-stage --verify/check-trace/check-whitelist/check-version）
+- [references/workflow-stages.md](references/workflow-stages.md)：六步三段式 playbook（输入/动作/输出断言 + 白名单 + 黄金路径 + 横向操作）；进入任一步骤前读对应小节
+- [references/project-state.md](references/project-state.md)：functions.json 契约与 trace 格式；首次读写 functions.json/trace 前读
+- [references/routing-matrix.md](references/routing-matrix.md)：逻辑分工判定矩阵（Postgres RPC / pg_cron / pg_net / FunctionGraph / 边界外）；步骤二逻辑分解前查
+- [references/cli-commands.md](references/cli-commands.md)：KooCLI 命令链与自校准纪律；步骤一命令自校准前读
+- [references/secret-management.md](references/secret-management.md)：密钥纪律、cli-json-file 隔离、CSMS v2 升级路径；步骤四配置 env 前必读
+- [template/](template/)：零依赖 Node.js 样板（handler/lib/config/test-events）；步骤三代码生成时复制
+- [scripts/fgs-gate.py](scripts/fgs-gate.py)：机械验证门（check-contract/check-stage --verify/check-trace/check-whitelist/check-version）；步骤四、五、六完成前运行对应模式

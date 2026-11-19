@@ -11,7 +11,10 @@ Guards the v2.0.0 scenario-based restructure against regressions:
      mcp_server_rds_supabase_mgr pyproject version; stable (0.4.0) and
      pre-release (0.4.0a8) forms both supported, stable sorts newer
   4. every relative markdown link in every skill file resolves on disk,
-     and the references directory holds exactly the expected four files
+     and the references directory holds exactly the expected five files
+  5. frontmatter carries a top-level semver `version` that equals the
+     prose "版本 x.y.z" declaration (skill-version drift guard, mirroring
+     the repo-level validator's top-level/metadata rule)
 
 Usage: python skill-lint.py            (checks this script's own skill dir)
 Exit codes: 0 = PASS, 1 = FAIL (missing[] printed as JSON).
@@ -42,9 +45,11 @@ SCENARIOS = [
 ]
 JARGON_BLACKLIST = ("台账", "账本", "码道", "未决", "对账", "落盘", "兜底", "打标", "拉起",
                     "硬试", "硬删", "话术", "顺带", "不许", "干净收尾", "闭环", "一句话")
-EXPECTED_REFERENCES = {"scenarios.md", "acceptance.md", "local-requests.md", "install.md"}
+EXPECTED_REFERENCES = {"scenarios.md", "acceptance.md", "local-requests.md", "install.md", "commands.md"}
 VERSION_RE = re.compile(r"mcp_server_supabase\s*≥\s*(\d+)\.(\d+)\.(\d+)(?:a(\d+))?")
 PYPROJECT_RE = re.compile(r'^version\s*=\s*"(\d+)\.(\d+)\.(\d+)(?:a(\d+))?"', re.MULTILINE)
+FRONT_VERSION_RE = re.compile(r'^version:\s*"(\d+\.\d+\.\d+)"\s*$', re.MULTILINE)
+PROSE_VERSION_RE = re.compile(r'^版本\s+(\d+\.\d+\.\d+)；', re.MULTILINE)
 LINK_RE = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
 
 
@@ -96,6 +101,15 @@ def main():
         missing.append("SKILL.md missing 'mcp_server_supabase ≥ x.y.z[aN]' declaration")
     elif declared > actual:
         missing.append(f"SKILL.md declares server {declared} newer than actual {actual}")
+
+    front_version = FRONT_VERSION_RE.search(skill)
+    prose_version = PROSE_VERSION_RE.search(skill)
+    if front_version is None:
+        missing.append('frontmatter top-level version missing (e.g. version: "2.16.0")')
+    elif prose_version is None:
+        missing.append("SKILL.md missing prose '版本 x.y.z；' declaration")
+    elif front_version.group(1) != prose_version.group(1):
+        missing.append(f"version drift between frontmatter ({front_version.group(1)}) and prose ({prose_version.group(1)})")
 
     for where, text in texts.items():
         base = (SKILL_DIR / where).parent

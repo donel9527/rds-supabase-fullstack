@@ -1,9 +1,12 @@
 ---
 name: rds-supabase-web-build
-description: 'RDS Supabase 全栈开发编排技能：AI Agent 通过自然语言创建并托管 Web 应用网站的端到端工作流——需求澄清与设计、前端代码生成、后端声明式配置（DDL/GRANT/RLS/RPC）生成与部署、本地 L0 测试验证、前端静态资源 OBS+CDN 全托管、端到端上线与生命周期管理（更新/回滚/下线）。Use when：创建 Web 网站、搭建 AI 应用、全栈应用从零到上线、已有 RDS Supabase 应用的迭代更新与托管维护。编排管理面与数据面两台 MCP（均由工作流步骤动态安装：管理面→步骤三、数据面→步骤四）及 rds-supabase-mgr-mcp / rds-supabase-mcp / rds-supabase-usage / rds-supabase-frontend / rds-supabase-postgres-best-practices / rds-supabase-function-graph 六个专项技能。v1 后端边界为数据层；复杂业务逻辑由 function-graph 技能（云函数）承接，SSR 后端部署不支持。'
+description: 'RDS Supabase 全栈开发编排技能：AI Agent 通过自然语言创建并托管 Web 应用网站的端到端工作流——需求澄清与设计、前端代码生成、后端声明式配置（DDL/GRANT/RLS/RPC）生成与部署、本地 L0 测试验证、前端静态资源 OBS+CDN 全托管、端到端上线与生命周期管理（更新/回滚/下线）。Use when：创建 Web 网站、搭建 AI 应用、全栈应用从零到上线、已有 RDS Supabase 应用的迭代更新与托管维护。编排管理面与数据面两台 MCP（均由工作流步骤动态安装：管理面→步骤三、数据面→步骤四）及 rds-supabase-mgr-mcp / rds-supabase-mcp / rds-supabase-usage / rds-supabase-frontend / rds-supabase-postgres-best-practices / rds-supabase-function-graph 六个专项技能。v1 后端边界为数据层；复杂业务逻辑由 function-graph 技能（云函数）承接，SSR 后端部署不支持。
+  English triggers: build a website from scratch, fullstack web app, ai app hosting, deploy frontend and backend, obs cdn static site, update rollback teardown.'
 license: MIT
+version: "0.12.4"
+tags: [huawei-cloud, rds, supabase, fullstack, orchestration]
 metadata:
-  version: "0.12.3"
+  version: "0.12.4"
 ---
 
 # RDS Supabase 全栈开发编排（web-build）
@@ -34,6 +37,14 @@ RDS Supabase 全栈开发的**顶层编排技能**：用户以单句自然语言
 - **后端轨**：产出 init.sql（DDL/GRANT/RLS/RPC/种子），运行于 RDS Supabase（PostgREST/GoTrue）
 - **前端轨**：产出静态站点（默认 React+Vite+TS + supabase-js），托管于 OBS+CDN
 
+典型用例：
+
+1. 全新网站从零到上线：单句需求 → 步骤一–九全流程 → 上线报告与「应用名片」交付
+2. 已上线应用追加功能/页面：更新工作流（增量 init.sql → 重走步骤五与步骤九）
+3. 前端回退到上一验收版本：回滚工作流（前端版本回退 + DB 批次管理）
+4. 应用下线：下线工作流（teardown.sql + 清理清单）
+5. 追加文件/图片/视频管理能力：步骤二标记 `storage` → 步骤三对接私有 OBS 桶
+
 ## 适用范围
 
 **触发条件**（满足任一即启用）：
@@ -55,6 +66,18 @@ RDS Supabase 全栈开发的**顶层编排技能**：用户以单句自然语言
 | init.sql 五步部署/单工具数据操作 | rds-supabase-mcp 技能 |
 | SSR 后端部署 | 不支持（静态导出为边界，继承 frontend 技能策略） |
 | 复杂业务逻辑（支付/第三方调用/长任务） | rds-supabase-function-graph 技能（云函数承载） |
+
+## 安全硬约束与责任边界
+
+以下红线汇集自"注意事项"、"前置条件"与"参数确认"（完整表述见对应章节），任一违反即该步骤失败并停止推进：
+
+- **凭据红线**：密钥永不写入 webapp.json/会话内容/工具返回；agent 不读取交付文件、不经手明文；anon key 进入前端产物属预期，Service Role Key 绝不进入
+- **配置与凭据项目级隔离**：Region/RDS·OBS 接入点/PROJECT_ID 唯一权威为项目内 webapp.json `environment` 段，禁止从 agent 进程/shell 会话/全局环境变量读取；凭据只存 `<项目根>/.hwsupabase/secrets/`（0600、排除 Git），不写个人级/系统级配置
+- **MCP 注册与安装来源锁定**：两台 MCP 只注册进当前项目的项目级配置，禁止一切用户级/系统级位置；只从本仓安装（uvx git / 本地克隆 / ZIP 逃生通道），禁 PyPI 与第三方源
+- **付费资源显式确认**：云侧付费资源（实例/OBS 桶/CDN）创建前费用预估展示 + 用户显式确认；管理面操作遵循两阶段确认
+- **交互式勾选禁止跳过**：凭据来源、Supabase 应用接入、OBS 桶接入、托管场景均须用户显式选择，不得代为默认
+- **两桶边界**：前端静态托管桶（公开读）与后端 Storage 桶（私有）分属两域，禁止混同与复用
+- **通过条件未满足不得推进**：gate FAIL 按缺项整改后重跑；强制门（步骤五、六）不可跳过
 
 ## 前置条件
 

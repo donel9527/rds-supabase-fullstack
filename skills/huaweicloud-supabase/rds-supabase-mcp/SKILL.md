@@ -1,10 +1,13 @@
 ---
 name: rds-supabase-mcp
-description: '华为云 RDS Supabase 管理技能：管理部署在华为云 RDS PostgreSQL 上的自建 Supabase 平台（Kong 网关、PostgREST、GoTrue、Storage、Realtime）。Web 应用开发中，后端代码以 init.sql 迁移脚本（DDL、GRANT 等初始化 SQL）形式存在，经本技能部署为数据库层定义，前端经 REST API 直接消费。Use when：RDS Supabase 实例创建完成或选定后，动态安装本 MCP 服务器（凭网关 URL 与 API Key，见 references/install.md）；开发中执行后端代码 init.sql 迁移脚本（建表、授权、RLS、函数）；查询数据库结构与数据；管理登录用户；配置存储桶；检查行级安全（RLS）与安全建议；排查连接与执行计划。本 MCP 服务器基于 HenkDz/selfhosted-supabase-mcp 改进。'
+description: '华为云 RDS Supabase 管理技能：管理部署在华为云 RDS PostgreSQL 上的自建 Supabase 平台（Kong 网关、PostgREST、GoTrue、Storage、Realtime）。Web 应用开发中，后端代码以 init.sql 迁移脚本（DDL、GRANT 等初始化 SQL）形式存在，经本技能部署为数据库层定义，前端经 REST API 直接消费。Use when：RDS Supabase 实例创建完成或选定后，动态安装本 MCP 服务器（凭网关 URL 与 API Key，见 references/install.md）；开发中执行后端代码 init.sql 迁移脚本（建表、授权、RLS、函数）；查询数据库结构与数据；管理登录用户；配置存储桶；检查行级安全（RLS）与安全建议；排查连接与执行计划。本 MCP 服务器基于 HenkDz/selfhosted-supabase-mcp 改进。
+  English triggers: install supabase mcp server, run init.sql migration, execute_sql deployment, read_only query, manage auth users, rls advisors security check, storage bucket config, troubleshoot slow queries.'
 license: MIT
+version: "2.7.2"
+tags: [huawei-cloud, rds, supabase, postgresql, mcp]
 metadata:
-  tags: [huawei-cloud, rds, supabase, postgresql, mcp, database, baas]
-  version: "2.7.1"
+  tags: [huawei-cloud, rds, supabase, postgresql, mcp]
+  version: "2.7.2"
 ---
 
 # 华为云 RDS Supabase 管理
@@ -24,6 +27,8 @@ metadata:
 - 移除不适配当前部署形态的工具（迁移记录、Edge Functions 等）
 
 完整链路：Web 全栈开发流程（实例创建 / 选定）→ 动态安装（references/install.md）→ AI 助手 → MCP 工具 → service 层 → client（PostgREST RPC / GoTrue 管理 API）。
+
+在技能族中的位置：本技能承担数据面管理环节——全栈编排技能 rds-supabase-web-build 在其步骤四按本技能 references/install.md 动态接入数据面；init.sql 质量规则对照 rds-supabase-postgres-best-practices 技能，客户端（supabase-js）用法见 rds-supabase-usage 技能，云函数侧服务端逻辑见 rds-supabase-function-graph 技能。
 
 典型用例：
 
@@ -52,6 +57,17 @@ metadata:
 | 实例开通、续费、规格变更、备份策略 | 云平台控制台（本 MCP 不涉及） |
 | MCP 服务器动态安装与配置（实例创建/选定后） | references/install.md（单命令动态安装）；references/mcp-installation-guide.md（完整指南） |
 | `public.migrations` 表 | 平台内部对象：不读、不写、不依赖 |
+
+## 安全硬约束与责任边界
+
+以下红线汇集自正文各章（出处以括号标注），违反任一条即停止操作并向用户说明：
+
+- **只读优先**：排查与查询场景一律 `execute_sql` 传 `read_only=true`（数据库层白名单强制）；仅需只读访问时设置 `HUAWEICLOUD_MCP_READ_ONLY=true` 拦截全部写工具（见"SQL 排查"、"前置条件"、"注意事项"）
+- **写确认**：破坏性语句（`DROP`、`TRUNCATE`、`ALTER`）逐条人工确认，禁止 `DROP ... CASCADE`；不可逆的用户写操作执行前逐字核对（见"部署后端定义"第②步、"参数确认"）
+- **RLS 覆盖与最小授权**：每张对外暴露的表必须启用行级安全并至少配置一条策略；仅向必要角色授予必要权限（见"部署后端定义"第②步）
+- **事务与验证**：脚本整批单一事务执行，失败自动回滚；变更是否生效一律以查询到的实际状态为准，不依赖执行记录（见"部署后端定义"第③⑤步）
+- **平台内部对象**：`public.migrations` 表不读、不写、不依赖（见"适用范围"边界表）
+- **审计与脱敏**：每次调用记录审计日志；输出中符合密钥特征的值自动脱敏（见"注意事项"）
 
 ## 前置条件
 
@@ -186,7 +202,7 @@ NOTIFY pgrst, 'reload schema';            -- PostgREST 立即感知结构变更�
 ## 参考文档
 
 - references/install.md（实例创建/选定后的动态安装：凭三项配置信息一句话完成接入）
-- references/init-sql-guide.md（init.sql 编写规范）
-- references/verification-method.md（验证方法）
-- references/related-tools.md（工具分组、访问通道与错误格式）
-- references/mcp-installation-guide.md（服务器安装与配置）
+- references/init-sql-guide.md（init.sql 编写规范；部署后端定义前读）
+- references/verification-method.md（验证方法；部署后核验结构与安全项时读）
+- references/related-tools.md（工具分组、访问通道与错误格式；选择工具或遇工具报错时查）
+- references/mcp-installation-guide.md（服务器安装与配置；install.md 单命令不足、需完整配置说明时读）

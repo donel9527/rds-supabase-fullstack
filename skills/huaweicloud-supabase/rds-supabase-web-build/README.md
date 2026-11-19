@@ -48,4 +48,4 @@ uvx --from git+https://github.com/huaweicloud/rds-supabase-fullstack --subdirect
 
 ## 许可
 
-MIT（见 [LICENSE](LICENSE)）
+MIT（见 [LICENSE.txt](LICENSE.txt)）

@@ -5,6 +5,55 @@ semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Skills aligned with the "华为云基础云服务 Skill 开发与管理规范 v2.0.0"
+  (GitCode developer-skill discussion #13) under a capability-freeze
+  discipline: a pre-change baseline (headings / 64 table tools / 38
+  acceptance K-items / 11 scenario titles / links / version lines) was
+  captured and must survive the change set. Applied, with the six-skill
+  suite and the mgr skill passing all their own gates:
+  - scripts/validate_skills.py upgraded first (gate-before-content):
+    top-level `version`/`tags` allowed and enforced (semver, <=5 tags,
+    top-level vs metadata anti-drift), A6 CHANGELOG baseline switched to
+    the top-level version, description <=1024, per-package file count
+    <=40 with a documented deviation registry (postgres-best-practices
+    45 - its 38 rule files are the symptom-routing capability itself),
+    46-entry extension whitelist scan, docstring/FORBIDDEN_FILES mismatch
+    fixed
+  - Tier 0 hygiene: .DS_Store / __pycache__ / *.pyc removed and ignored;
+    bare LICENSE files renamed LICENSE.txt (web-build, usage,
+    postgres-best-practices) with README/INSTALL links synced
+  - All skills: frontmatter gains top-level version + tags (<=5), a
+    description trailing line of English trigger words (all under 1024
+    chars; existing Chinese trigger semantics untouched), overview
+    architecture notes and 3-5 typical use cases distilled from existing
+    content; write-capable skills (mcp, web-build, frontend,
+    function-graph) gain a 安全硬约束与责任边界 chapter consolidating
+    existing red lines (positioned before 前置条件); function-graph's
+    nine references mentions upgraded to when-to-read semantics
+  - mgr-mcp: security chapter renamed 安全硬约束与责任边界 and moved
+    before 前置条件; the 58-tool command roster moved verbatim to the new
+    references/commands.md (SKILL.md keeps a six-group map with
+    when-to-read pointers); frontmatter metadata block replaced by
+    top-level version 2.16.0 aligned with the prose declaration (fixing
+    the stale 2.5.0); skill-lint grows a frontmatter-vs-prose version
+    drift guard and expects five reference files; the stale
+    '>= 0.4.0a8' test assertion replaced by a live-declaration mutation
+    plus a new frontmatter-drift regression case
+  - version increments per the spec's modify-must-bump rule:
+    `rds-supabase-mgr-mcp` 2.16.0, `rds-supabase-mcp` 2.7.2,
+    `rds-supabase-web-build` 0.12.4, `rds-supabase-frontend` 0.2.6,
+    `rds-supabase-usage` 0.2.5, `rds-supabase-postgres-best-practices`
+    0.3.2, `rds-supabase-function-graph` 0.1.3
+  - explicit exemptions recorded (independent repo, not the GitCode
+    developer-skill org): huawei-cloud-* directory renaming, SKILL.md
+    body English conversion, quality-cli / VOD telemetry injection,
+    three-level product-domain restructure, references renaming to the
+    four-piece set - each deferred until an official-repo contribution
+    event; usage's self-contained design and postgres-best-practices'
+    38-file rule library kept as deliberate deviations
+
 ### Fixed
 
 - `create_supabase_eip` surfaced `MCP_SDK_ERROR 'EIP write result unknown'`

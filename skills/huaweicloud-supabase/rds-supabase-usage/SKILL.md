@@ -1,9 +1,12 @@
 ---
 name: rds-supabase-usage
-description: '华为云 RDS Supabase 平台开发技能（自建 Supabase 栈：Kong 网关、PostgREST、GoTrue 认证、Storage、Realtime、pgvector）。Use when：使用 supabase-js / @supabase/ssr 客户端库或 Next.js、React、SvelteKit、Astro、Remix 集成；认证问题（login、logout、sessions、JWT、cookies、getSession、getUser、RLS）；schema 变更与 init.sql 部署；REST/Data API 行为异常（permission denied、schema cache、42501、超时、表不可见）；Postgres 错误与性能问题（慢查询、索引、连接、锁）；Storage 故障、Realtime 断连；向量检索；服务端计算与定时任务。不适用于：MCP 服务器安装配置与实例管理、SQL 与 schema 质量规则库。'
+description: '华为云 RDS Supabase 平台开发技能（自建 Supabase 栈：Kong 网关、PostgREST、GoTrue 认证、Storage、Realtime、pgvector）。Use when：使用 supabase-js / @supabase/ssr 客户端库或 Next.js、React、SvelteKit、Astro、Remix 集成；认证问题（login、logout、sessions、JWT、cookies、getSession、getUser、RLS）；schema 变更与 init.sql 部署；REST/Data API 行为异常（permission denied、schema cache、42501、超时、表不可见）；Postgres 错误与性能问题（慢查询、索引、连接、锁）；Storage 故障、Realtime 断连；向量检索；服务端计算与定时任务。不适用于：MCP 服务器安装配置与实例管理、SQL 与 schema 质量规则库。
+  English triggers: supabase-js client, ssr integration, auth login session jwt, rls permission denied, 42501 schema cache, realtime storage, pgvector search, pg_cron jobs.'
 license: MIT
+version: "0.2.5"
+tags: [huawei-cloud, rds, supabase, client, debugging]
 metadata:
-  version: "0.2.4"
+  version: "0.2.5"
   author: fitz-liujian
   derived-from: "supabase/agent-skills@c9be0e9 (MIT)"
 ---
@@ -13,6 +16,16 @@ metadata:
 ## 概述
 
 本平台是运行在华为云 RDS PostgreSQL 上的自建 Supabase 栈：应用端通过 Kong 网关访问 PostgREST 数据 API、GoTrue 认证、Storage 与 Realtime，后端逻辑以数据库层定义（表结构、授权、RLS 策略、函数）为主。开发纪律：**组件版本以部署内实测为准，改后必验证，先定位层再修复。**
+
+在技能族中的位置：本技能是应用开发与平台排错的用法层指导（只读知识，不含写操作流程）——数据面操作经 `mcp-server-huaweicloud-rds-supabase` MCP 执行（安装与工具清单不在本技能范围），SQL 质量规则对照 rds-supabase-postgres-best-practices 技能，云函数侧服务端逻辑见 rds-supabase-function-graph 技能。
+
+典型用例：
+
+1. 前端接入：supabase-js / @supabase/ssr 客户端初始化与数据查询
+2. 认证排查：登录会话、JWT、cookies、getSession/getUser 行为异常
+3. REST/Data API 报错定位：42501 permission denied、schema cache、表不可见
+4. 性能与错误诊断：慢查询、连接池、prepared statement 冲突
+5. 能力接入：Storage、Realtime、pgvector 向量检索、pg_cron 定时任务
 
 ## 任务边界（自包含）
 

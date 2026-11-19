@@ -1,9 +1,12 @@
 ---
 name: rds-supabase-postgres-best-practices
-description: 'Postgres 最佳实践规则库（华为云 RDS Supabase 部署）。编写或修改任何存入 Postgres 数据库的内容之前加载：建表与改表（列类型选择）、schema 设计、RLS 策略、索引、触发器、数据库函数、主键与 UUID 选型、批量导入、数据恢复。诊断场景同样加载：慢查询、高 CPU、超时、EXPLAIN 执行计划、连接耗尽、连接池、锁等待、死锁、表膨胀、N+1 查询、OFFSET 深分页、upsert、外键索引缺失、JSONB 查询慢、全文检索、定时任务（pg_cron）、跨用户或跨租户数据可见。华为云 RDS 部署专属：JWT claims 身份判定（request.jwt.claims）、参数模板（ALTER SYSTEM 无权限）、身份辅助函数、PostgREST 暴露面。单列变更与单条查询同样适用。'
+description: 'Postgres 最佳实践规则库（华为云 RDS Supabase 部署）。编写或修改任何存入 Postgres 数据库的内容之前加载：建表与改表（列类型选择）、schema 设计、RLS 策略、索引、触发器、数据库函数、主键与 UUID 选型、批量导入、数据恢复。诊断场景同样加载：慢查询、高 CPU、超时、EXPLAIN 执行计划、连接耗尽、连接池、锁等待、死锁、表膨胀、N+1 查询、OFFSET 深分页、upsert、外键索引缺失、JSONB 查询慢、全文检索、定时任务（pg_cron）、跨用户或跨租户数据可见。华为云 RDS 部署专属：JWT claims 身份判定（request.jwt.claims）、参数模板（ALTER SYSTEM 无权限）、身份辅助函数、PostgREST 暴露面。单列变更与单条查询同样适用。
+  English triggers: postgres schema design, create table column types, rls policy, index optimization, slow query explain analyze, connection pooling, lock wait bloat, uuid primary key.'
 license: MIT
+version: "0.3.2"
+tags: [huawei-cloud, rds, supabase, postgres, sql]
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
   author: fitz-liujian
   derived-from: "supabase/agent-skills@c9be0e9 (MIT)"
 ---
@@ -13,6 +16,16 @@ metadata:
 ## 概述
 
 源自 Supabase 维护的通用 Postgres 规则库（"for Postgres running anywhere"），针对华为云 RDS Supabase 自建部署适配（身份判定、参数通道、扩展可用性），并新增 rds- 分区承载部署专属规则。每条规则含 Incorrect/Correct 对照与量化收益。**先按下方索引定位规则文件，再按规则修改 SQL。**
+
+在技能族中的位置：本技能是只读规则库，不执行任何云操作、与 MCP/KooCLI 无直接依赖——全栈编排技能 rds-supabase-web-build 在步骤五生成 init.sql 前将其设为强制门逐条对照；规则内容服务一切在本部署上编写或修改 SQL 的场景。
+
+典型用例：
+
+1. 建表与列类型选型：text/timestamptz/numeric、主键与 UUID 选型
+2. 为查询设计与优化索引：复合、部分、覆盖索引与 GIN/GiST/BRIN 选型
+3. 编写与加固 RLS 策略、最小授权与角色划分
+4. 诊断慢查询、连接耗尽、锁等待、死锁、表膨胀
+5. 修复 N+1、OFFSET 深分页、批量插入等数据访问模式问题
 
 ## 何时应用
 

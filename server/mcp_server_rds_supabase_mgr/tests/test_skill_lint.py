@@ -1,4 +1,4 @@
-import shutil,subprocess,sys,tempfile,unittest
+import re,shutil,subprocess,sys,tempfile,unittest
 from pathlib import Path
 
 SKILL=Path(__file__).resolve().parents[3]/'skills'/'huaweicloud-supabase'/'rds-supabase-mgr-mcp'
@@ -34,7 +34,22 @@ class SkillLintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='skill-lint-') as tmp:
             broken=_fake_repo_with_skill(tmp)
             skill_md=broken/'SKILL.md'
-            skill_md.write_text(skill_md.read_text(encoding='utf-8').replace('≥ 0.4.0a8','≥ 9.9.9a9'),encoding='utf-8')
+            # Mutate the LIVE server-version declaration (whatever it currently
+            # is) instead of a hard-coded stale string.
+            skill_md.write_text(re.sub(r'mcp_server_supabase\s*≥\s*\S+','mcp_server_supabase ≥ 9.9.9a9',
+                                        skill_md.read_text(encoding='utf-8')),encoding='utf-8')
             result=_run(broken)
             self.assertEqual(result.returncode,1)
             self.assertIn('newer than actual',result.stdout)
+
+    def test_lint_rejects_frontmatter_prose_version_drift(self):
+        with tempfile.TemporaryDirectory(prefix='skill-lint-') as tmp:
+            broken=_fake_repo_with_skill(tmp)
+            skill_md=broken/'SKILL.md'
+            mutated=re.sub(r'^version:\s*"\d+\.\d+\.\d+"','version: "9.9.9"',
+                           skill_md.read_text(encoding='utf-8'),flags=re.MULTILINE)
+            self.assertNotEqual(mutated,skill_md.read_text(encoding='utf-8'))
+            skill_md.write_text(mutated,encoding='utf-8')
+            result=_run(broken)
+            self.assertEqual(result.returncode,1)
+            self.assertIn('version drift between frontmatter',result.stdout)
