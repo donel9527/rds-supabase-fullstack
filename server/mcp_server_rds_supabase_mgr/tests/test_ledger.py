@@ -139,6 +139,7 @@ class HookRecordingTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import AsyncMock
         koocli=AsyncMock();koocli.region='cn-east-3';koocli.token='fixture'
         koocli.call=AsyncMock(side_effect=[
+            {'publicips':[{'id':'baseline-other'}]},
             {'publicip':{'id':EIP,'public_ip_address':'1.2.3.4','alias':'eip-1'}},
             {'publicip':{'id':EIP}}])
         service=EipService(koocli,PlanStore(Path(self.tmp.name)/'plans.db'),ledger=self.ledger_())

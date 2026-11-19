@@ -9,6 +9,13 @@ EIP_PATH='/v3/{project}/eip/eips'
 USAGE_TAG='Supabase应用公网访问，自动创建的'
 
 
+def _error_label(error):
+    """Bounded failure label for user-facing notes: the MCP error code when
+    available, else the exception class name - never the raw message."""
+    code=getattr(error,'code',None)
+    return code if isinstance(code,str) else type(error).__name__
+
+
 class EipService:
     """EIP purchase via KooCLI (hcloud EIP service): idle-first selection or a new
     dedicated full-dynamic-BGP EIP. Baseline: pay-per-use recommended, bandwidth 5-1000M."""
@@ -47,6 +54,51 @@ class EipService:
         idle=[self._view(row) for row in rows if isinstance(row,dict) and
               (row.get('status')=='FREE' or (row.get('status') is None and not row.get('associate_instance_id')))]
         return {'data':idle,'note':'空闲=未绑定（FREE）；选定其一可直接用于 bind_supabase_eip'}
+
+    async def _existing_eip_ids(self):
+        """Snapshot every visible EIP id before a creation submission - the
+        reconciliation baseline. None (unreadable) degrades reconciliation to
+        'unreadable'; submission itself proceeds (issue #24)."""
+        try:
+            data=await self.koocli.call('EIP','ListPublicips',{'limit':100})
+            rows=data.get('publicips') if isinstance(data,dict) else None
+            if not isinstance(rows,list):return None
+            return {row.get('id') for row in rows if isinstance(row,dict)}
+        except BaseException:
+            return None
+
+    async def _reconcile_creation(self,baseline,alias,charge_mode,size):
+        """One bounded reconciliation read after an ambiguous CreatePublicip (issue #24).
+
+        Attribution is by baseline difference: only ids absent from the
+        pre-submission snapshot AND matching the submitted attributes (alias,
+        charge mode, size) count as candidates - the fixed default alias
+        'supabase-app-eip' collides across earlier auto-created EIPs, so
+        attribute matching alone cannot attribute safely. Outcomes:
+        created (exactly one new match) / absent (no new match) /
+        ambiguous (several new matches - never auto-claimed) /
+        unreadable (list failed or baseline unavailable)."""
+        if baseline is None:
+            return {'outcome':'unreadable','error':'baseline unavailable'}
+        try:
+            data=await self.koocli.call('EIP','ListPublicips',{'limit':100})
+        except BaseException as error:
+            return {'outcome':'unreadable','error':type(error).__name__}
+        rows=data.get('publicips') if isinstance(data,dict) else None
+        if not isinstance(rows,list):
+            return {'outcome':'unreadable','error':'unrecognized list response'}
+        candidates=[]
+        for row in rows:
+            if not isinstance(row,dict):continue
+            view=self._view(row)
+            if not view.get('id') or view['id'] in baseline:continue
+            if view.get('alias')!=alias:continue
+            if view.get('charge_mode')!=charge_mode:continue
+            if view.get('bandwidth_size_mbps')!=size:continue
+            candidates.append(view)
+        if len(candidates)==1:return {'outcome':'created','eip':candidates[0]}
+        if not candidates:return {'outcome':'absent'}
+        return {'outcome':'ambiguous','candidates':sorted(str(c.get('id')) for c in candidates)}
 
     async def ensure_publicip(self,prefer_idle=True,billing_method=None,bandwidth_size_mbps=None,
                               name=None,confirm=False,plan_id=None):
@@ -101,35 +153,65 @@ class EipService:
         if os.getenv('SUPABASE_ENABLE_WRITES')!='true' or os.getenv('HUAWEICLOUD_MCP_READ_ONLY','false').lower()=='true':
             raise McpToolError('MCP_READ_ONLY','Writes are disabled')
         self.plans.claim(plan_id,digest)
-        operation='CreatePublicip'
-        params={'publicip':{'type':'5_bgp','ip_version':4,'alias':name or 'supabase-app-eip'},
+        alias=name or 'supabase-app-eip'
+        params={'publicip':{'type':'5_bgp','ip_version':4,'alias':alias},
                 'bandwidth':{'name':name or 'supabase-bandwidth','share_type':'PER',
                              'size':bandwidth_size_mbps,'charge_mode':billing_method}}
+        baseline=await self._existing_eip_ids()
+        view=None
+        reconciled=None
         try:
-            data=await self.koocli.call('EIP',operation,params)
+            data=await self.koocli.call('EIP','CreatePublicip',params)
             nested=data.get('publicip') if isinstance(data,dict) else None
             row=nested if isinstance(nested,dict) else (data if isinstance(data,dict) else {})
             view=self._view(row)
             if isinstance(data,dict) and data.get('public_ip_address') and not view.get('public_ip_address'):
                 view['public_ip_address']=data['public_ip_address']
-            if not view.get('id'):raise ValueError()
+            if not view.get('id'):raise ValueError('unrecognized creation response')
+        except BaseException as error:
+            # Ambiguous submission (transport lost or response unparsable): the
+            # cloud may still have created the EIP. Reconcile before returning
+            # anything - never push a clarifiable result back to the caller (#24).
+            outcome=await self._reconcile_creation(baseline,alias,billing_method,bandwidth_size_mbps)
+            if outcome['outcome']=='created':
+                view=outcome['eip']
+                reconciled={'verified':True,
+                            'note':'提交响应丢失（%s）：已按基线差集+参数匹配（别名/带宽/计费方式）实查确认 EIP 创建成功'%_error_label(error)}
+            elif outcome['outcome']=='absent':
+                self.plans.finish(plan_id,'failed')
+                raise RecoveryError('MCP_SDK_ERROR','EIP creation verified absent after reconciliation','verified_absent',
+                                    '实查核对未发现新建 EIP（大概率未创建）：重试须全新预览+新 plan_id；若担心列表滞后，重试前可稍候并用 list_idle_publicips 或控制台再核对一次。',plan_id) from None
+            elif outcome['outcome']=='ambiguous':
+                self.plans.finish(plan_id,'unknown')
+                raise RecoveryError('MCP_SDK_ERROR','EIP creation ambiguous: multiple new candidates','ambiguous_candidates',
+                                    '实查核对发现多个新 EIP 匹配本次参数（候选 ID：%s）——不可自动归属，请人工核对后处置，绝不重放。'%', '.join(outcome['candidates']),plan_id) from None
+            else:
+                self.plans.finish(plan_id,'unknown')
+                raise RecoveryError('MCP_SDK_ERROR','EIP write result unknown','submission_unknown',
+                                    '提交响应丢失（%s）且实查清单不可读（%s）：先实查 EIP 列表再决定下一步；绝不盲目重放。'%(
+                                        _error_label(error),outcome.get('error','unreadable')),plan_id) from None
+        # The USAGE_FOR tag is advisory (provenance also lives in the resource
+        # ledger): a failed tag write degrades to a warning, never to an unknown
+        # write result - the EIP itself is already created.
+        tag_warning=None
+        try:
             await self.koocli.call('EIP','BatchCreatePublicipTags',
                                    {'action':'create','publicip_id':view['id'],
                                     'tags':[{'key':'USAGE_FOR','value':USAGE_TAG}]})
-            self.plans.finish(plan_id,'accepted')
-            result={'mode':'created','status':'created','eip':view,
-                    'tag':'USAGE_FOR='+USAGE_TAG,'plan_id':plan_id}
-            if self.ledger is not None:
-                warning=self.ledger.record_safe('eip',view['id'],name=view.get('alias'),
-                                                auto_created=True,
-                                                detail={'address':view.get('public_ip_address'),
-                                                        'billing_method':billing_method,
-                                                        'bandwidth_size_mbps':bandwidth_size_mbps,
-                                                        'charge_mode':view.get('charge_mode'),
-                                                        'provenance':'create_supabase_eip'})
-                if warning:result['record_warning']=warning
-            return result
-        except BaseException:
-            self.plans.finish(plan_id,'unknown')
-            raise RecoveryError('MCP_SDK_ERROR','EIP write result unknown','submission_unknown',
-                                'Inspect the plan and EIP resource; never blindly repeat a write.',plan_id) from None
+        except BaseException as error:
+            tag_warning='USAGE_FOR 标签写入失败（%s）：EIP 已创建；标签用于来源标识，可稍后经控制台或 hcloud 补写'%_error_label(error)
+        self.plans.finish(plan_id,'accepted')
+        result={'mode':'created','status':'created','eip':view,
+                'tag':'USAGE_FOR='+USAGE_TAG,'plan_id':plan_id}
+        if reconciled is not None:result['reconciliation']=reconciled
+        if tag_warning:result['tag_warning']=tag_warning
+        if self.ledger is not None:
+            warning=self.ledger.record_safe('eip',view['id'],name=view.get('alias'),
+                                            auto_created=True,
+                                            detail={'address':view.get('public_ip_address'),
+                                                    'billing_method':billing_method,
+                                                    'bandwidth_size_mbps':bandwidth_size_mbps,
+                                                    'charge_mode':view.get('charge_mode'),
+                                                    'provenance':'create_supabase_eip'})
+            if warning:result['record_warning']=warning
+        return result

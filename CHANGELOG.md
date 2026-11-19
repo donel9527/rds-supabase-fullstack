@@ -7,6 +7,35 @@ semantic versioning.
 
 ### Fixed
 
+- `create_supabase_eip` surfaced `MCP_SDK_ERROR 'EIP write result unknown'`
+  although the EIP was actually created (issue #24). The old catch-all folded
+  four cloud end-states into one opaque unknown: a lost transport response,
+  an unparsable creation response, a failed USAGE_FOR tag write (EIP created,
+  untagged), and a request that never reached the cloud. Fixed in
+  `mcp_server_rds_supabase_mgr` 0.4.0a66:
+  - before every creation submission the service snapshots the visible EIP
+    inventory (reconciliation baseline); on an ambiguous submission it
+    reconciles by baseline set-difference plus attribute matching (alias /
+    bandwidth size / charge mode - the fixed default alias collides across
+    auto-created EIPs, so attributes alone cannot attribute)
+  - exactly one new match returns the real `created` result with
+    `reconciliation.verified` and re-applies the tag; no new match reports
+    recovery category `verified_absent` with the plan marked failed (a fresh
+    preview may retry); several new matches report `ambiguous_candidates`
+    listing ids without auto-claiming; only an unreadable reconciliation
+    (or an unavailable baseline) falls back to `submission_unknown`, now
+    naming both failure codes
+  - a failed tag write degrades to a `tag_warning` on the created result
+    (the tag is advisory; provenance also lives in the resource ledger)
+  - "never blindly repeat" preserved: CreatePublicip stays non-idempotent
+    and every plan single-use
+  - tests: reconciliation confirmed (transport loss + unparseable response),
+    verified-absent, ambiguous candidates, unreadable list, unavailable
+    baseline, tag-failure warning, baseline snapshot in the happy paths
+  - follow-up candidate noted: the same reconcile-on-unknown pattern applies
+    to the KooCLI delete tools (verify absence); not in this change set
+  - skill 2.15.0 (server >= 0.4.0a66): scenario 4, README zh/en, acceptance K38
+
 - `create_supabase_with_new_instance` / `create_supabase_link_exist_instance`
   demanded `security_group_id` in the request file while the docs promised it was
   injected automatically, the error named neither the expected location nor the

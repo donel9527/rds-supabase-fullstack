@@ -171,7 +171,7 @@ URL/JSON 转义与人工抄录错误——预览时若含字母/数字/`-`/`_` �
 **采购**：`create_supabase_eip` 空闲优先（`prefer_idle=true`）——先列出未绑定 EIP
 供用户选定，选定后直接用于绑定、不新建；无空闲时新建：按需计费固定（不支持
 包周期）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
-按需计费固定——计费方式（bandwidth 按带宽 / traffic 按流量，无默认由用户按场景选择）与带宽大小（bandwidth 5-1000 / traffic 5-300 峰值）均由用户决策；收费（带宽费/流量费+IP 保有费）在采购前展示并确认，并自动添加 USAGE_FOR 标签。
+按需计费固定——计费方式（bandwidth 按带宽 / traffic 按流量，无默认由用户按场景选择）与带宽大小（bandwidth 5-1000 / traffic 5-300 峰值）均由用户决策；收费（带宽费/流量费+IP 保有费）在采购前展示并确认，并自动添加 USAGE_FOR 标签。提交响应丢失时先按基线差集+参数匹配实查核对——确认已创建直接返回实际结果（`reconciliation.verified`）、实查未发现报 `verified_absent`、多候选报 `ambiguous_candidates` 不自动归属、实查不可读才报 `submission_unknown`；标签写入失败降级为 `tag_warning` 不影响创建结果。
 
 **绑定（首次）**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
 Supabase 应用 ID 且真实存在（以应用详情接口核对）、`public_ip_id` 为规范 UUID、`public_ip`

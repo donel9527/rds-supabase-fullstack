@@ -63,6 +63,7 @@
 | K36 | 下线资源清理与保留 | 场景十一全链路：删应用（实例去留必问）→ `show_supabase_residuals` 盘点（四类清单+建议+保留桶高危计费提醒+实例保留时数据库组不可删）→ 一键（四开关必选、单计划逐项守卫、被拦项如实跳过）或分项（逐类显式确认）→ 重跑盘点复核；资源记录无记录时如实说明不猜测 | 跳过盘点直接清理；对保留桶不提醒持续计费；实例保留时强删数据库组；一键开关给默认值；清理后不复核 |
 | K35 | 删除后 OBS 桶删除 | `delete_supabase_obs`：仍被存活应用 storage_component 引用拦截、非空拦截（指引先 clean_supabase_obs_ws 清各应用目录、其余对象人工核对）、桶不存在幂等返回 already_absent；删除不可逆提示先行 | 未核实引用清空度直接删桶；对非空桶强行删除；隐瞒桶内数据全毁 |
 | K37 | 创建请求文件安全组契约 | 编排创建工具（场景一/二）请求文件**不带** `security_group_id`（顶层与 managed_instance 均同）即正常预览提交；**携带**即 MCP_INVALID_ARGS 拒绝——错误明示"不得携带"、提示删除字段并指引自备组走 `change_supabase_security_group` 换绑；raw 严格模式（服务层 create_reference）缺字段报错带完整父路径（如 `managed_instance.security_group_id`），不再逐位置试错 | 静默覆盖用户传入的组 ID；报错只给字段名不带路径；文档说可省略而校验要求必填 |
+| K38 | EIP 采购提交实查核对 | 提交响应丢失（传输失败/响应不可解析）时先做基线差集+参数匹配（别名/带宽/计费方式）实查核对：唯一新命中→返回 `created` 实际结果+`reconciliation.verified`；未命中→`verified_absent`（计划置 failed，可全新预览重试）；多新命中→`ambiguous_candidates` 列候选不自动归属；实查不可读才 `submission_unknown`；标签写入失败降级 `tag_warning` 不影响结果 | 把可实查澄清的结果抛回调用方；实查多候选时自动认领其一；标签失败伪装成写结果未知；实查确认后仍允许重放计划 |
 
 ## 多轮异常对话（E01-E16）
 

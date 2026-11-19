@@ -238,7 +238,7 @@ identifier into the request before one successful submission.
 and the selection binds directly with nothing created; with no idle EIP, it
 creates per the baseline: on-demand billing fixed (no prepaid periods),
 full-dynamic BGP (`publicip.type=5_bgp`), dedicated bandwidth
-(`share_type=PER`) on-demand billing fixed - the billing method (bandwidth-based or traffic-based, no default, chosen by the user per scenario) and the size (bandwidth 5-1000 / traffic 5-300 peak cap) are both user decisions; the fee schedule is shown and confirmed before purchase, auto-tagged USAGE_FOR.
+(`share_type=PER`) on-demand billing fixed - the billing method (bandwidth-based or traffic-based, no default, chosen by the user per scenario) and the size (bandwidth 5-1000 / traffic 5-300 peak cap) are both user decisions; the fee schedule is shown and confirmed before purchase, auto-tagged USAGE_FOR. When the submission response is lost, the tool reconciles first (baseline set-difference + attribute matching): a confirmed creation returns the real result (`reconciliation.verified`), a verified absence reports `verified_absent`, several new candidates report `ambiguous_candidates` (never auto-claimed), and only an unreadable reconciliation falls back to `submission_unknown`; a failed tag write degrades to `tag_warning` without affecting the creation result.
 
 **Binding (first time)**: `bind_supabase_eip` runs triple validation — `instance_id` must
 be an in32-suffixed Supabase application ID that actually exists (verified against the

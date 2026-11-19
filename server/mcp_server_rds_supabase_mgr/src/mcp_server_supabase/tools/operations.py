@@ -42,7 +42,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.READ)
     async def show_supabase_auth_config(application_id: str) -> dict:
-        """查询应用 Auth 配置（注册开关、跳转 URL、邮箱与 GitHub 身份源、邮件模板）。敏感凭据在任何层级均不返回；结果作为 Auth 变更预览与对账基线。"""
+        """查询应用 Auth 配置（注册开关、跳转 URL、邮箱与 GitHub 身份源、邮件模板）。敏感凭据在任何层级均不返回；结果作为 Auth 变更预览与核对基线。"""
         return await service.read("auth", application_id)
 
     @server.tool()

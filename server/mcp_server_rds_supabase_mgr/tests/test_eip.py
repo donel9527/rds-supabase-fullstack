@@ -115,6 +115,7 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('0.64',preview['billing']['unit_price_reference'])
         self.assertIn('300Mbps',preview['billing']['traffic_limit'])
         self.koocli.push({'publicips':[]})
+        self.koocli.push({'publicips':[]})
         self.koocli.push({'publicip':{'id':'e-10','status':'ACTIVE','public_ip_address':'10.0.0.1'}})
         self.koocli.push({})
         result=await self.service.ensure_publicip(billing_method='traffic',bandwidth_size_mbps=100,confirm=True,plan_id=preview['plan_id'])
@@ -134,13 +135,14 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         preview=await self.service.ensure_publicip(name='app-eip',billing_method='bandwidth',bandwidth_size_mbps=300)
         self.assertEqual(preview['eip']['alias'],'app-eip')
         self.koocli.push({'publicips':[]})
+        self.koocli.push({'publicips':[]})
         self.koocli.push({'publicip':{'id':'e-9','status':'ACTIVE','public_ip_address':'9.9.9.9',
                                       'bandwidth':{'size':300,'share_type':'PER','charge_mode':'bandwidth'}}})
         self.koocli.push({})
         result=await self.service.ensure_publicip(name='app-eip',billing_method='bandwidth',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual([c[1] for c in self.koocli.calls],
-                         ['ListPublicips','ListPublicips','CreatePublicip','BatchCreatePublicipTags'])
-        service,operation,params=self.koocli.calls[2]
+                         ['ListPublicips','ListPublicips','ListPublicips','CreatePublicip','BatchCreatePublicipTags'])
+        service,operation,params=self.koocli.calls[3]
         self.assertEqual((service,operation),('EIP','CreatePublicip'))
         self.assertEqual(params['publicip']['type'],'5_bgp')
         self.assertEqual(params['publicip']['ip_version'],4)
@@ -156,7 +158,7 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('--bandwidth.share_type=PER',flags)
         self.assertIn('--bandwidth.size=300',flags)
         self.assertIn('--bandwidth.charge_mode=bandwidth',flags)
-        tag_params=self.koocli.calls[3][2]
+        tag_params=self.koocli.calls[4][2]
         self.assertEqual(tag_params['action'],'create')
         self.assertEqual(tag_params['publicip_id'],'e-9')
         self.assertEqual(tag_params['tags'],[{'key':'USAGE_FOR','value':TAG_VALUE}])
@@ -210,32 +212,113 @@ class EipServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.code,'MCP_GUARDRAIL_BLOCKED')
         self.assertEqual(self.koocli.calls,[])
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'prepared')
+        self.koocli.push({'publicips':[]})
         self.koocli.push({'publicip':{'id':'e-5','public_ip_address':'5.5.5.5'}})
         self.koocli.push({})
         await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         with self.assertRaises(McpToolError) as ctx:
             await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_GUARDRAIL_BLOCKED')
-        self.assertEqual(len(self.koocli.calls),2)
+        self.assertEqual(len(self.koocli.calls),3)
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
 
-    async def test_write_failure_keeps_unknown(self):
+    async def test_write_failure_with_no_new_eip_is_verified_absent(self):
         preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300)
+        self.koocli.push({'publicips':[{'id':'old-1','alias':'other','status':'BINDING'}]})
         self.koocli.push(McpToolError('MCP_CLI_ERROR','boom'))
+        self.koocli.push({'publicips':[{'id':'old-1','alias':'other','status':'BINDING'}]})
         with self.assertRaises(McpToolError) as ctx:
             await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
         self.assertEqual(ctx.exception.code,'MCP_SDK_ERROR')
-        self.assertEqual(ctx.exception.recovery['category'],'submission_unknown')
+        self.assertEqual(ctx.exception.recovery['category'],'verified_absent')
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'failed')
+
+    async def test_transport_loss_reconciles_the_created_eip(self):
+        # issue #24: the write lands cloud-side while the response is lost - the
+        # reconciliation read must confirm and return the real result.
+        preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='traffic',bandwidth_size_mbps=5)
+        self.koocli.push({'publicips':[{'id':'old-1','alias':'supabase-app-eip','status':'BINDING',
+                                        'public_ip_address':'1.1.1.1','bandwidth':{'size':5,'charge_mode':'traffic','share_type':'PER'}}]})
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','connection reset'))
+        self.koocli.push({'publicips':[{'id':'old-1','alias':'supabase-app-eip','status':'BINDING',
+                                        'public_ip_address':'1.1.1.1','bandwidth':{'size':5,'charge_mode':'traffic','share_type':'PER'}},
+                                       {'id':'e-new','alias':'supabase-app-eip','status':'DOWN',
+                                        'public_ip_address':'4.4.4.4','publicip':{'type':'5_bgp'},
+                                        'bandwidth':{'size':5,'charge_mode':'traffic','share_type':'PER'}}]})
+        self.koocli.push({})
+        result=await self.service.ensure_publicip(prefer_idle=False,billing_method='traffic',bandwidth_size_mbps=5,
+                                                   confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(result['mode'],'created')
+        self.assertEqual(result['eip']['id'],'e-new')
+        self.assertEqual(result['eip']['public_ip_address'],'4.4.4.4')
+        self.assertTrue(result['reconciliation']['verified'])
+        self.assertEqual(self.koocli.calls[-1][1],'BatchCreatePublicipTags')  # tag re-applied on the reconciled EIP
+        self.assertEqual(self.koocli.calls[-1][2]['publicip_id'],'e-new')
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
+
+    async def test_unparseable_response_reconciles_the_created_eip(self):
+        preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=50)
+        self.koocli.push({'publicips':[]})
+        self.koocli.push({'unexpected':True})
+        self.koocli.push({'publicips':[{'id':'e-p','alias':'supabase-app-eip','status':'DOWN',
+                                        'public_ip_address':'5.5.5.5','bandwidth':{'size':50,'charge_mode':'bandwidth','share_type':'PER'}}]})
+        self.koocli.push({})
+        result=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=50,
+                                                  confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(result['eip']['id'],'e-p')
+        self.assertTrue(result['reconciliation']['verified'])
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
+
+    async def test_reconcile_with_multiple_new_candidates_stays_ambiguous(self):
+        preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='traffic',bandwidth_size_mbps=5)
+        self.koocli.push({'publicips':[]})
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','lost'))
+        self.koocli.push({'publicips':[{'id':'c-1','alias':'supabase-app-eip','status':'DOWN',
+                                        'bandwidth':{'size':5,'charge_mode':'traffic','share_type':'PER'}},
+                                       {'id':'c-2','alias':'supabase-app-eip','status':'DOWN',
+                                        'bandwidth':{'size':5,'charge_mode':'traffic','share_type':'PER'}}]})
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.ensure_publicip(prefer_idle=False,billing_method='traffic',bandwidth_size_mbps=5,
+                                                confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(ctx.exception.recovery['category'],'ambiguous_candidates')
+        self.assertIn('c-1',ctx.exception.hint);self.assertIn('c-2',ctx.exception.hint)
         self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
 
-    async def test_tag_failure_after_create_keeps_unknown(self):
+    async def test_reconcile_unreadable_keeps_submission_unknown(self):
         preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300)
+        self.koocli.push({'publicips':[{'id':'old-1','alias':'other'}]})
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','boom'))
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','list down'))
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,
+                                                confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(ctx.exception.recovery['category'],'submission_unknown')
+        self.assertIn('MCP_CLI_ERROR',ctx.exception.hint)   # both failure classes surface in the note
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
+
+    async def test_baseline_unavailable_degrades_reconciliation_to_unreadable(self):
+        preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300)
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','baseline down'))
+        self.koocli.push(McpToolError('MCP_CLI_ERROR','boom'))
+        with self.assertRaises(McpToolError) as ctx:
+            await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,
+                                                confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(ctx.exception.recovery['category'],'submission_unknown')
+        self.assertIn('baseline unavailable',ctx.exception.hint)
+        self.assertEqual(len(self.koocli.calls),2)   # baseline + create; reconciliation short-circuits without a baseline
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
+
+    async def test_tag_failure_after_create_degrades_to_warning(self):
+        preview=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300)
+        self.koocli.push({'publicips':[]})
         self.koocli.push({'publicip':{'id':'e-7','public_ip_address':'7.7.7.7'}})
         self.koocli.push(McpToolError('MCP_CLI_ERROR','tag failed'))
-        with self.assertRaises(McpToolError) as ctx:
-            await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,confirm=True,plan_id=preview['plan_id'])
-        self.assertEqual(ctx.exception.code,'MCP_SDK_ERROR')
-        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'unknown')
+        result=await self.service.ensure_publicip(prefer_idle=False,billing_method='bandwidth',bandwidth_size_mbps=300,
+                                                   confirm=True,plan_id=preview['plan_id'])
+        self.assertEqual(result['status'],'created')
+        self.assertEqual(result['eip']['id'],'e-7')
+        self.assertIn('USAGE_FOR 标签写入失败',result['tag_warning'])
+        self.assertEqual(self.service.plans.inspect(preview['plan_id'])['state'],'accepted')
 
     def test_view_tolerates_flat_and_nested_shapes(self):
         view=EipService._view({'id':'p1','publicip_address':'2.2.2.2','bandwidth_size':50,

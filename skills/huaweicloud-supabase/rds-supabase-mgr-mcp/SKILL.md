@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.14.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a65`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，58 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.15.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a66`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，58 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -134,7 +134,7 @@ metadata:
 
 **触发**：应用已创建但 `public_ip` 为空（用户访问不了），或用户要求开通/变更公网访问。刚创建的应用没有公网地址，必须做完本场景才算可访问。
 
-1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时新建：**按需计费固定（不支持包周期）**、全动态 BGP（`type=5_bgp`）、独享带宽。**计费方式由用户按场景选择（无默认，缺失即拒）**：`bandwidth`（按带宽计费——带宽费=带宽峰值×时长、不限流量，流量大或访问量稳定场景更优；阶梯计费 0-5M 统一单价、超 5M 按 Mbps 计费，官方示例 6Mbps≈0.565 元/小时）/ `traffic`（按流量计费——流量费按出云流量 GB 计、入云不计，带宽仅作峰值限速，流量低或波动大场景更优；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、同账号区域峰值总和 ≤5Gbps）。**带宽大小由用户决策**（bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速，无默认，缺失即拒）。两项均须采购前向用户**展示收费标准**并确认：费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时），精确单价以[官网价格详情](https://www.huaweicloud.com/pricing.html?tab=detail#/eip)为准（[场景](https://support.huaweicloud.com/price-eip/eip_billing_0005.html)/[收费标准](https://support.huaweicloud.com/price-eip/eip_billing_0007.html)）；自创建起持续计费直至释放。并自动添加 USAGE_FOR 标签标记来源与用途。
+1. **采购**：`create_supabase_eip(prefer_idle=true)` 空闲优先——先列出未绑定 EIP 供用户选定（选定后直接用于绑定、不新建）；无空闲时新建：**按需计费固定（不支持包周期）**、全动态 BGP（`type=5_bgp`）、独享带宽。**计费方式由用户按场景选择（无默认，缺失即拒）**：`bandwidth`（按带宽计费——带宽费=带宽峰值×时长、不限流量，流量大或访问量稳定场景更优；阶梯计费 0-5M 统一单价、超 5M 按 Mbps 计费，官方示例 6Mbps≈0.565 元/小时）/ `traffic`（按流量计费——流量费按出云流量 GB 计、入云不计，带宽仅作峰值限速，流量低或波动大场景更优；官方示例 0.64 元/GB；单 EIP 峰值上限 300Mbps、同账号区域峰值总和 ≤5Gbps）。**带宽大小由用户决策**（bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速，无默认，缺失即拒）。两项均须采购前向用户**展示收费标准**并确认：费用 = 带宽费/流量费 + 弹性公网IP保有费（未绑定云资源且未释放时收取，官方示例 0.02 元/小时），精确单价以[官网价格详情](https://www.huaweicloud.com/pricing.html?tab=detail#/eip)为准（[场景](https://support.huaweicloud.com/price-eip/eip_billing_0005.html)/[收费标准](https://support.huaweicloud.com/price-eip/eip_billing_0007.html)）；自创建起持续计费直至释放。并自动添加 USAGE_FOR 标签标记来源与用途。提交响应丢失时工具会先按基线差集+参数匹配实查核对：确认已创建则直接返回实际结果（`reconciliation.verified`）；实查未发现报 `verified_absent`（可全新预览重试）；多候选报 `ambiguous_candidates`（不自动归属）；实查清单不可读才报 `submission_unknown`——标签写入失败仅降级为 `tag_warning` 不影响创建结果。
 2. **绑定（首次）**：`bind_supabase_eip(instance_id, public_ip_id, public_ip)` 三重校验——`instance_id` 必须为 in32 结尾的 Supabase 应用 ID 且真实存在（以应用详情接口核对，404 会明示核对源）、`public_ip_id` 为规范 UUID、`public_ip` 为合法 IPv4；仅运行中（normal）且无进行中操作、尚未绑定 EIP 的应用可首次绑定，经应用级 public-eip 接口提交（与 `change_supabase_eip` 同一后端契约）；已绑定应用更换或解绑须改用 `change_supabase_eip`。
 3. **同步 `api_external_url`**：公网地址变了，邮箱确认链接与 OAuth 回调都指向该 URL，不同步则登录链路是断的。把拼装的公网访问地址写入请求文件别名 → `update_supabase_auth_config` 预览 → 确认 → 查任务 → `show_supabase_auth_config` 回查不再是 localhost。
 4. **探活**：以 curl 探测访问地址（任何状态码都算网络可达）；不通回头查安全组规则与 EIP 绑定状态。
