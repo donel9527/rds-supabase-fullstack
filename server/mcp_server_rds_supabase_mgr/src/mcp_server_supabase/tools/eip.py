@@ -18,7 +18,7 @@ def register(server):
     @server.tool()
     @guard(risk=ToolRisk.DANGEROUS)
     async def bind_supabase_eip(instance_id: str, public_ip_id: str, public_ip: str, confirm: bool = False, plan_id: str | None = None) -> dict:
-        """为 Supabase 应用绑定 EIP，两段式提交，经 RDS AttachEip 通道。三重校验：instance_id 须为本环境 in32 应用 ID 且真实存在、public_ip_id 为规范 UUID、public_ip 为合法 IPv4。"""
+        """为 Supabase 应用首次绑定 EIP，两段式提交，经应用级 public-eip 接口（与 change_supabase_eip 同一后端契约）。三重校验：instance_id 须为本环境 in32 应用 ID 且真实存在（以应用详情接口核对，404 明示核对源）、public_ip_id 为规范 UUID、public_ip 为合法 IPv4；仅运行中且无进行中操作的应用可绑定，已绑定应用须改用 change_supabase_eip。"""
         result = await EipBindService(ledger=ResourceLedger()).bind_public_ip(instance_id, public_ip_id, public_ip, confirm, plan_id)
         rows = [[result.get('instance_id'), (result.get('eip') or {}).get('public_ip'),
                  (result.get('eip') or {}).get('public_ip_id'), result.get('status')]]

@@ -171,11 +171,13 @@ URL/JSON 转义与人工抄录错误——预览时若含字母/数字/`-`/`_` �
 **采购**：`create_supabase_eip` 空闲优先（`prefer_idle=true`）——先列出未绑定 EIP
 供用户选定，选定后直接用于绑定、不新建；无空闲时新建：按需计费固定（不支持
 包周期）、全动态 BGP（`publicip.type=5_bgp`）、独享带宽（`share_type=PER`）
-按需计费固定——计费方式（bandwidth 按带宽 / traffic 按流量，无默认由用户按场景选择）与带宽大小（bandwidth 5-1000 / traffic 5-300 峰值）均由用户决策；收费（带宽费/流量费+IP 保有费）在采购前展示并确认，并自动打标 USAGE_FOR。
+按需计费固定——计费方式（bandwidth 按带宽 / traffic 按流量，无默认由用户按场景选择）与带宽大小（bandwidth 5-1000 / traffic 5-300 峰值）均由用户决策；收费（带宽费/流量费+IP 保有费）在采购前展示并确认，并自动添加 USAGE_FOR 标签。
 
-**绑定**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
-Supabase 应用 ID 且在本环境应用列表内、`public_ip_id` 为规范 UUID、`public_ip`
-为合法 IPv4——全部通过后经 RDS AttachEip 绑定。
+**绑定（首次）**：`bind_supabase_eip` 执行三重校验——`instance_id` 必须为 in32 结尾的
+Supabase 应用 ID 且真实存在（以应用详情接口核对）、`public_ip_id` 为规范 UUID、`public_ip`
+为合法 IPv4；仅运行中且无进行中操作、尚未绑定 EIP 的应用可首次绑定，经应用级
+public-eip 接口（SwitchSupabaseApplicationEipBind）提交；已绑定应用更换或解绑须改用
+`change_supabase_eip`。
 
 绑定成功后必须经 `update_supabase_auth_config` 同步 `api_external_url`（邮箱链接与
 OAuth 回调依赖该地址），并探活验证。
@@ -394,7 +396,7 @@ cleanup_obs_workspace, cleanup_security_groups, confirm, plan_id)`（DANGEROUS�
 | `list_ssl_certificates` | 盘点已有 SSL 证书 | READ | - |
 | `purchase_supabase_ssl_cert` | 两段式购买并申请证书 | DANGEROUS | - |
 | `create_supabase_eip` | EIP 空闲优先采购 | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
-| `bind_supabase_eip` | EIP 三重校验绑定 | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
+| `bind_supabase_eip` | EIP 首次绑定（应用级 public-eip） | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
 | `create_supabase_new_obs` | 新建私有 OBS 桶 | WRITE | `KooCLI OBS mb` |
 | `change_supabase_eip` | 绑定或解绑 EIP | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
 | `change_supabase_application_password` | 改应用登录密码，不涉实例 | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |

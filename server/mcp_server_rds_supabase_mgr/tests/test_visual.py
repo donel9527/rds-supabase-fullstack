@@ -671,7 +671,7 @@ def arrangement_ssl_public_fixture():
         'bandwidth':{'share_type':'PER（独享带宽）','type':'全动态 BGP（publicip.type=5_bgp）',
                      'size_range_mbps':'5-1000','recommended_size_mbps':300},
         'purchase':'优先空闲：create_supabase_eip(prefer_idle=true) 先列未绑定 EIP 供用户选定',
-        'bind':'bind_supabase_eip(instance_id, public_ip_id, public_ip)（三重校验，RDS AttachEip）',
+        'bind':'bind_supabase_eip(instance_id, public_ip_id, public_ip)（三重校验，应用级 public-eip 接口）',
         'post_bind':'绑定成功后必须 update_supabase_auth_config 同步 api_external_url'}
     return result
 

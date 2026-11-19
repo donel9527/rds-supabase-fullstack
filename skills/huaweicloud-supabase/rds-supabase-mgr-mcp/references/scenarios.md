@@ -145,7 +145,7 @@ SKILL.md 教链路；本文件存细节。每个场景给出"步骤/工具/参�
 | 步骤 | 工具 | 关键参数 | 校验点 |
 |---|---|---|---|
 | 1. 采购 | `create_supabase_eip` | prefer_idle=true、billing_method=<bandwidth/traffic 用户按场景选>、bandwidth_size_mbps=<用户决策：bandwidth 5-1000 计费尺寸 / traffic 5-300 峰值限速> | 空闲优先：列出未绑定 EIP 供用户选定；无空闲按需新建（**计费方式与大小先问用户并展示收费标准再执行**——bandwidth 带宽费=峰值×时长不限流量[官方示例 6Mbps≈0.565 元/小时]、traffic 流量费按出云 GB[官方示例 0.64 元/GB，单 EIP 峰值上限 300Mbps]，另含 IP 保有费[未绑定时官方示例 0.02 元/小时]；全动态 BGP+独享+自动添加 USAGE_FOR 标签） |
-| 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且在列表内、UUID 规范、IPv4 合法；经 RDS AttachEip |
+| 2. 绑定 | `bind_supabase_eip` | instance_id、public_ip_id、public_ip | 三重校验全过：in32 结尾应用 ID 且真实存在（应用详情接口核对）、UUID 规范、IPv4 合法；仅未绑定应用的首次绑定，经应用级 public-eip 接口 |
 | 3. 同步 URL | `update_supabase_auth_config` | 请求文件别名只含 api_external_url | 拼装的公网访问地址；预览→确认→查任务→回查 |
 | 4. 探活 | 本地 curl | 访问地址 | 任何状态码都算网络可达；不通查安全组规则与 EIP |
 | 5. HTTPS（可选） | `list_ssl_certificates` / `purchase_supabase_ssl_cert` → `change_supabase_ssl` | cert_id 即 `change_supabase_ssl` 入参 | 证书获取三路径：复用（盘点账号已有证书）/购买（推荐，免费档 DV_SSL_CERT_BASIC；付费档生成待支付订单）/导入自有；纯 EIP 公网 IP 无域名时仅文件验证；切换闪断低峰执行，生效后回调协议改 https |

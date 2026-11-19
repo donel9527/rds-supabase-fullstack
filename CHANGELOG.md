@@ -5,6 +5,32 @@ semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- `bind_supabase_eip` rejected applications that `list_supabase_applications`
+  returned, while `change_supabase_eip` accepted the same ID (issue #23).
+  Three stacked defects, all fixed in `mcp_server_rds_supabase_mgr` 0.4.0a64:
+  the ownership check consulted an ID-filtered inventory query and its
+  catch-all swallowed every read failure (backend 4xx/5xx, contract mismatch)
+  into a misleading "not managed by this environment" rejection - it now reads
+  the authoritative application detail endpoint (the same source
+  `change_supabase_eip` uses), maps a definitive 404 to MCP_NOT_FOUND with the
+  verification source named in the hint, and propagates every other read
+  failure unchanged; the submission channel was the instance-level RDS
+  AttachEip API (`/v3/{project}/instances/{instance_id}/public-ip`) addressed
+  with an application ID - a resource level no application ID can ever match -
+  and now submits through the application-level public-eip endpoint
+  (SwitchSupabaseApplicationEipBind) like the change tool; and the tool lacked
+  the state guardrails of its sibling. New guardrails per the intended
+  scenario split: bind is for first-time binding only (running applications
+  with no in-flight actions and no EIP bound; an already-bound application is
+  directed to `change_supabase_eip`), guards run before the plan claim, and
+  the accepted response carries the job id with follow-up guidance. Skill
+  2.13.0 (server >= 0.4.0a64): scenario 4, command table and README zh/en
+  updated; `show_supabase_creation_progress` and
+  `list_supabase_applications(application_id=...)` keep the filtered query
+  (no masquerading path there; probe confirmed the parameters are accepted).
+
 ### Added
 
 - Repo-wide wording rectification across all skills and the mgr server

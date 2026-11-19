@@ -240,10 +240,13 @@ creates per the baseline: on-demand billing fixed (no prepaid periods),
 full-dynamic BGP (`publicip.type=5_bgp`), dedicated bandwidth
 (`share_type=PER`) on-demand billing fixed - the billing method (bandwidth-based or traffic-based, no default, chosen by the user per scenario) and the size (bandwidth 5-1000 / traffic 5-300 peak cap) are both user decisions; the fee schedule is shown and confirmed before purchase, auto-tagged USAGE_FOR.
 
-**Binding**: `bind_supabase_eip` runs triple validation — `instance_id` must
-be an in32-suffixed Supabase application ID within this environment's
-application list, `public_ip_id` a canonical UUID, and `public_ip` a valid
-IPv4 — and only then binds via the RDS AttachEip API.
+**Binding (first time)**: `bind_supabase_eip` runs triple validation — `instance_id` must
+be an in32-suffixed Supabase application ID that actually exists (verified against the
+application detail endpoint), `public_ip_id` a canonical UUID, and `public_ip` a valid
+IPv4; only a running application with no in-flight actions and no EIP bound yet can be
+bound here, submitted through the application-level public-eip endpoint
+(SwitchSupabaseApplicationEipBind). Swapping or unbinding an already-bound application
+belongs to `change_supabase_eip`.
 
 After a successful binding, `update_supabase_auth_config` must sync
 `api_external_url` (email links and OAuth callbacks depend on it), followed
@@ -551,7 +554,7 @@ pre-provisioned into a local request file and referenced by alias.
 | `list_ssl_certificates` | Inventory existing SSL certificates | READ | - |
 | `purchase_supabase_ssl_cert` | Two-phase certificate purchase | DANGEROUS | - |
 | `create_supabase_eip` | Idle-first EIP provisioning | WRITE | [CreatePublicip](https://console.huaweicloud.com/apiexplorer/#/openapi/EIP/doc?api=CreatePublicip) |
-| `bind_supabase_eip` | EIP binding with triple validation | WRITE | [AttachEip](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=AttachEip) |
+| `bind_supabase_eip` | First-time EIP binding (application-level public-eip) | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
 | `create_supabase_new_obs` | Create a private OBS bucket | WRITE | `KooCLI OBS mb` |
 | `change_supabase_eip` | Bind or unbind EIP | WRITE | [SwitchSupabaseApplicationEipBind](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=SwitchSupabaseApplicationEipBind) |
 | `change_supabase_application_password` | Change app login password only | DANGEROUS | [ModifySupabaseApplicationPassword](https://console.huaweicloud.com/apiexplorer/#/openapi/RDS/doc?api=ModifySupabaseApplicationPassword) |
