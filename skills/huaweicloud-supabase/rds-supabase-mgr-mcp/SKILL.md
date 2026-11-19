@@ -9,7 +9,7 @@ metadata:
 
 # 华为云 RDS Supabase 应用管理（管理面）
 
-版本 2.13.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a64`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，58 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
+版本 2.14.0；配套服务端 `mcp_server_supabase ≥ 0.4.0a65`（uvx 规范入口 `mcp-huaweicloud-rds-supabase-mgr`，58 个工具）。工具存在不代表服务端已在真实环境联调；工具数量与能力以运行时 `tools/list` 与 `get_supabase_capabilities` 返回为准。
 
 ## 概述
 
@@ -100,7 +100,7 @@ metadata:
 3. **az_code 触发实时发现**：`discover_supabase_create_basic_options(az_code)` 一次取应用版本（取当前最高，x.y.z 应用版本而非 PG 引擎版本）、Single/Ha 支持（实时探测，Ha 被拒即仅 Single）与可售规格（按规格类型分组展示全部可售，全部可选或自定义，推荐通用型 2U4G）；`discover_db_instance_for_create(scenario="newly_instance", mode)` 取引擎版本、实例规格与磁盘类型逐字段推荐——实例规格按 group_type 十大类分组展示全部可售规格，默认推荐与应用同规格；磁盘类型展示中文名、官方说明与实时兼容规格类型供选择；企业项目为可选字段，仅企业项目账号需要——发现时实时查询企业项目列表（仅此场景查询）供选择，默认选中 default 项目，查询不可用或个人账号直接省略该字段；`discover_network_for_create(scenario="newly_instance")` 选定 IP 充足的 VPC/子网（优先 2 个空闲 IP、备选 1 个）并给出双组安全组规格——区域无可用网络时返回默认推荐（VPC `default_vpc` 192.168.0.0/16 + 子网 `default_subnet` 192.168.0.0/24，建在实例所在可用区），按 `default_create` 建网后再跑一次发现取真实 ID；发现工具本身不创建资源。
 4. **组装本地请求文件**：全部参数与秘密（应用密码、数据库密码、存储 AK/SK）只入文件；**密码生成规范**：12-16 位大小写字母+数字（云侧三类即合规，无需特殊字符；确需符号只用 `-`/`_`，禁用引号、反斜杠、空格与 `@#$%&*+=?,/：;` 等易转义难抄录字符）；写盘后**回读核对**再预览。预览前按[场景手册](references/scenarios.md)的“预览前逐项核对清单”逐项核对——最常见的错误：`version` 填成 PG 引擎版本、漏 `ha` 对象、密码不合规、`period_type` 传数字。
 5. **预览**：`create_supabase_with_new_instance(request_ref, public_access_cidr, confirm=false)`。`public_access_cidr` 三选一：`auto`（探测当前设备出口 IP）/ `open`（0.0.0.0/0，经 KooCLI，须用户明确确认）/ 自定义有界 CIDR（全 0 网段必须直接传 `open`）。预览返回脱敏参数、双组安全组方案与 `plan_id`，交用户核对。
-6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交——请求文件无需手填 `security_group_id`。
+6. **确认提交**：同参数 `confirm=true` + `plan_id`。提交时自动创建应用组 `supabase-app-sg` 与数据库组 `supabase-db-sg` 两个专用安全组（应用组 8443 入方向 + 5432 出方向指向子网 CIDR，数据库组 5432 入方向指向子网 CIDR）、启用存储时确保 OBS 桶存在（已有复用、缺失新建、全局重名自动追加短 uuid），全部回填注入后一次提交。**请求文件不得携带 `security_group_id`（顶层与 `managed_instance` 均同，携带即拒绝并提示删除）；自备安全组请在创建完成后经 `change_supabase_security_group` 换绑。**
 7. **跟踪与凭据交付**：回显 `application_id`/`instance_id` 与双工作流 ID；`show_supabase_creation_progress` 一次覆盖“实例创建中→应用等待→应用创建中→完成/失败”全阶段（整体约 20-30 分钟，实例先就绪、应用任务才开始）；托管实例**固定按需计费**（无订单支付环节），实例创建成功即开始计费。**Dashboard 登录**：账号固定 `supabase`；密码即本地请求文件 `create.password` 原文（创建路径不生成、不改动密码——受理响应的 `dashboard_credential` 同此说明）；引导用户打开该文件核对取用，登录失败先核对文件原文（大小写与易混字符），需要更换时使用 `change_supabase_application_password`（旧密码立即失效）。
 8. **验证与后续**：`show_supabase_application` 回查状态就绪；随后按需执行公网开通（场景四）、SSL（证书获取三路径，见第 1 步④）、登录配置（场景六）与接入信息交付（场景七）。
 
@@ -113,7 +113,7 @@ metadata:
 1. 意图四问同场景一第 1 步，托管来源取已有实例。
 2. `discover_db_instance_for_create(scenario="existed_instance")`（或 `list_supabase_manageable_instances`）分页列出可托管候选（每页 20 条），含版本、部署类型、端口、可用区、创建时间与 `current_actions`——**`current_actions` 非空或状态非 ACTIVE 的实例必须排除**（正在重启/升级/变更，任务冲突会失败）；交用户选定 `instance_id`，可传 `instance_id` 取该实例基础/配置/网络详情回填编排。
 3. 组装本地请求文件：`manage_type="existed_instance"` 与 `existing_instance{"instance_id", "database_name":"root", "database_pwd"}`——用户名固定 `root` 不能改；root 密码引导用户写本地文件（存量密码不受创建密码规则约束），全程不进对话。
-4. 预览与确认提交：`create_supabase_link_exist_instance(request_ref, public_access_cidr, ...)`——自动创建应用组（8443 入方向三选一 + 5432 出方向指向实例所在子网 CIDR），**实例自身安全组不动**；启用存储时同样确保 OBS 桶；回填注入后一次提交。
+4. 预览与确认提交：`create_supabase_link_exist_instance(request_ref, public_access_cidr, ...)`——自动创建应用组（8443 入方向三选一 + 5432 出方向指向实例所在子网 CIDR），**实例自身安全组不动**；启用存储时同样确保 OBS 桶；回填注入后一次提交。请求文件同样**不得携带** `security_group_id`（携带即拒绝并提示删除）。
 5. 跟踪：回显 `application_id` 与应用工作流 ID（无实例任务）；`show_supabase_creation_progress` 跟踪至就绪。
 6. 验证与创建后动作同场景一第 8 步。
 

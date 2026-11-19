@@ -152,7 +152,7 @@ class CreationFlowService:
                 'database_group':{'name':'supabase-db-sg','ingress':{'port':5432,'cidr':subnet_cidr}}
                                  if scenario=='newly_instance' else '不动（保持实例现状）',
                 'egress':{'port':5432,'cidr':subnet_cidr},
-                'note':'确认后自动创建并注入请求体，无需手填 security_group_id'}
+                'note':'确认后自动创建并注入请求体；请求文件不得携带 security_group_id（携带即拒绝）'}
 
     def _workflow(self,result,scenario):
         """Tracking and post-completion follow-ups echoing the submitted result."""
@@ -225,7 +225,7 @@ class CreationFlowService:
         security groups are provisioned, wired into the request and submitted once."""
         from mcp_server_supabase.service.creation import validate_creation
         from mcp_server_supabase.service.request_refs import load_request,preview_request
-        body=validate_creation(load_request(request_ref))
+        body=validate_creation(load_request(request_ref),orchestrated=True)
         if body['manage_type']!='newly_instance':
             raise McpToolError('MCP_INVALID_ARGS','本工具仅服务新建实例场景（对应编排 newly_instance）',
                                hint='已有实例挂载用 create_supabase_link_exist_instance')
@@ -269,7 +269,7 @@ class CreationFlowService:
         from mcp_server_supabase.service.creation import validate_creation
         from mcp_server_supabase.service.instance_catalog import _find_manageable
         from mcp_server_supabase.service.request_refs import load_request,preview_request
-        body=validate_creation(load_request(request_ref))
+        body=validate_creation(load_request(request_ref),orchestrated=True)
         if body['manage_type']!='existed_instance':
             raise McpToolError('MCP_INVALID_ARGS','本工具仅服务已有实例挂载场景（对应编排 existed_instance）',
                                hint='新建实例用 create_supabase_with_new_instance')

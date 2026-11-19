@@ -39,10 +39,13 @@ def load_request(alias):
                            hint='Check: SUPABASE_REQUESTS_FILE must be an absolute path to a regular file owned by the current user with owner-only permissions; no symlink, duplicate JSON keys or oversized content (max 64 KiB). Never paste secrets into chat.') from None
 
 
-def fields(value, allowed, required=()):
-    if not isinstance(value,dict):raise ValueError('expected a JSON object')
-    if set(value)-set(allowed):raise ValueError(f'unexpected field(s): {sorted(set(value)-set(allowed))}')
-    if set(required)-set(value):raise ValueError(f'missing required field(s): {sorted(set(required)-set(value))}')
+def fields(value, allowed, required=(), path=''):
+    # The optional path prefixes reported field names (e.g. managed_instance.security_group_id)
+    # so callers never have to guess which same-named field at which level is flagged.
+    prefix=f'{path}.' if path else ''
+    if not isinstance(value,dict):raise ValueError(f'expected a JSON object{f" at {path}" if path else ""}')
+    if set(value)-set(allowed):raise ValueError(f'unexpected field(s): {sorted(prefix+key for key in set(value)-set(allowed))}')
+    if set(required)-set(value):raise ValueError(f'missing required field(s): {sorted(prefix+key for key in set(required)-set(value))}')
 
 
 def text(value, limit=2048):

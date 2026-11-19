@@ -15,8 +15,23 @@ def password_rule(value,label):
         raise ValueError(f'{label} must be {_PASSWORD_RULE}')
 
 
-def validate_creation(body):
+def validate_creation(body, orchestrated=False):
+    """Validate a creation request body.
+
+    orchestrated=True marks the orchestrated creation tools (create_supabase_
+    with_new_instance / create_supabase_link_exist_instance): their dedicated
+    security groups are provisioned and injected at confirmation time, so the
+    request file must NOT carry security_group_id (top-level application group
+    or managed_instance database group) - presence is rejected with a migration
+    hint instead of being silently overwritten (issue #25). The post-injection
+    re-validation runs in the default strict mode, where both fields are
+    mandatory. Fixes #25.
+    """
     try:
+        if orchestrated and ('security_group_id' in body
+                             or (isinstance(body.get('managed_instance'),dict) and 'security_group_id' in body['managed_instance'])):
+            raise ValueError('the orchestrated creation tools provision and inject dedicated security groups at confirmation; '
+                             'the request file must not carry security_group_id (top-level or managed_instance)')
         required=('name','basic_config','version','mode','flavor_ref','availability_zone','password','storage_component','manage_type')
         fields(body,required+('managed_instance','existing_instance','data_vip','security_group_id'),required)
         if not isinstance(body['name'],str) or not 4<=len(body['name'])<=64 or any(ord(c)<32 for c in body['name']):raise ValueError('name must be 4-64 characters')
@@ -24,7 +39,7 @@ def validate_creation(body):
         if not isinstance(body['version'],str) or not re.fullmatch(r'[1-9]\d*\.(0|[1-9]\d*)\.(0|[1-9]\d*)',body['version']):raise ValueError('version must be X.Y.Z - the Supabase application version, use the highest available (not the PG engine version)')
         if not isinstance(body['flavor_ref'],str) or not re.fullmatch(r'rds\.supabase(\.[a-z0-9]+){3,4}',body['flavor_ref']):raise ValueError('flavor_ref must be an application flavor like rds.supabase.n1.large.2')
         az=segment(body['availability_zone']);password_rule(body['password'],'password')
-        basic=body['basic_config'];fields(basic,('region','vpc_id','subnet_id','time_zone'),('region','vpc_id','subnet_id'))
+        basic=body['basic_config'];fields(basic,('region','vpc_id','subnet_id','time_zone'),('region','vpc_id','subnet_id'),path='basic_config')
         for key in ('region','vpc_id','subnet_id'):segment(basic[key])
         if 'time_zone' in basic:
             # Official CreateInstance contract: PostgreSQL accepts whole-hour UTC
@@ -38,7 +53,7 @@ def validate_creation(body):
         if body['storage_component']['enabled'] and not body['storage_component'].get('sk'):raise ValueError('storage_component requires the full AK/SK on the creation path (SK omission is only available via update)')
         if body['manage_type']=='existed_instance':
             if body.get('managed_instance') is not None:raise ValueError('manage_type existed_instance must not carry managed_instance')
-            existing=body['existing_instance'];fields(existing,('instance_id','database_name','database_pwd'),('instance_id','database_name','database_pwd'))
+            existing=body['existing_instance'];fields(existing,('instance_id','database_name','database_pwd'),('instance_id','database_name','database_pwd'),path='existing_instance')
             segment(existing['instance_id'])
             if existing['database_name']!='root':raise ValueError('database_name must be "root" - the connection user for a managed PG instance is fixed and cannot be changed')
             text(existing['database_pwd'])
@@ -47,29 +62,32 @@ def validate_creation(body):
             managed=body['managed_instance']
             # enterprise_project_id stays optional: EPS-enabled accounts pick a live
             # project from the discovery list; personal accounts omit the field and
-            # the backend assigns placement.
-            required_pg=('datastore','charge_info','flavor_ref','volume','availability_zone','security_group_id','password')
-            fields(managed,required_pg+('ha','enterprise_project_id','configuration_id','port','data_vip','tags'),required_pg)
-            fields(managed['datastore'],('type','version'),('type','version'))
+            # the backend assigns placement. In orchestrated mode the database
+            # security group is injected at confirmation (the file must not carry it);
+            # in the raw strict mode it is a mandatory field.
+            required_pg=('datastore','charge_info','flavor_ref','volume','availability_zone','password')
+            if not orchestrated:required_pg=required_pg+('security_group_id',)
+            fields(managed,required_pg+('security_group_id','ha','enterprise_project_id','configuration_id','port','data_vip','tags'),required_pg,path='managed_instance')
+            fields(managed['datastore'],('type','version'),('type','version'),path='managed_instance.datastore')
             if managed['datastore']['type']!='PostgreSQL':raise ValueError('managed_instance.datastore.type must be PostgreSQL')
             text(managed['datastore']['version'],64)
             if 'ha' in managed:
-                ha=managed['ha'];fields(ha,('mode','replication_mode'),('mode','replication_mode'))
+                ha=managed['ha'];fields(ha,('mode','replication_mode'),('mode','replication_mode'),path='managed_instance.ha')
                 if ha['mode'] not in ('Single','Ha'):raise ValueError('ha.mode must be Single or Ha (match the top-level mode)')
                 if ha['replication_mode'] not in ('async','sync'):raise ValueError("ha.replication_mode must be 'async' or 'sync'")
             # Official product scope: the managed PG instance is on-demand only -
             # prepaid periods are not supported on this creation path. Billing rules:
             # https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html
-            charge=managed['charge_info'];fields(charge,('charge_mode',),('charge_mode',))
+            charge=managed['charge_info'];fields(charge,('charge_mode',),('charge_mode',),path='managed_instance.charge_info')
             if charge['charge_mode']!='postPaid':
                 raise ValueError('charge_info.charge_mode must be postPaid - the managed PG instance is on-demand only (prepaid periods are not supported; billing rules: https://support.huaweicloud.com/price-rds-pg/rds_00_0005.html)')
-            fields(managed['volume'],('type','size'),('type','size'))
+            fields(managed['volume'],('type','size'),('type','size'),path='managed_instance.volume')
             text(managed['volume']['type'],32)
             if type(managed['volume']['size']) is not int or not 40<=managed['volume']['size']<=40000:raise ValueError('volume.size must be an integer in 40-40000 (GB)')
             if managed['availability_zone']!=az:raise ValueError('managed_instance.availability_zone must equal the top-level availability_zone')
             text(managed['flavor_ref'],128);password_rule(managed['password'],'managed_instance.password')
             if 'enterprise_project_id' in managed:segment(managed['enterprise_project_id'])
-            identifier(managed['security_group_id'])
+            if 'security_group_id' in managed:identifier(managed['security_group_id'])
             if 'configuration_id' in managed:segment(managed['configuration_id'])
             if 'port' in managed and (type(managed['port']) is not int or not 2100<=managed['port']<=9500):raise ValueError('port must be an integer in 2100-9500 (use 5432 or omit it for the default)')
             if 'data_vip' in managed:ipaddress.IPv4Address(managed['data_vip'])
@@ -80,5 +98,10 @@ def validate_creation(body):
     except McpToolError:
         raise
     except (ValueError,TypeError,KeyError) as e:
+        hint=('Fix the flagged field and preview again. Backend password, version, capacity and sale policies remain authoritative.')
+        if orchestrated and 'must not carry security_group_id' in str(e):
+            hint=('Delete security_group_id from the request file (both the top-level application group and '
+                  'managed_instance.database group are provisioned and injected at confirmation). To use your own '
+                  'security groups, create the application first and rebind with change_supabase_security_group.')
         raise McpToolError('MCP_INVALID_ARGS',f'Invalid creation request: {str(e) or e.__class__.__name__}',
-                          hint='Fix the flagged field and preview again. Backend password, version, capacity and sale policies remain authoritative.') from None
+                          hint=hint) from None

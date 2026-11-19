@@ -64,6 +64,17 @@ class CreationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
         self.assertIn('unexpected field',message(ctx.exception));self.assertIn('hax',message(ctx.exception))
         self.client.request.assert_not_awaited()
+    async def test_missing_fields_report_parent_paths(self):
+        # issue #25: same-named fields are reported with their parent path
+        body=copy.deepcopy(REAL_NEW_PG);del body['managed_instance']['security_group_id']
+        self.file.write_text(json.dumps({'create':body}))
+        with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
+        self.assertIn('managed_instance.security_group_id',message(ctx.exception))
+        broken=copy.deepcopy(REAL_NEW_PG);del broken['basic_config']['vpc_id']
+        self.file.write_text(json.dumps({'create':broken}))
+        with self.assertRaises(McpToolError) as ctx:await self.ops.create_reference('create')
+        self.assertIn('basic_config.vpc_id',message(ctx.exception))
+
     async def test_password_composition_rule(self):
         for bad,needle in (('abcdefgh','password'),('Ab1','password'),('A'*33,'password'),('Abcdefgh','at least three')):
             body=copy.deepcopy(REAL_NEW_PG);body['password']=bad

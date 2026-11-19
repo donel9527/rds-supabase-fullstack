@@ -609,8 +609,9 @@ mcp-huaweicloud-rds-supabase-mgr -t streamable-http
 2. 按编排逐步执行：网络就绪（默认推荐场景按 `default_create` 建网）→ 存储就绪
    （`discover_supabase_storage` 定复用或新建，新建桶走 `create_supabase_new_obs`）
    → 本地请求文件（含 root 密码、存储凭据等秘密）。
-3. 按托管来源二选一提交（安全组由创建工具自动创建注入，无需手填
-   `security_group_id`）：新建实例（推荐）走
+3. 按托管来源二选一提交（安全组由创建工具自动创建注入，**请求文件不得携带
+   `security_group_id`**——顶层与 `managed_instance` 均同，携带即拒绝并提示删除；
+   自备安全组请在创建完成后经 `change_supabase_security_group` 换绑）：新建实例（推荐）走
    `create_supabase_with_new_instance(request_ref, confirm=false)`，挂载已有实例走
    `create_supabase_link_exist_instance(request_ref, confirm=false)`。预览 → 脱敏
    参数交用户核对 → 相同参数 `confirm=true` + `plan_id` 提交。

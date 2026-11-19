@@ -28,15 +28,19 @@ NEW_BODY={'name':'flow-app','basic_config':{'region':'cn-east-3','vpc_id':VPC_ID
                               'charge_info':{'charge_mode':'postPaid'},
                               'flavor_ref':'rds.pg.n1.medium.2','volume':{'type':'ESSD','size':40},
                               'availability_zone':'cn-east-3a',
-                              'security_group_id':'99999999-9999-4999-8999-999999999999',
-                              'password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'},
-          'security_group_id':'88888888-8888-4888-8888-888888888888'}
+                              'password':'Fixture-Secret1','enterprise_project_id':'cddc3f1f-6c3e-4d0f-a1f1-2b5bb2d6b2a6'}}
 
 EXIST_BODY={'name':'flow-app','basic_config':{'region':'cn-east-3','vpc_id':VPC_ID,'subnet_id':SUBNET_ID},
             'storage_component':{'enabled':False},'version':'1.0.0','mode':'Single',
             'flavor_ref':'rds.supabase.n1.large.2','availability_zone':'cn-east-3a',
             'password':'Fixture-Secret1','manage_type':'existed_instance',
             'existing_instance':{'instance_id':INSTANCE_ID,'database_name':'root','database_pwd':'fixture-secret'}}
+
+# issue #25: orchestrated files carrying security_group_id are rejected up front
+NEW_BODY_SG=dict(NEW_BODY,security_group_id='88888888-8888-4888-8888-888888888888',
+                 managed_instance=dict(NEW_BODY['managed_instance'],
+                                       security_group_id='99999999-9999-4999-8999-999999999999'))
+EXIST_BODY_SG=dict(EXIST_BODY,security_group_id='88888888-8888-4888-8888-888888888888')
 
 STORAGE_BODY=dict(NEW_BODY,storage_component={'enabled':True,'bucket_name':'supabase-flow-app',
                                                'ak':'fixture-ak','sk':'fixture-sk'})
@@ -125,7 +129,8 @@ class CreationFlowTests(unittest.IsolatedAsyncioTestCase):
         os.environ['SUPABASE_ENABLE_WRITES']='true';os.environ['HUAWEICLOUD_MCP_READ_ONLY']='false'
         self.requests=Path(self.tmp.name)/'requests.json'
         self.requests.write_text(json.dumps({'new':NEW_BODY,'exist':EXIST_BODY,'new-obs':STORAGE_BODY,
-                                              'exist-obs':STORAGE_EXIST_BODY}),encoding='utf-8')
+                                              'exist-obs':STORAGE_EXIST_BODY,
+                                              'new-sg':NEW_BODY_SG,'exist-sg':EXIST_BODY_SG}),encoding='utf-8')
         os.chmod(self.requests,0o600)
         os.environ['SUPABASE_REQUESTS_FILE']=str(self.requests)
         self.addCleanup(lambda:os.environ.clear() or os.environ.update(self.env))
@@ -162,6 +167,25 @@ class CreationFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.network.groups,[]);self.assertEqual(self.network.rules,[])
         self.assertEqual(self.ops.submitted,[]);self.assertEqual(self.ops.candidates_calls,0)
         self.assertEqual(self.koocli.calls,[])
+
+    async def test_orchestrated_rejects_files_carrying_security_group_ids(self):
+        # issue #25: presence is rejected with a migration hint - never silently overwritten
+        for ref,tool in (('new-sg',self.flow.with_new_instance),('exist-sg',self.flow.link_exist_instance)):
+            with self.assertRaises(McpToolError) as ctx:
+                await tool(ref)
+            self.assertEqual(ctx.exception.code,'MCP_INVALID_ARGS')
+            self.assertIn('must not carry security_group_id',str(ctx.exception))
+            self.assertIn('change_supabase_security_group',ctx.exception.hint or '')
+        self.assertEqual(self.network.groups,[]);self.assertEqual(self.ops.submitted,[])
+        self.assertEqual(self.koocli.calls,[])
+
+    async def test_orchestrated_omitted_groups_pass_entry_and_inject_at_confirm(self):
+        # the documented contract: omit both locations; entry validation passes,
+        # both groups are injected at confirmation (asserted by the execute tests)
+        self.push_subnets()
+        preview=await self.flow.with_new_instance('new')
+        self.assertEqual(preview['status'],'confirmation_required')
+        self.assertIn('不得携带 security_group_id',preview['security_group_plan']['note'])
 
     def storage_flow(self,obs_result):
         return CreationFlowService(operations=self.ops,network=self.network,koocli=self.koocli,

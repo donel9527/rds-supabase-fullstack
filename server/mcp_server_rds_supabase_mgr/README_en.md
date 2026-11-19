@@ -88,7 +88,7 @@ database hosting.
   - Flavor discovery: every saleable spec grouped by group_type (ten official classes); application and instance flavors asked separately, instance default matching the application's spec
   - Disk types: Chinese labels, official constraints, and live compatibility lists
   - Four discovery families (application, instance, network, security group) consolidating parameters live with recommendations
-- **Scenario-based creation**: two scenario tools — create with a new instance (recommended) or by attaching an existing one; dedicated security groups and the OBS bucket auto-prepared, parameters backfilled and injected, one submission
+- **Scenario-based creation**: two scenario tools — create with a new instance (recommended) or by attaching an existing one; dedicated security groups and the OBS bucket auto-prepared, parameters backfilled and injected, one submission. The request file must NOT carry security_group_id (top-level or managed_instance) - presence is rejected with a removal hint; to use your own groups, rebind with change_supabase_security_group after creation
 - **Network and security groups**
   - VPC/subnet placement: free-IP preference, default recommendation when no network exists
   - Dedicated group creation and rules, dual-tag protection (AUTO_CREATE/USE_FOR), three-way ingress source choice

@@ -7,6 +7,28 @@ semantic versioning.
 
 ### Fixed
 
+- `create_supabase_with_new_instance` / `create_supabase_link_exist_instance`
+  demanded `security_group_id` in the request file while the docs promised it was
+  injected automatically, the error named neither the expected location nor the
+  right field, and a hand-filled value was silently overwritten by the
+  auto-provisioned groups (issue #25). Fixed in `mcp_server_rds_supabase_mgr`
+  0.4.0a65 by making absence the only valid state: `validate_creation` grows an
+  orchestrated mode (used by both scenario tools) that REJECTS the request file
+  when `security_group_id` appears at the top level or under `managed_instance` -
+  with a hint to delete the field and to rebind own groups through
+  `change_supabase_security_group` after creation - while the raw strict mode
+  (service-level `create_reference`) keeps the field mandatory and now reports
+  missing/unexpected fields with their full parent path
+  (`managed_instance.security_group_id`), so callers never have to probe
+  positions one by one. Contract migration note: earlier rounds accepted a
+  top-level value, later rounds required `managed_instance.security_group_id` -
+  both are now REJECTED for the scenario tools; the field is injected at
+  confirmation as originally documented. `fields()` error messages carry the
+  parent path everywhere. Skill 2.14.0 (server >= 0.4.0a65): SKILL scenarios
+  1-2, scenarios.md request example, local-requests contract, README zh/en and
+  acceptance K37 updated; the OBS bucket field is unaffected (bucket_name stays
+  optional and user-provided buckets are reused, not overwritten).
+
 - `bind_supabase_eip` rejected applications that `list_supabase_applications`
   returned, while `change_supabase_eip` accepted the same ID (issue #23).
   Three stacked defects, all fixed in `mcp_server_rds_supabase_mgr` 0.4.0a64:
