@@ -7,6 +7,18 @@ semantic versioning.
 
 ### Changed
 
+- mgr-mcp INSTALL.md gains an installation-discipline block for the
+  installing agent (mgr-mcp 2.16.1): the conversation request cap is
+  32MB and accumulated screenshots/attachments abort the install with
+  `request too large`; agents must stay on terminal commands, avoid
+  browser/screenshot reads of the repo pages, avoid pulling the whole
+  repo into the conversation, and skip large text files (uv.lock /
+  CHANGELOG.md / docs/) the install never depends on. Prompted by a
+  field report where a one-line install triggered the 32MB error on a
+  browser-equipped agent - the repo itself ships no raster images
+  (verified: 6.5MB of tracked text, largest object a 0.5MB lock file),
+  so the accumulation came from page screenshots, not repo content.
+
 - Skills aligned with the "华为云基础云服务 Skill 开发与管理规范 v2.0.0"
   (GitCode developer-skill discussion #13) under a capability-freeze
   discipline: a pre-change baseline (headings / 64 table tools / 38

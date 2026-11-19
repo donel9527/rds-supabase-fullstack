@@ -2,6 +2,8 @@
 
 安装范围**仅本技能**——不安装、不配置任何 MCP 服务器、凭据与云资源。管理面 MCP 服务器在技能触发后的环境检查环节由 Agent 动态安装使能（会话内免重启），规程见 [SKILL.md](SKILL.md) 与 [references/install.md](references/install.md)。
 
+> **安装纪律（代理执行时遵守）**：会话请求上限 32MB——累积的截图与附件会把请求推过上限，报 `request too large` 中断安装。安装全程只用终端命令；不要用浏览器打开/截图阅读本文件或仓库页面（需要文档内容时读本地克隆中的文件）；不要把整个仓库拖入会话或附件（安装只需要 `skills/huaweicloud-supabase/rds-supabase-mgr-mcp/` 一个目录，浅克隆即可）；不要读取 `uv.lock`、`CHANGELOG.md`、`docs/` 等大文本文件——安装不依赖它们。仓库不含位图图片；web-build 技能的 3 个 SVG 为文本资产，与本技能安装无关。
+
 将下面这句话发送给你的 AI Agent：
 
 > 按照 https://github.com/huaweicloud/rds-supabase-fullstack/blob/main/skills/huaweicloud-supabase/rds-supabase-mgr-mcp/INSTALL.md 安装 rds-supabase-mgr-mcp 技能；装完报告安装路径。
